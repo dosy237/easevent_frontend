@@ -224,7 +224,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const loadEventDetail = async (id) => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`/api/events/${id}/`);
+      const response = await apiClient.get(`/api/events/publics/${id}/`);
       setFullEvent(response.data);
       setError(null);
     } catch (err) {

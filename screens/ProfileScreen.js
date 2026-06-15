@@ -415,7 +415,6 @@ export default function ProfileScreen({ navigation }) {
             style: 'destructive',
             onPress: async () => {
               await logout();
-              navigation?.reset({ index: 0, routes: [{ name: 'Home' }] });
             },
           },
         ]
@@ -426,7 +425,6 @@ export default function ProfileScreen({ navigation }) {
   const handleAccountDeleted = async () => {
     setShowDeleteModal(false);
     await logout();
-    navigation?.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
   if (!user) return null;
