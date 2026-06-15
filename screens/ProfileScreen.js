@@ -24,6 +24,7 @@ import { Ionicons }     from '@expo/vector-icons';
 import { useAuth }      from '../context/AuthContext';
 
 import { API_BASE } from '../config';
+import { apiClient } from '../services/apiClient';
 const C = {
   green:      '#1B6B4A',
   greenDark:  '#155C3C',
@@ -162,28 +163,15 @@ const PasswordModal = ({ visible, onClose, onSuccess, accessToken }) => {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/change-password/`, {
-        method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          old_password: oldPassword,
-          new_password: newPassword,
-        }),
+      await apiClient.post('/api/auth/change-password/', {
+        old_password: oldPassword,
+        new_password: newPassword,
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.detail || 'Erreur lors du changement de mot de passe.');
-        return;
-      }
 
       onSuccess();
       onClose();
-    } catch {
-      setError('Impossible de se connecter au serveur.');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors du changement de mot de passe.');
     } finally {
       setLoading(false);
     }
@@ -298,24 +286,10 @@ const DeleteAccountModal = ({ visible, onClose, onConfirm, accessToken }) => {
     setError('');
 
     try {
-      const res = await fetch(`${API_BASE}/api/auth/delete-account/`, {
-        method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.detail || 'Erreur lors de la suppression.');
-        return;
-      }
-
+      await apiClient.post('/api/auth/delete-account/', { password });
       onConfirm();
-    } catch {
-      setError('Impossible de se connecter au serveur.');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors de la suppression.');
     } finally {
       setLoading(false);
     }
@@ -407,46 +381,17 @@ export default function ProfileScreen({ navigation }) {
   // ── Sauvegarder un champ du profil ───────────────────────────
   const saveField = async (field, value) => {
   try {
-    let token = accessToken;
-
-    // Premier essai avec le token actuel
-    let res = await fetch(`${API_BASE}/api/auth/me/update/`, {
-      method:  'PATCH',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ [field]: value }),
-    });
-
-    // Si token expiré (401) → on le rafraîchit et on réessaie
-    if (res.status === 401) {
-      token = await refreshAccessToken();
-      if (!token) {
-        Alert.alert(
-          'Session expirée',
-          'Votre session a expiré. Veuillez vous reconnecter.'
-        );
-        navigation?.reset({ index: 0, routes: [{ name: 'Home' }] });
-        return;
-      }
-      // Deuxième essai avec le nouveau token
-      res = await fetch(`${API_BASE}/api/auth/me/update/`, {
-        method:  'PATCH',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ [field]: value }),
-      });
-    }
-
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    await updateUser(data);
+    const response = await apiClient.patch('/api/auth/me/update/', { [field]: value });
+    await updateUser(response.data);
     showSuccess('Profil mis à jour');
-
-  } catch {
+  } catch (err) {
+    if (err.response?.status === 401) {
+       // AuthContext interceptor might handle this, but for safety:
+       const token = await refreshAccessToken();
+       if (token) {
+         return saveField(field, value); // Retry once
+       }
+    }
     Alert.alert(
       'Erreur',
       'Impossible de sauvegarder vos modifications. Vérifiez votre connexion et réessayez.'

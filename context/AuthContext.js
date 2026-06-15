@@ -25,6 +25,9 @@ import React, {
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
+import { apiClient } from '../services/apiClient';
+import { authService } from '../services/authService';
+
 // ─────────────────────────────────────────────────────────────────
 // CLÉS DE STOCKAGE SÉCURISÉ
 // ─────────────────────────────────────────────────────────────────
@@ -34,12 +37,7 @@ const KEYS = {
   USER: 'easevent_user',
 };
 
-// ─────────────────────────────────────────────────────────────────
-// ADRESSE DU BACKEND
-// TODO (amélioration future) : Importer depuis config.js
-// pour centraliser toutes les URLs de l’application.
-// ─────────────────────────────────────────────────────────────────
-const API_BASE = 'https://easevent-backend.onrender.com';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.101:8003';
 
 // ─────────────────────────────────────────────────────────────────
 // CRÉATION DU CONTEXTE
@@ -116,18 +114,7 @@ export function AuthProvider({ children }) {
         return null;
       }
 
-      const res = await fetch(`${API_BASE}/api/auth/token/refresh/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh: storedRefresh }),
-      });
-
-      if (!res.ok) {
-        await logout();
-        return null;
-      }
-
-      const data = await res.json();
+      const data = await authService.refreshToken(storedRefresh);
 
       await SecureStore.setItemAsync(KEYS.ACCESS_TOKEN, data.access);
       setAccessToken(data.access);
@@ -135,7 +122,10 @@ export function AuthProvider({ children }) {
       return data.access;
     } catch (err) {
       console.error('Erreur rafraîchissement token:', err);
-      await logout();
+      // Only logout if it's a 401 or similar auth error
+      if (err.response?.status === 401 || err.response?.status === 400) {
+        await logout();
+      }
       return null;
     }
   }, [logout]);

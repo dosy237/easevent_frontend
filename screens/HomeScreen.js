@@ -40,6 +40,7 @@ import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { API_BASE } from '../config';
+import { apiClient } from '../services/apiClient';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -259,22 +260,15 @@ export default function HomeScreen({ navigation }) {
   const [searchActive, setSearchActive] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
 
-  const debounceTimer = useRef(null);
-
-  // ── Récupération des événements ──────────────────────────────
   const fetchEvents = useCallback(async (search = '', filter = activeFilter) => {
     try {
-      const params = new URLSearchParams();
-      if (search.trim()) params.append('search', search.trim());
-      if (filter.value) params.append('type', filter.value);
+      const params = {};
+      if (search.trim()) params.search = search.trim();
+      if (filter.value) params.type = filter.value;
 
-      const url = `${API_BASE}/api/events/publics/${params.toString() ? '?' + params.toString() : ''}`;
-      const res = await fetch(url);
-
-      if (!res.ok) throw new Error(`Erreur ${res.status}`);
-
-      const data = await res.json();
-      setEvents(data.events || []);
+      const response = await apiClient.get('/api/events/publics/', { params });
+      
+      setEvents(response.data.events || []);
       setError(null);
     } catch (err) {
       setError('Impossible de charger les événements.');

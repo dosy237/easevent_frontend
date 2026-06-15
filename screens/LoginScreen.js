@@ -19,6 +19,7 @@
  * ════════════════════════════════════════════════════════════════
  */
 import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/authService';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -40,10 +41,6 @@ import { Ionicons }     from '@expo/vector-icons';
 
 const { height: H } = Dimensions.get('window');
 
-// ─────────────────────────────────────────────────────────────────
-// API
-// ─────────────────────────────────────────────────────────────────
-import { API_BASE } from '../config';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -72,19 +69,6 @@ const SCREEN = {
   REGISTER: 'register',  // formulaire d'inscription
 };
 
-// ════════════════════════════════════════════════════════════════
-// COMPOSANT : InputField
-// Champ de saisie stylisé avec icône et gestion d'erreur.
-//
-// Props :
-// - icon        : nom d'icône Ionicons
-// - placeholder : texte d'indication
-// - value       : valeur du champ (state)
-// - onChangeText: fonction appelée à chaque frappe
-// - secureEntry : true pour les mots de passe
-// - error       : message d'erreur à afficher sous le champ
-// - keyboardType: type de clavier ('email-address', 'default'...)
-// ════════════════════════════════════════════════════════════════
 const InputField = ({
   icon,
   placeholder,
@@ -95,39 +79,28 @@ const InputField = ({
   keyboardType = 'default',
   autoCapitalize = 'none',
 }) => {
-  // showPassword : toggle pour afficher/masquer le mot de passe
   const [showPassword, setShowPassword] = useState(false);
-
-  // focused : true quand le champ est actif
-  // Permet de changer la couleur de la bordure
   const [focused, setFocused] = useState(false);
 
   return (
     <View style={styles.inputWrap}>
-      {/* Conteneur du champ avec bordure dynamique */}
       <View style={[
         styles.inputBox,
         focused && styles.inputBoxFocused,
         error  && styles.inputBoxError,
       ]}>
-
-        {/* Icône à gauche */}
         <Ionicons
           name={icon}
           size={18}
           color={focused ? C.green : C.textMut}
           style={styles.inputIcon}
         />
-
-        {/* Champ de saisie */}
         <TextInput
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor={C.textMut}
           value={value}
           onChangeText={onChangeText}
-          // Si secureEntry et showPassword → affiche le texte
-          // Si secureEntry et !showPassword → masque avec des points
           secureTextEntry={secureEntry && !showPassword}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
@@ -135,8 +108,6 @@ const InputField = ({
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
-
-        {/* Bouton œil pour les mots de passe */}
         {secureEntry && (
           <TouchableOpacity
             onPress={() => setShowPassword(!showPassword)}
@@ -150,8 +121,6 @@ const InputField = ({
           </TouchableOpacity>
         )}
       </View>
-
-      {/* Message d'erreur sous le champ */}
       {error ? (
         <View style={styles.fieldError}>
           <Ionicons name="alert-circle-outline" size={12} color={C.error} />
@@ -162,11 +131,6 @@ const InputField = ({
   );
 };
 
-// ════════════════════════════════════════════════════════════════
-// COMPOSANT : ProgressBar
-// Barre de progression pour le formulaire d'inscription en 2 étapes.
-// Props : step (1 ou 2), total (2)
-// ════════════════════════════════════════════════════════════════
 const ProgressBar = ({ step, total }) => (
   <View style={styles.progressRow}>
     {Array.from({ length: total }).map((_, i) => (
@@ -175,7 +139,6 @@ const ProgressBar = ({ step, total }) => (
         style={[
           styles.progressSegment,
           i < step && styles.progressSegmentActive,
-          // Dernier segment sans margin droite
           i === total - 1 && { marginRight: 0 },
         ]}
       />
@@ -183,40 +146,21 @@ const ProgressBar = ({ step, total }) => (
   </View>
 );
 
-// ════════════════════════════════════════════════════════════════
-// ÉCRAN PRINCIPAL : LoginScreen
-//
-// Props :
-// - navigation : objet React Navigation
-// ════════════════════════════════════════════════════════════════
 export default function LoginScreen({ navigation }) {
   const { login } = useAuth();
-
-  // ── État de l'écran (landing / login / register) ──────────────
-  const [screen,      setScreen]      = useState(SCREEN.LANDING);
-
-  // ── Étape du formulaire d'inscription (1 ou 2) ────────────────
+  const [screen, setScreen] = useState(SCREEN.LANDING);
   const [registerStep, setRegisterStep] = useState(1);
-
-  // ── Champs du formulaire ──────────────────────────────────────
-  const [email,     setEmail]     = useState('');
-  const [password,  setPassword]  = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
-  const [lastName,  setLastName]  = useState('');
-
-  // ── États UI ──────────────────────────────────────────────────
+  const [lastName, setLastName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
-
-  // Erreurs par champ
+  const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
 
-  // ── Animations ───────────────────────────────────────────────
-  const fadeAnim  = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const logoScale = useRef(new Animated.Value(1)).current;
 
-  // Animation d'entrée au montage
   useEffect(() => {
     Animated.spring(logoScale, {
       toValue:  1,
@@ -226,8 +170,6 @@ export default function LoginScreen({ navigation }) {
     }).start();
   }, []);
 
-  // ── Transition entre les états ────────────────────────────────
-  // Fade out → change l'état → Fade in
   const transitionTo = (newScreen) => {
     setError('');
     setFieldErrors({});
@@ -242,7 +184,6 @@ export default function LoginScreen({ navigation }) {
     });
   };
 
-  // ── Validation basique ────────────────────────────────────────
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   const validateLoginFields = () => {
@@ -272,142 +213,83 @@ export default function LoginScreen({ navigation }) {
     return Object.keys(errors).length === 0;
   };
 
-  // ── Connexion ─────────────────────────────────────────────────
   const handleLogin = async () => {
     if (!validateLoginFields()) return;
-
     setLoading(true);
     setError('');
-
     try {
-      // POST vers notre endpoint Django /api/auth/login/
-      // On envoie email + password en JSON
-      const res = await fetch(`${API_BASE}/api/auth/login/`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        // Le serveur a retourné une erreur (400, 401...)
-        // On affiche le message d'erreur retourné par Django
-        const msg = data?.detail
-          || data?.non_field_errors?.[0]
-          || 'Email ou mot de passe incorrect.';
-        setError(msg);
-        return;
-      }
-
-      // Connexion réussie — data contient { access, refresh, user }
-      // TODO : stocker les tokens avec expo-secure-store
-      // pour les requêtes authentifiées futures
-      // await SecureStore.setItemAsync('access_token', data.access);
-      // ← ajouter en haut du composant
-      // Navigation vers l'accueil
+      const data = await authService.login(email, password);
       await login({
-      userData: data.user,
-      access:   data.access,
-      refresh:  data.refresh,
+        userData: data.user,
+        access:   data.access,
+        refresh:  data.refresh,
       });
-      navigation?.reset({
-      index: 0,
-      routes: [{ name: 'TabDashboard' }],
-      });
-
     } catch (err) {
-      setError('Impossible de se connecter. Vérifie ta connexion internet.');
+      const msg = err.response?.data?.detail 
+        || err.response?.data?.non_field_errors?.[0]
+        || 'Email ou mot de passe incorrect.';
+      setError(msg);
       console.error('Erreur login:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Inscription ───────────────────────────────────────────────
   const handleRegisterStep1 = () => {
     if (!validateRegisterStep1()) return;
-    // Passe à l'étape 2 — prénom et nom
     setRegisterStep(2);
   };
 
   const handleRegisterStep2 = async () => {
     if (!validateRegisterStep2()) return;
-
     setLoading(true);
     setError('');
-
     try {
-      const res = await fetch(`${API_BASE}/api/auth/register/`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          email,
-          password,
-          first_name: firstName.trim(),
-          last_name:  lastName.trim(),
-        }),
+      const data = await authService.register({
+        email,
+        password,
+        first_name: firstName.trim(),
+        last_name:  lastName.trim(),
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        const msg = data?.email?.[0]
-          || data?.detail
-          || 'Une erreur est survenue lors de l\'inscription.';
-        setError(msg);
-        return;
+      if (data.access) {
+         await login({
+           userData: data.user,
+           access:   data.access,
+           refresh:  data.refresh,
+         });
+      } else {
+        setError("Compte créé ! Veuillez vous connecter.");
+        transitionTo(SCREEN.LOGIN);
       }
-
-      // Inscription réussie → retour au landing avec message
-      // TODO : afficher un message "Vérifiez votre email"
-     navigation?.reset({
-        index: 0,
-       routes: [{ name: 'TabDashboard' }],
-     });
-
     } catch (err) {
-      setError('Impossible de s\'inscrire. Vérifie ta connexion internet.');
+      const msg = err.response?.data?.email?.[0]
+        || err.response?.data?.detail
+        || 'Une erreur est survenue lors de l\'inscription.';
+      setError(msg);
       console.error('Erreur register:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // ─────────────────────────────────────────────────────────────
-  // RENDU — ÉTAT LANDING
-  // Page d'accueil avec logo centré et deux boutons
-  // ─────────────────────────────────────────────────────────────
   const renderLanding = () => (
     <Animated.View style={[styles.landingContent, { opacity: fadeAnim }]}>
-
-      {/* Logo centré */}
       <Animated.View style={[
         styles.logoContainer,
         { transform: [{ scale: logoScale }] }
       ]}>
-        {/* Icône carrée arrondie verte */}
         <View style={styles.logoIconBox}>
           <Ionicons name="calendar-outline" size={36} color={C.white} />
         </View>
-
-        {/* Nom de l'application */}
         <Text style={styles.landingAppName}>
           <Text style={styles.landingEas}>Eas</Text>
           <Text style={styles.landingEven}>even</Text>
         </Text>
-
-        {/* Tagline en italique */}
         <Text style={styles.landingTagline}>Créez l'exceptionnel</Text>
-
-        {/* Trait orange décoratif — fidèle au Figma */}
         <View style={styles.landingDivider} />
       </Animated.View>
 
-      {/* Boutons d'action */}
       <View style={styles.landingButtons}>
-
-        {/* Bouton principal — Démarrer l'aventure */}
         <TouchableOpacity
           style={styles.btnPrimary}
           onPress={() => transitionTo(SCREEN.REGISTER)}
@@ -417,7 +299,6 @@ export default function LoginScreen({ navigation }) {
           <Ionicons name="arrow-forward-outline" size={18} color={C.white} />
         </TouchableOpacity>
 
-        {/* Bouton secondaire — Se connecter */}
         <TouchableOpacity
           style={styles.btnSecondary}
           onPress={() => transitionTo(SCREEN.LOGIN)}
@@ -426,55 +307,35 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.btnSecondaryTxt}>Se connecter</Text>
         </TouchableOpacity>
 
-        {/* Séparateur OU CONTINUER AVEC */}
         <View style={styles.dividerRow}>
           <View style={styles.dividerLine} />
           <Text style={styles.dividerTxt}>OU CONTINUER AVEC</Text>
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Boutons OAuth */}
         <View style={styles.oauthRow}>
-
-          {/* Google */}
           <TouchableOpacity style={styles.oauthBtn} activeOpacity={0.8}>
             <Ionicons name="logo-google" size={22} color="#4285F4" />
           </TouchableOpacity>
-
-          {/* Apple */}
           <TouchableOpacity style={styles.oauthBtn} activeOpacity={0.8}>
             <Ionicons name="logo-apple" size={22} color={C.text} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Footer légal */}
       <View style={styles.footer}>
-        <TouchableOpacity>
-          <Text style={styles.footerLink}>Conditions</Text>
-        </TouchableOpacity>
+        <TouchableOpacity><Text style={styles.footerLink}>Conditions</Text></TouchableOpacity>
         <Text style={styles.footerDot}>·</Text>
-        <TouchableOpacity>
-          <Text style={styles.footerLink}>Confidentialité</Text>
-        </TouchableOpacity>
+        <TouchableOpacity><Text style={styles.footerLink}>Confidentialité</Text></TouchableOpacity>
         <Text style={styles.footerDot}>·</Text>
-        <TouchableOpacity>
-          <Text style={styles.footerLink}>Aide</Text>
-        </TouchableOpacity>
+        <TouchableOpacity><Text style={styles.footerLink}>Aide</Text></TouchableOpacity>
       </View>
-
       <Text style={styles.footerCopy}>© 2026 Easevent Inc.</Text>
     </Animated.View>
   );
 
-  // ─────────────────────────────────────────────────────────────
-  // RENDU — ÉTAT LOGIN
-  // Formulaire de connexion email + mot de passe
-  // ─────────────────────────────────────────────────────────────
   const renderLogin = () => (
     <Animated.View style={[styles.formContent, { opacity: fadeAnim }]}>
-
-      {/* En-tête */}
       <View style={styles.formHeader}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -486,13 +347,11 @@ export default function LoginScreen({ navigation }) {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Sous-titre */}
       <Text style={styles.formSubtitle}>
-        Bon retour parmi nous 👋{'\n'}
+        Bon retour parmi nous 👋{"\n"}
         Entrez vos identifiants pour continuer.
       </Text>
 
-      {/* Message d'erreur global */}
       {error ? (
         <View style={styles.errorBanner}>
           <Ionicons name="alert-circle-outline" size={16} color={C.error} />
@@ -500,7 +359,6 @@ export default function LoginScreen({ navigation }) {
         </View>
       ) : null}
 
-      {/* Champs */}
       <InputField
         icon="mail-outline"
         placeholder="Adresse email"
@@ -519,12 +377,10 @@ export default function LoginScreen({ navigation }) {
         error={fieldErrors.password}
       />
 
-      {/* Mot de passe oublié */}
       <TouchableOpacity style={styles.forgotBtn}>
         <Text style={styles.forgotTxt}>Mot de passe oublié ?</Text>
       </TouchableOpacity>
 
-      {/* Bouton connexion */}
       <TouchableOpacity
         style={[styles.btnPrimary, loading && styles.btnDisabled]}
         onPress={handleLogin}
@@ -541,7 +397,6 @@ export default function LoginScreen({ navigation }) {
         )}
       </TouchableOpacity>
 
-      {/* Lien inscription */}
       <View style={styles.switchRow}>
         <Text style={styles.switchTxt}>Pas encore de compte ?</Text>
         <TouchableOpacity onPress={() => transitionTo(SCREEN.REGISTER)}>
@@ -551,20 +406,13 @@ export default function LoginScreen({ navigation }) {
     </Animated.View>
   );
 
-  // ─────────────────────────────────────────────────────────────
-  // RENDU — ÉTAT REGISTER
-  // Formulaire d'inscription en 2 étapes
-  // ─────────────────────────────────────────────────────────────
   const renderRegister = () => (
     <Animated.View style={[styles.formContent, { opacity: fadeAnim }]}>
-
-      {/* En-tête */}
       <View style={styles.formHeader}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => {
             if (registerStep === 2) {
-              // Retour à l'étape 1 sans réinitialiser les données
               setRegisterStep(1);
               setError('');
               setFieldErrors({});
@@ -579,10 +427,8 @@ export default function LoginScreen({ navigation }) {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Barre de progression — étape 1/2 ou 2/2 */}
       <ProgressBar step={registerStep} total={2} />
 
-      {/* Sous-titre selon l'étape */}
       <Text style={styles.formSubtitle}>
         {registerStep === 1
           ? 'Étape 1 sur 2 — Vos identifiants de connexion'
@@ -590,7 +436,6 @@ export default function LoginScreen({ navigation }) {
         }
       </Text>
 
-      {/* Message d'erreur global */}
       {error ? (
         <View style={styles.errorBanner}>
           <Ionicons name="alert-circle-outline" size={16} color={C.error} />
@@ -598,7 +443,6 @@ export default function LoginScreen({ navigation }) {
         </View>
       ) : null}
 
-      {/* ÉTAPE 1 : email + mot de passe */}
       {registerStep === 1 && (
         <>
           <InputField
@@ -628,7 +472,6 @@ export default function LoginScreen({ navigation }) {
         </>
       )}
 
-      {/* ÉTAPE 2 : prénom + nom */}
       {registerStep === 2 && (
         <>
           <InputField
@@ -665,7 +508,6 @@ export default function LoginScreen({ navigation }) {
         </>
       )}
 
-      {/* Lien connexion */}
       <View style={styles.switchRow}>
         <Text style={styles.switchTxt}>Déjà un compte ?</Text>
         <TouchableOpacity onPress={() => transitionTo(SCREEN.LOGIN)}>
@@ -675,16 +517,9 @@ export default function LoginScreen({ navigation }) {
     </Animated.View>
   );
 
-  // ─────────────────────────────────────────────────────────────
-  // RENDU PRINCIPAL
-  // KeyboardAvoidingView : remonte le contenu quand le clavier
-  // s'ouvre pour que les champs restent visibles.
-  // behavior='padding' sur iOS, 'height' sur Android.
-  // ─────────────────────────────────────────────────────────────
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.white} />
-
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
           style={styles.kav}
@@ -706,11 +541,7 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// STYLES
-// ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-
   root:  { flex: 1, backgroundColor: C.white },
   safe:  { flex: 1 },
   kav:   { flex: 1 },
@@ -720,8 +551,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 32,
   },
-
-  // ── Landing
   landingContent: {
     flex: 1,
     justifyContent: 'space-between',
@@ -752,10 +581,7 @@ const styles = StyleSheet.create({
     width: 40, height: 3,
     backgroundColor: C.orange, borderRadius: 2,
   },
-
   landingButtons: { gap: 12 },
-
-  // ── Bouton principal vert
   btnPrimary: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 10,
@@ -770,8 +596,6 @@ const styles = StyleSheet.create({
     color: C.white, fontSize: 16, fontWeight: '800',
   },
   btnDisabled: { opacity: 0.7 },
-
-  // ── Bouton secondaire bordure
   btnSecondary: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center',
@@ -782,8 +606,6 @@ const styles = StyleSheet.create({
   btnSecondaryTxt: {
     color: C.text, fontSize: 16, fontWeight: '700',
   },
-
-  // ── Séparateur OAuth
   dividerRow: {
     flexDirection: 'row', alignItems: 'center',
     gap: 10, marginVertical: 4,
@@ -793,110 +615,77 @@ const styles = StyleSheet.create({
     fontSize: 11, color: C.textMut,
     fontWeight: '600', letterSpacing: 0.5,
   },
-
-  // ── Boutons OAuth
   oauthRow: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
   oauthBtn: {
     width: 56, height: 56, borderRadius: 16,
-    backgroundColor: C.white,
-    borderWidth: 1.5, borderColor: C.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  // ── Footer
-  footer: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 8,
-    marginTop: 32,
-  },
-  footerLink: { fontSize: 12, color: C.textMut, fontWeight: '600' },
-  footerDot:  { fontSize: 12, color: C.border },
-  footerCopy: {
-    textAlign: 'center', fontSize: 11,
-    color: C.textMut, marginTop: 6,
-  },
-
-  // ── Formulaires (login + register)
-  formContent: {
-    paddingTop: 16,
-  },
-  formHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: C.bg,
-    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.white, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: C.border,
   },
-  formTitle: {
-    fontSize: 18, fontWeight: '800', color: C.text,
+  footer: {
+    flexDirection: 'row', justifyContent: 'center',
+    alignItems: 'center', gap: 8, marginTop: 24,
   },
+  footerLink: { color: C.textMut, fontSize: 12 },
+  footerDot: { color: C.textMut, fontSize: 12 },
+  footerCopy: {
+    color: C.textMut, fontSize: 11,
+    textAlign: 'center', marginTop: 12, marginBottom: 8,
+  },
+  formContent: { flex: 1, paddingTop: 20 },
+  formHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 32,
+  },
+  backBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center',
+  },
+  formTitle: { fontSize: 24, fontWeight: '900', color: C.text },
   formSubtitle: {
-    fontSize: 14, color: C.textSub,
-    lineHeight: 20, marginBottom: 24,
+    fontSize: 16, color: C.textSub,
+    lineHeight: 24, marginBottom: 32,
   },
-
-  // ── Barre de progression
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: C.errorBg, padding: 12,
+    borderRadius: 12, marginBottom: 20,
+    borderWidth: 1, borderColor: C.error + '20',
+  },
+  errorBannerTxt: { color: C.error, fontSize: 13, fontWeight: '500' },
+  inputWrap: { marginBottom: 20 },
+  inputBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.inputBg, borderRadius: 16,
+    borderWidth: 1.5, borderColor: C.inputBg,
+    paddingHorizontal: 16, height: 60,
+  },
+  inputBoxFocused: { borderColor: C.green, backgroundColor: C.white },
+  inputBoxError: { borderColor: C.error, backgroundColor: C.errorBg },
+  inputIcon: { marginRight: 12 },
+  input: {
+    flex: 1, color: C.text, fontSize: 16,
+    fontWeight: '500', height: '100%',
+  },
+  eyeBtn: { padding: 8 },
+  fieldError: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 4, marginTop: 6, paddingLeft: 4,
+  },
+  fieldErrorTxt: { color: C.error, fontSize: 12 },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: 32 },
+  forgotTxt: { color: C.green, fontSize: 14, fontWeight: '700' },
+  switchRow: {
+    flexDirection: 'row', justifyContent: 'center',
+    alignItems: 'center', marginTop: 32,
+  },
+  switchTxt: { color: C.textMut, fontSize: 14 },
+  switchLink: { color: C.green, fontSize: 14, fontWeight: '700' },
   progressRow: {
-    flexDirection: 'row', gap: 6,
-    marginBottom: 20,
+    flexDirection: 'row', gap: 8, marginBottom: 24,
   },
   progressSegment: {
     flex: 1, height: 4, borderRadius: 2,
     backgroundColor: C.border,
   },
-  progressSegmentActive: {
-    backgroundColor: C.orange,
-  },
-
-  // ── InputField
-  inputWrap:    { marginBottom: 14 },
-  inputBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: C.inputBg,
-    borderRadius: 14, paddingHorizontal: 14,
-    borderWidth: 1.5, borderColor: C.border,
-    minHeight: 52,
-  },
-  inputBoxFocused: { borderColor: C.green, backgroundColor: C.white },
-  inputBoxError:   { borderColor: C.error },
-  inputIcon:  { marginRight: 10 },
-  input: {
-    flex: 1, fontSize: 15,
-    color: C.text, padding: 0,
-    paddingVertical: 14,
-  },
-  eyeBtn: { padding: 4, marginLeft: 6 },
-
-  // ── Erreur champ
-  fieldError: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 4, marginTop: 5, paddingLeft: 4,
-  },
-  fieldErrorTxt: { fontSize: 12, color: C.error, fontWeight: '500' },
-
-  // ── Erreur globale (bannière)
-  errorBanner: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 8, backgroundColor: C.errorBg,
-    borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: '#FECACA',
-    marginBottom: 16,
-  },
-  errorBannerTxt: { fontSize: 13, color: C.error, flex: 1, lineHeight: 18 },
-
-  // ── Mot de passe oublié
-  forgotBtn:  { alignSelf: 'flex-end', marginBottom: 20, marginTop: -4 },
-  forgotTxt:  { fontSize: 13, color: C.green, fontWeight: '600' },
-
-  // ── Lien switch (connexion ↔ inscription)
-  switchRow: {
-    flexDirection: 'row', justifyContent: 'center',
-    alignItems: 'center', marginTop: 20,
-  },
-  switchTxt:  { fontSize: 14, color: C.textSub },
-  switchLink: { fontSize: 14, color: C.green, fontWeight: '700' },
+  progressSegmentActive: { backgroundColor: C.green },
 });

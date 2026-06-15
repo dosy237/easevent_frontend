@@ -49,6 +49,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import CreateEventScreen from './screens/CreateEventScreen';
 import EventDashboardScreen from './screens/EventDashboardScreen';
+import TicketsScreen from './screens/TicketsScreen'; // IMPORT AJOUTÉ
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -111,45 +112,6 @@ function DiscoverStackNavigator() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// ÉCRAN : TicketsScreen (placeholder)
-// ════════════════════════════════════════════════════════════════
-function TicketsScreen() {
-  return (
-    <View style={placeholderStyles.root}>
-      <Ionicons name="ticket-outline" size={56} color={C.textMut} />
-      <Text style={placeholderStyles.title}>Mes Billets</Text>
-      <Text style={placeholderStyles.sub}>
-        Vos billets d'événements apparaîtront ici.{'\n'}
-        Souscrivez à un événement pour commencer.
-      </Text>
-    </View>
-  );
-}
-
-const placeholderStyles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: C.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: C.text,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  sub: {
-    fontSize: 14,
-    color: C.textMut,
-    textAlign: 'center',
-    lineHeight: 21,
-  },
-});
-
-// ════════════════════════════════════════════════════════════════
 // NAVIGATEUR TABS — Utilisateurs connectés
 // ════════════════════════════════════════════════════════════════
 function AppTabNavigator() {
@@ -162,7 +124,7 @@ function AppTabNavigator() {
             TabDashboard: focused ? 'home' : 'home-outline',
             TabDiscover:  focused ? 'compass' : 'compass-outline',
             TabCreate:    focused ? 'add-circle' : 'add-circle-outline',
-            TabTickets:   focused ? 'ticket' : 'ticket-outline',
+            TabTickets:   focused ? 'mail' : 'mail-outline', // Updated for invitations
             TabProfile:   focused ? 'person' : 'person-outline',
           };
           return (
@@ -206,7 +168,7 @@ function AppTabNavigator() {
           tabBarInactiveTintColor: C.orange,
         }}
       />
-      <Tabs.Screen name="TabTickets" component={TicketsScreen} options={{ tabBarLabel: 'Billets' }} />
+      <Tabs.Screen name="TabTickets" component={TicketsScreen} options={{ tabBarLabel: 'Invitations' }} />
       <Tabs.Screen name="TabProfile" component={ProfileScreen} options={{ tabBarLabel: 'Profil' }} />
     </Tabs.Navigator>
   );

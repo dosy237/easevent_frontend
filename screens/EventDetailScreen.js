@@ -43,6 +43,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
+import { apiClient } from '../services/apiClient';
+import { useAuth } from '../context/AuthContext';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -191,13 +193,15 @@ export default function EventDetailScreen({ route, navigation }) {
   // useSafeAreaInsets() nous donne les valeurs exactes pour chaque bord
   const insets = useSafeAreaInsets();
 
+  const [fullEvent, setFullEvent] = useState(event);
+  const [loading, setLoading]   = useState(!event?.description);
+  const [error, setError]       = useState(null);
+
   // Animations d'entrée du contenu
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
   // scrollY : suit la position verticale du scroll.
-  // Sert à rendre le header transparent au départ et opaque
-  // quand on fait défiler vers le bas.
   const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -210,7 +214,29 @@ export default function EventDetailScreen({ route, navigation }) {
         toValue: 0, duration: 380, useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+
+    // Si on n'a que des données partielles (ex: depuis la liste), on recharge tout
+    if (event?.id) {
+       loadEventDetail(event.id);
+    }
+  }, [event?.id]);
+
+  const loadEventDetail = async (id) => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get(`/api/events/${id}/`);
+      setFullEvent(response.data);
+      setError(null);
+    } catch (err) {
+      console.error("Erreur chargement détail événement:", err);
+      // If we already have some data, don't show a hard error
+      if (!fullEvent) {
+          setError("Impossible de charger l'événement.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Opacité du fond du header selon le scroll
   // Entre 0 et 80px de scroll → opacité passe de 0 à 1
@@ -285,7 +311,7 @@ export default function EventDetailScreen({ route, navigation }) {
 
         {/* Badge type d'événement */}
         <View style={styles.typeBadge}>
-          <Text style={styles.typeBadgeTxt}>{typeLabel(event.event_type)}</Text>
+          <Text style={styles.typeBadgeTxt}>{typeLabel(fullEvent.event_type)}</Text>
         </View>
       </View>
 
@@ -305,7 +331,7 @@ export default function EventDetailScreen({ route, navigation }) {
         {/* ── IMAGE HERO ──────────────────────────────────── */}
         <View style={styles.heroBox}>
           <Image
-            source={{ uri: event.cover_image }}
+            source={{ uri: fullEvent.cover_image }}
             style={styles.heroImage}
             resizeMode="cover"
           />
@@ -319,21 +345,21 @@ export default function EventDetailScreen({ route, navigation }) {
             {/* Date en badge orange */}
             <View style={styles.heroDateBadge}>
               <Ionicons name="calendar-outline" size={12} color={C.white} />
-              <Text style={styles.heroDateTxt}>{event.date_formatted}</Text>
+              <Text style={styles.heroDateTxt}>{fullEvent.date_formatted}</Text>
             </View>
 
             {/* Titre principal */}
-            <Text style={styles.heroTitle}>{event.title}</Text>
+            <Text style={styles.heroTitle}>{fullEvent.title}</Text>
 
             {/* Lieu cliquable */}
             <TouchableOpacity
               style={styles.heroLocation}
-              onPress={() => openGoogleMaps(event.location_address)}
+              onPress={() => openGoogleMaps(fullEvent.location_address)}
               activeOpacity={0.75}
             >
               <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
               <Text style={styles.heroLocationTxt} numberOfLines={1}>
-                {event.location_address}
+                {fullEvent.location_address}
               </Text>
               <Ionicons name="open-outline" size={12} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
@@ -342,13 +368,13 @@ export default function EventDetailScreen({ route, navigation }) {
             <View style={styles.heroStats}>
               <View style={styles.heroStat}>
                 <Ionicons name="eye-outline" size={13} color="rgba(255,255,255,0.75)" />
-                <Text style={styles.heroStatTxt}>{event.view_count} vues</Text>
+                <Text style={styles.heroStatTxt}>{fullEvent.view_count} vues</Text>
               </View>
               <View style={styles.heroStatDivider} />
               <View style={styles.heroStat}>
                 <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.75)" />
                 <Text style={styles.heroStatTxt}>
-                  {event.confirmed_count} confirmé{event.confirmed_count > 1 ? 's' : ''}
+                  {fullEvent.confirmed_count} confirmé{fullEvent.confirmed_count > 1 ? 's' : ''}
                 </Text>
               </View>
             </View>
@@ -372,7 +398,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon="calendar-outline"
               label="Date"
-              value={formatDateComplete(event.start_date)}
+              value={formatDateComplete(fullEvent.start_date)}
             />
             <View style={styles.divider} />
 
@@ -380,7 +406,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon="time-outline"
               label="Horaires"
-              value={`${formatHeure(event.start_date)} — ${formatHeure(event.end_date)}`}
+              value={`${formatHeure(fullEvent.start_date)} — ${formatHeure(fullEvent.end_date)}`}
             />
             <View style={styles.divider} />
 
@@ -388,28 +414,28 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon="location-outline"
               label="Lieu"
-              value={event.location_address}
-              onPress={() => openGoogleMaps(event.location_address)}
+              value={fullEvent.location_address}
+              onPress={() => openGoogleMaps(fullEvent.location_address)}
             />
 
             {/* Ambiance si renseignée */}
-            {event.ambiance ? (
+            {fullEvent.ambiance ? (
               <>
                 <View style={styles.divider} />
                 <InfoRow
                   icon="color-palette-outline"
                   label="Ambiance"
-                  value={event.ambiance.charAt(0).toUpperCase() + event.ambiance.slice(1)}
+                  value={fullEvent.ambiance.charAt(0).toUpperCase() + fullEvent.ambiance.slice(1)}
                 />
               </>
             ) : null}
           </View>
 
           {/* ── Description ────────────────────────────────── */}
-          {event.description ? (
+          {fullEvent.description ? (
             <View style={styles.descCard}>
               <Text style={styles.cardSectionTitle}>À propos</Text>
-              <Text style={styles.descText}>{event.description}</Text>
+              <Text style={styles.descText}>{fullEvent.description}</Text>
             </View>
           ) : null}
 
