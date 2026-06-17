@@ -39,8 +39,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { API_BASE } from '../config';
-import { apiClient } from '../services/apiClient';
+import { eventService } from '../services/eventService';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -266,9 +265,9 @@ export default function HomeScreen({ navigation }) {
       if (search.trim()) params.search = search.trim();
       if (filter.value) params.type = filter.value;
 
-      const response = await apiClient.get('/api/events/publics/', { params });
+      const data = await eventService.fetchPublicEvents(params);
       
-      setEvents(response.data.events || []);
+      setEvents(data.events || []);
       setError(null);
     } catch (err) {
       setError('Impossible de charger les événements.');

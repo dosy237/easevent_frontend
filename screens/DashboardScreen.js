@@ -61,11 +61,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 
 // ─────────────────────────────────────────────────────────────────
-// CONFIGURATION
+// SERVICES
 // ─────────────────────────────────────────────────────────────────
 
-// Adresse du backend Django — doit correspondre à l'IP de ta machine
-import { API_BASE } from '../config';
+import eventService from '../services/eventService';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE DE COULEURS — identique aux autres écrans pour la cohérence
 // ─────────────────────────────────────────────────────────────────
@@ -412,73 +411,28 @@ export default function DashboardScreen({ navigation }) {
     }).start();
   }, []);
 
-  // ── Fonction utilitaire : appel API avec gestion du token expiré ──
-  // Pourquoi cette fonction ?
-  // Quand l'access token expire (après 15 min), le serveur répond 401.
-  // Au lieu de déconnecter l'utilisateur, on rafraîchit le token
-  // et on réessaie la requête automatiquement.
-  const apiCall = useCallback(async (url, options = {}) => {
-    let token = accessToken;
-
-    // Premier essai avec le token actuel
-    let res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
-
-    // Si 401 = token expiré → on le rafraîchit et on réessaie
-    if (res.status === 401) {
-      token = await refreshAccessToken();
-      if (!token) return null; // Refresh aussi expiré → null (déconnexion gérée par refreshAccessToken)
-
-      res = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${token}`,
-          ...options.headers,
-        },
-      });
-    }
-
-    return res;
-  }, [accessToken, refreshAccessToken]);
-
   // ── Charger toutes les données du dashboard ──────────────────
   const loadData = useCallback(async () => {
     try {
       // Promise.all lance les deux requêtes EN PARALLÈLE
-      // Au lieu de : attendre invitations PUIS attendre événements (lent)
       // On fait : invitations ET événements en même temps (deux fois plus rapide)
-      const [invitRes, eventsRes] = await Promise.all([
-        apiCall(`${API_BASE}/api/invitations/mine/`),
-        apiCall(`${API_BASE}/api/events/mes-evenements/`),
+      const [invitData, eventsData] = await Promise.all([
+        eventService.fetchMyInvitations(),
+        eventService.fetchMyEvents(),
       ]);
 
-      // Mettre à jour les invitations si la requête a réussi
-      if (invitRes?.ok) {
-        const data = await invitRes.json();
-        setInvitations(data.invitations || []);
-      }
-
-      // Mettre à jour les événements si la requête a réussi
-      if (eventsRes?.ok) {
-        const data = await eventsRes.json();
-        setMyEvents(data.events || []);
-      }
+      setInvitations(invitData.invitations || []);
+      setMyEvents(eventsData.events || []);
 
     } catch (err) {
       console.error('Erreur chargement dashboard:', err);
+      // NOTE: Le token refresh est potentiellement géré globalement ou via un intercepteur
     } finally {
       // finally s'exécute toujours — on arrête les spinners
       setLoading(false);
       setRefreshing(false);
     }
-  }, [apiCall]);
+  }, []);
 
   // ── Pull-to-refresh ──────────────────────────────────────────
   const onRefresh = () => {
@@ -492,25 +446,15 @@ export default function DashboardScreen({ navigation }) {
   // sans recharger toute la liste (optimisation UX)
   const handleRespond = async (invitationId, status) => {
     try {
-      const res = await apiCall(
-        `${API_BASE}/api/invitations/${invitationId}/repondre/`,
-        {
-          method: 'POST',
-          body:   JSON.stringify({ status }),
-        }
+      await eventService.respondToInvitation(invitationId, status);
+      // Mettre à jour le statut localement — pas besoin de recharger toute la liste
+      setInvitations(prev =>
+        prev.map(inv =>
+          inv.id === invitationId
+            ? { ...inv, status } // copie l'invitation avec le nouveau statut
+            : inv                // laisse les autres intactes
+        )
       );
-
-      if (res?.ok) {
-        // Mettre à jour le statut localement — pas besoin de recharger toute la liste
-        // .map() crée un nouveau tableau en remplaçant l'invitation concernée
-        setInvitations(prev =>
-          prev.map(inv =>
-            inv.id === invitationId
-              ? { ...inv, status } // copie l'invitation avec le nouveau statut
-              : inv                // laisse les autres intactes
-          )
-        );
-      }
     } catch (err) {
       Alert.alert('Erreur', 'Impossible de répondre à cette invitation. Réessayez.');
     }
@@ -529,15 +473,9 @@ export default function DashboardScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const res = await apiCall(
-                `${API_BASE}/api/events/${event.id}/delete/`,
-                { method: 'DELETE' }
-              );
-              if (res?.ok) {
-                // Retirer l'événement de la liste sans recharger
-                // .filter() retourne un nouveau tableau sans l'événement supprimé
-                setMyEvents(prev => prev.filter(e => e.id !== event.id));
-              }
+              await eventService.deleteEvent(event.id);
+              // Retirer l'événement de la liste sans recharger
+              setMyEvents(prev => prev.filter(e => e.id !== event.id));
             } catch {
               Alert.alert('Erreur', 'Impossible de supprimer cet événement.');
             }

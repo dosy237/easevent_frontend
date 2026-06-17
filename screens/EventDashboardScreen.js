@@ -28,11 +28,12 @@ import { SafeAreaView }    from 'react-native-safe-area-context';
 import { Ionicons }        from '@expo/vector-icons';
 import { useFocusEffect }  from '@react-navigation/native';
 import { useAuth }         from '../context/AuthContext';
+import { eventService }    from '../services/eventService';
 
 // ─────────────────────────────────────────────────────────────────
 // API
 // ─────────────────────────────────────────────────────────────────
-import { API_BASE } from '../config';
+
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -299,7 +300,7 @@ export default function EventDashboardScreen({ route, navigation }) {
   // L'événement est passé en paramètre depuis DashboardScreen
   // via navigation.navigate('EventDashboard', { event })
   const { event: initialEvent } = route.params || {};
-  const { accessToken, refreshAccessToken } = useAuth();
+  const { accessToken } = useAuth();
 
   // ── États ────────────────────────────────────────────────────
   const [event,         setEvent]         = useState(initialEvent);
@@ -321,51 +322,20 @@ export default function EventDashboardScreen({ route, navigation }) {
     }).start();
   }, []);
 
-  // ── Appel API avec refresh token ─────────────────────────────
-  const apiCall = useCallback(async (url, options = {}) => {
-    let token = accessToken;
-    let res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
-    if (res.status === 401) {
-      token = await refreshAccessToken();
-      if (!token) return null;
-      res = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${token}`,
-          ...options.headers,
-        },
-      });
-    }
-    return res;
-  }, [accessToken, refreshAccessToken]);
+
 
   // ── Charger les données de l'événement ───────────────────────
   const loadData = useCallback(async () => {
     if (!event?.id) return;
     try {
-      const [detailRes, participantsRes] = await Promise.all([
-        apiCall(`${API_BASE}/api/events/${event.id}/detail/`),
-        apiCall(`${API_BASE}/api/events/${event.id}/participants/`),
+      const [detailData, participantsData] = await Promise.all([
+        eventService.fetchEventDetail(event.id),
+        eventService.fetchEventParticipants(event.id),
       ]);
 
-      if (detailRes?.ok) {
-        const data = await detailRes.json();
-        setEvent(data.event);
-        setStats(data.invitations);
-      }
-
-      if (participantsRes?.ok) {
-        const data = await participantsRes.json();
-        setParticipants(data.participants || []);
-      }
+      setEvent(detailData.event);
+      setStats(detailData.invitations);
+      setParticipants(participantsData.participants || []);
 
     } catch (err) {
       console.error('Erreur chargement event dashboard:', err);
@@ -373,7 +343,7 @@ export default function EventDashboardScreen({ route, navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [event?.id, apiCall]);
+  }, [event?.id]);
 
   // Recharger à chaque fois qu'on revient sur cet écran
   useFocusEffect(
@@ -402,35 +372,23 @@ const handlePublish = async () => {
         onPress: async () => {
           setPublishing(true);
           try {
-            const res = await apiCall(
-              `${API_BASE}/api/events/${event.id}/publish/`,
-              {
-                method: 'POST',
-                body:   JSON.stringify({
-                  visibility: event.visibility,
-                }),
-              }
-            );
+            await eventService.publishEvent(event.id, event.visibility);
 
-            if (res?.ok) {
-              setEvent(prev => ({
-                ...prev,
-                status: isPublished ? 'draft' : 'published',
-              }));
-              Alert.alert(
-                isPublished ? 'Événement dépublié' : '🎉 Événement publié !',
-                isPublished
-                  ? 'L\'événement n\'est plus accessible.'
-                  : isPrivate
-                    ? 'Votre événement est publié. Seuls vos invités peuvent y accéder.'
-                    : 'Votre événement est maintenant visible dans le fil de découverte.',
-              );
-            } else {
-              const data = await res?.json();
-              Alert.alert('Erreur', data?.detail || 'Impossible de modifier le statut.');
-            }
-          } catch {
-            Alert.alert('Erreur', 'Vérifiez votre connexion.');
+            setEvent(prev => ({
+              ...prev,
+              status: isPublished ? 'draft' : 'published',
+            }));
+            Alert.alert(
+              isPublished ? 'Événement dépublié' : '🎉 Événement publié !',
+              isPublished
+                ? 'L\'événement n\'est plus accessible.'
+                : isPrivate
+                  ? 'Votre événement est publié. Seuls vos invités peuvent y accéder.'
+                  : 'Votre événement est maintenant visible dans le fil de découverte.',
+            );
+          } catch (err) {
+            const detail = err.response?.data?.detail || 'Impossible de modifier le statut.';
+            Alert.alert('Erreur', detail);
           } finally {
             setPublishing(false);
           }
@@ -452,16 +410,11 @@ const handlePublish = async () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const res = await apiCall(
-                `${API_BASE}/api/events/${event.id}/delete/`,
-                { method: 'DELETE' }
-              );
-              if (res?.ok) {
-                Alert.alert('Supprimé', 'L\'événement a été supprimé.', [{
-                  text: 'OK',
-                  onPress: () => navigation?.goBack(),
-                }]);
-              }
+              await eventService.deleteEvent(event.id);
+              Alert.alert('Supprimé', 'L\'événement a été supprimé.', [{
+                text: 'OK',
+                onPress: () => navigation?.goBack(),
+              }]);
             } catch {
               Alert.alert('Erreur', 'Impossible de supprimer cet événement.');
             }
@@ -475,22 +428,13 @@ const handlePublish = async () => {
   const handleInvite = async (data) => {
     setInviting(true);
     try {
-      const res = await apiCall(
-        `${API_BASE}/api/events/${event.id}/invite/`,
-        { method: 'POST', body: JSON.stringify(data) }
-      );
-
-      const resData = await res?.json();
-
-      if (res?.ok) {
-        setShowInvite(false);
-        Alert.alert('✅ Invitation envoyée', resData.message || 'L\'invitation a été envoyée.');
-        loadData(); // Recharger la liste
-      } else {
-        Alert.alert('Erreur', resData?.detail || 'Impossible d\'envoyer l\'invitation.');
-      }
-    } catch {
-      Alert.alert('Erreur', 'Vérifiez votre connexion.');
+      const resData = await eventService.inviteParticipant(event.id, data);
+      setShowInvite(false);
+      Alert.alert('✅ Invitation envoyée', resData.message || 'L\'invitation a été envoyée.');
+      loadData(); // Recharger la liste
+    } catch (err) {
+      const detail = err.response?.data?.detail || 'Impossible d\'envoyer l\'invitation.';
+      Alert.alert('Erreur', detail);
     } finally {
       setInviting(false);
     }
@@ -512,14 +456,9 @@ const handlePublish = async () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const res = await apiCall(
-                `${API_BASE}/api/invitations/${participant.id}/revoke/`,
-                { method: 'DELETE' }
-              );
-              if (res?.ok) {
-                // Retirer localement sans recharger
-                setParticipants(prev => prev.filter(p => p.id !== participant.id));
-              }
+              await eventService.revokeInvitation(participant.id);
+              // Retirer localement sans recharger
+              setParticipants(prev => prev.filter(p => p.id !== participant.id));
             } catch {
               Alert.alert('Erreur', 'Impossible de retirer cette invitation.');
             }

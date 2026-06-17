@@ -30,6 +30,7 @@ import { SafeAreaView }   from 'react-native-safe-area-context';
 import { Ionicons }       from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth }        from '../context/AuthContext';
+import { eventService }   from '../services/eventService';
 
 // QR Code — on utilise une librairie légère
 // Si elle n'est pas installée, on affiche un placeholder propre
@@ -43,7 +44,7 @@ try {
 // ─────────────────────────────────────────────────────────────────
 // API
 // ─────────────────────────────────────────────────────────────────
-import { API_BASE } from '../config';
+
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -443,7 +444,7 @@ const InvitationCard = ({ invitation, onPress, onRespond }) => {
 // ════════════════════════════════════════════════════════════════
 export default function TicketsScreen({ navigation }) {
 
-  const { user, accessToken, refreshAccessToken } = useAuth();
+  const { user } = useAuth();
 
   // ── États ────────────────────────────────────────────────────
   const [invitations,      setInvitations]      = useState([]);
@@ -462,47 +463,20 @@ export default function TicketsScreen({ navigation }) {
     }).start();
   }, []);
 
-  // ── Appel API avec refresh token ─────────────────────────────
-  const apiCall = useCallback(async (url, options = {}) => {
-    let token = accessToken;
-    let res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
-    if (res.status === 401) {
-      token = await refreshAccessToken();
-      if (!token) return null;
-      res = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${token}`,
-          ...options.headers,
-        },
-      });
-    }
-    return res;
-  }, [accessToken, refreshAccessToken]);
+
 
   // ── Charger les invitations ──────────────────────────────────
   const loadInvitations = useCallback(async () => {
     try {
-      const res = await apiCall(`${API_BASE}/api/invitations/mine/`);
-      if (res?.ok) {
-        const data = await res.json();
-        setInvitations(data.invitations || []);
-      }
+      const data = await eventService.fetchMyInvitations();
+      setInvitations(data.invitations || []);
     } catch (err) {
       console.error('Erreur chargement billets:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [apiCall]);
+  }, []);
 
   // Recharger à chaque fois qu'on revient sur cet écran
   useFocusEffect(
@@ -514,28 +488,23 @@ export default function TicketsScreen({ navigation }) {
   // ── Répondre à une invitation ────────────────────────────────
   const handleRespond = async (invitationId, newStatus) => {
     try {
-      const res = await apiCall(
-        `${API_BASE}/api/invitations/${invitationId}/repondre/`,
-        { method: 'POST', body: JSON.stringify({ status: newStatus }) }
+      await eventService.respondToInvitation(invitationId, newStatus);
+
+      // Mettre à jour localement sans recharger toute la liste
+      setInvitations(prev =>
+        prev.map(inv =>
+          inv.id === invitationId
+            ? { ...inv, status: newStatus }
+            : inv
+        )
       );
 
-      if (res?.ok) {
-        // Mettre à jour localement sans recharger toute la liste
-        setInvitations(prev =>
-          prev.map(inv =>
-            inv.id === invitationId
-              ? { ...inv, status: newStatus }
-              : inv
-          )
+      if (newStatus === 'confirmed') {
+        Alert.alert(
+          '🎉 Invitation acceptée !',
+          'Votre billet est maintenant disponible dans l\'onglet "Confirmés".',
+          [{ text: 'Voir mon billet', onPress: () => setActiveSection('confirmed') }]
         );
-
-        if (newStatus === 'confirmed') {
-          Alert.alert(
-            '🎉 Invitation acceptée !',
-            'Votre billet est maintenant disponible dans l\'onglet "Confirmés".',
-            [{ text: 'Voir mon billet', onPress: () => setActiveSection('confirmed') }]
-          );
-        }
       }
     } catch (err) {
       Alert.alert('Erreur', 'Impossible de répondre à cette invitation.');

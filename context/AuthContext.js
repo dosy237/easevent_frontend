@@ -25,7 +25,7 @@ import React, {
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-import { apiClient } from '../services/apiClient';
+import { apiClient, setLogoutCallback } from '../services/apiClient';
 import { authService } from '../services/authService';
 
 // ─────────────────────────────────────────────────────────────────
@@ -58,6 +58,11 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     checkStoredAuth();
   }, []);
+
+  // ── Register logout callback for apiClient 401 auto-logout ──
+  useEffect(() => {
+    setLogoutCallback(() => logout());
+  }, [logout]);
 
   const checkStoredAuth = async () => {
     try {

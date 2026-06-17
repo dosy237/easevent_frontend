@@ -19,5 +19,20 @@ export const authService = {
   getProfile: async () => {
     const response = await apiClient.get('/api/auth/profile/');
     return response.data;
+  },
+
+  updateProfile: async (userData) => {
+    const response = await apiClient.patch('/api/auth/me/update/', userData);
+    return response.data;
+  },
+
+  changePassword: async (passwords) => {
+    const response = await apiClient.post('/api/auth/change-password/', passwords);
+    return response.data;
+  },
+
+  deleteAccount: async (password) => {
+    const response = await apiClient.post('/api/auth/delete-account/', { password });
+    return response.data;
   }
 };

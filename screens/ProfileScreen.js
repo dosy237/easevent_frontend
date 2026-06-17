@@ -23,8 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons }     from '@expo/vector-icons';
 import { useAuth }      from '../context/AuthContext';
 
-import { API_BASE } from '../config';
-import { apiClient } from '../services/apiClient';
+import { authService }   from '../services/authService';
 const C = {
   green:      '#1B6B4A',
   greenDark:  '#155C3C',
@@ -145,7 +144,7 @@ const EditableField = ({ label, value, onSave, multiline = false, maxLength }) =
 // COMPOSANT : PasswordModal
 // Modal de changement de mot de passe
 // ════════════════════════════════════════════════════════════════
-const PasswordModal = ({ visible, onClose, onSuccess, accessToken }) => {
+const PasswordModal = ({ visible, onClose, onSuccess }) => {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -163,7 +162,7 @@ const PasswordModal = ({ visible, onClose, onSuccess, accessToken }) => {
 
     setLoading(true);
     try {
-      await apiClient.post('/api/auth/change-password/', {
+      await authService.changePassword({
         old_password: oldPassword,
         new_password: newPassword,
       });
@@ -274,7 +273,7 @@ const PasswordModal = ({ visible, onClose, onSuccess, accessToken }) => {
 // COMPOSANT : DeleteAccountModal
 // Modal de suppression de compte avec confirmation par mot de passe
 // ════════════════════════════════════════════════════════════════
-const DeleteAccountModal = ({ visible, onClose, onConfirm, accessToken }) => {
+const DeleteAccountModal = ({ visible, onClose, onConfirm }) => {
   const [password, setPassword] = useState('');
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
@@ -286,7 +285,7 @@ const DeleteAccountModal = ({ visible, onClose, onConfirm, accessToken }) => {
     setError('');
 
     try {
-      await apiClient.post('/api/auth/delete-account/', { password });
+      await authService.deleteAccount(password);
       onConfirm();
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors de la suppression.');
@@ -364,7 +363,7 @@ const DeleteAccountModal = ({ visible, onClose, onConfirm, accessToken }) => {
 // ════════════════════════════════════════════════════════════════
 export default function ProfileScreen({ navigation }) {
 
-  const { user, accessToken, logout, updateUser, refreshAccessToken  } = useAuth();
+  const { user, logout, updateUser } = useAuth();
 
   const [successMsg,       setSuccessMsg]       = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -380,24 +379,17 @@ export default function ProfileScreen({ navigation }) {
 
   // ── Sauvegarder un champ du profil ───────────────────────────
   const saveField = async (field, value) => {
-  try {
-    const response = await apiClient.patch('/api/auth/me/update/', { [field]: value });
-    await updateUser(response.data);
-    showSuccess('Profil mis à jour');
-  } catch (err) {
-    if (err.response?.status === 401) {
-       // AuthContext interceptor might handle this, but for safety:
-       const token = await refreshAccessToken();
-       if (token) {
-         return saveField(field, value); // Retry once
-       }
+    try {
+      const data = await authService.updateProfile({ [field]: value });
+      await updateUser(data);
+      showSuccess('Profil mis à jour');
+    } catch (err) {
+      Alert.alert(
+        'Erreur',
+        'Impossible de sauvegarder vos modifications. Vérifiez votre connexion et réessayez.'
+      );
     }
-    Alert.alert(
-      'Erreur',
-      'Impossible de sauvegarder vos modifications. Vérifiez votre connexion et réessayez.'
-    );
-  }
-};
+  };
   const showSuccess = (msg) => {
     setSuccessMsg(msg);
     setTimeout(() => setSuccessMsg(''), 2500);
@@ -608,7 +600,6 @@ export default function ProfileScreen({ navigation }) {
           visible={showPasswordModal}
           onClose={() => setShowPasswordModal(false)}
           onSuccess={() => showSuccess('Mot de passe modifié avec succès')}
-          accessToken={accessToken}
         />
 
         {/* ── Modal suppression compte ─────────────────────── */}
@@ -616,7 +607,6 @@ export default function ProfileScreen({ navigation }) {
           visible={showDeleteModal}
           onClose={() => setShowDeleteModal(false)}
           onConfirm={handleAccountDeleted}
-          accessToken={accessToken}
         />
 
       </SafeAreaView>

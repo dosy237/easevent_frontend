@@ -14,7 +14,7 @@
  * ════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, StatusBar, Animated, Platform, Alert,
@@ -27,10 +27,7 @@ import * as ImagePicker     from 'expo-image-picker';
 import DateTimePicker       from '@react-native-community/datetimepicker';
 import { useAuth }          from '../context/AuthContext';
 
-// ─────────────────────────────────────────────────────────────────
-// API
-// ─────────────────────────────────────────────────────────────────
-import { API_BASE } from '../config';
+import eventService from '../services/eventService';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -223,7 +220,7 @@ const DatePickerField = ({ label, date, onChange, minDate, error }) => {
         // Sur Android : après la date, ouvrir l'heure
         setTempDate(current);
         setMode('time');
-        setShowPicker(true);
+        setTimeout(() => setShowPicker(true), 150);
       } else {
         // Après l'heure : on a la date complète
         onChange(current);
@@ -358,7 +355,7 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
 // ════════════════════════════════════════════════════════════════
 export default function CreateEventScreen({ navigation }) {
 
-  const { accessToken, refreshAccessToken } = useAuth();
+  const { accessToken } = useAuth();
 
   // ── Étape actuelle ────────────────────────────────────────────
   const [step, setStep] = useState(1);
@@ -416,23 +413,6 @@ export default function CreateEventScreen({ navigation }) {
     });
   };
 
-  // ── Appel API avec refresh automatique du token ───────────────
-  const apiCall = useCallback(async (url, options = {}) => {
-    let token = accessToken;
-    let res = await fetch(url, {
-      ...options,
-      headers: { 'Authorization': `Bearer ${token}`, ...options.headers },
-    });
-    if (res.status === 401) {
-      token = await refreshAccessToken();
-      if (!token) return null;
-      res = await fetch(url, {
-        ...options,
-        headers: { 'Authorization': `Bearer ${token}`, ...options.headers },
-      });
-    }
-    return res;
-  }, [accessToken, refreshAccessToken]);
 
   // ── Upload image vers Cloudinary ──────────────────────────────
   // 1. Demande permission galerie
@@ -448,7 +428,7 @@ export default function CreateEventScreen({ navigation }) {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:    ImagePicker.MediaTypeOptions.Images,
+        mediaTypes:    ['images'],
         allowsEditing: true,
         quality:       0.8,
         base64:        true,
@@ -462,16 +442,10 @@ export default function CreateEventScreen({ navigation }) {
 
       const base64Data = `data:image/jpeg;base64,${asset.base64}`;
 
-      const res = await apiCall(`${API_BASE}/api/events/upload-image/`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ image: base64Data, name: imageName }),
-      });
-
-      if (res?.ok) {
-        const data = await res.json();
+      try {
+        const data = await eventService.uploadImage(base64Data, imageName);
         setUrl(data.url);
-      } else {
+      } catch (err) {
         Alert.alert('Erreur', 'Impossible d\'uploader l\'image. Réessayez.');
         setUri(null);
       }
@@ -540,41 +514,33 @@ export default function CreateEventScreen({ navigation }) {
         price:       isPaid && price ? parseFloat(price) : null,
       };
 
-      const res = await apiCall(`${API_BASE}/api/events/create/`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          title,
-          event_type:       eventType,
-          description,
-          start_date:       formatDateISO(startDate),
-          end_date:         formatDateISO(endDate),
-          location_address: locationAddress,
-          is_online:        isOnline,
-          online_link:      onlineLink || null,
-          cover_image:      coverImageUrl,
-          ambiance, palette, visibility, template_config,
-        }),
+      await eventService.createEvent({
+        title,
+        event_type:       eventType,
+        description,
+        start_date:       formatDateISO(startDate),
+        end_date:         formatDateISO(endDate),
+        location_address: locationAddress,
+        is_online:        isOnline,
+        online_link:      onlineLink || null,
+        cover_image:      coverImageUrl,
+        ambiance, palette, visibility, template_config,
       });
 
-      if (res?.ok) {
-        Alert.alert(
-          '🎉 Événement créé !',
-          `"${title}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
-          [{
-            text: 'Voir mon tableau de bord',
-            onPress: () => navigation?.reset({
-               index: 0,
-               routes: [{ name: 'TabDashboard' }],
+      Alert.alert(
+        '🎉 Événement créé !',
+        `"${title}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
+        [{
+          text: 'Voir mon tableau de bord',
+          onPress: () => navigation?.reset({
+             index: 0,
+             routes: [{ name: 'TabDashboard' }],
           }),
-          }]
-        );
-      } else {
-        const data = await res?.json();
-        Alert.alert('Erreur', data?.detail || 'Impossible de créer l\'événement.');
-      }
+        }]
+      );
     } catch (err) {
-      Alert.alert('Erreur', 'Vérifiez votre connexion et réessayez.');
+      const detail = err.response?.data?.detail || 'Vérifiez votre connexion et réessayez.';
+      Alert.alert('Erreur', detail);
       console.error('Erreur création:', err);
     } finally {
       setSubmitting(false);
