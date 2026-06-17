@@ -39,7 +39,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { eventService } from '../services/eventService';
+import eventService from '../services/eventService';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
