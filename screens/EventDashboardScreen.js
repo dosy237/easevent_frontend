@@ -274,7 +274,7 @@ const handlePublish = async () => {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity
               style={styles.editBtn}
-              onPress={() => navigation?.navigate('Conversations', { eventId: event.id })}
+              onPress={() => navigation?.navigate('Conversations', { eventId: event.id, eventTitle: event.title })}
               accessibilityRole="button"
               accessibilityLabel="Messages des invités"
             >
@@ -407,7 +407,7 @@ const handlePublish = async () => {
                       subtitle={counts.total ? `${counts.total} invité${counts.total > 1 ? 's' : ''} · ${counts.confirmed} confirmé${counts.confirmed > 1 ? 's' : ''}` : 'Aucun invité pour le moment'}
                       onPress={() => goGuests('all')} />
                     <ActionRow icon="chatbubbles-outline" title="Messages des invités"
-                      subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id })} />
+                      subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id, eventTitle: event.title })} />
                     <ActionRow icon="help-circle-outline" title="Questions RSVP" last
                       subtitle="Posez jusqu'à 5 questions à vos invités" onPress={() => navigation.navigate('RsvpQuestions', { event })} />
                   </View>

@@ -60,7 +60,7 @@ import { useFocusEffect } from '@react-navigation/native';
 // Retourne : user (infos utilisateur), accessToken (JWT), refreshAccessToken (renouveler le token)
 import { useAuth } from '../context/AuthContext';
 import { useTicketBadge } from '../context/TicketBadgeContext';
-import NotificationBell, { bellLabel } from '../components/ui/NotificationBell';
+import NotificationBell, { bellLabel, MessagesBubble, messagesLabel } from '../components/ui/NotificationBell';
 
 // ─────────────────────────────────────────────────────────────────
 // SERVICES
@@ -509,7 +509,7 @@ const goToDiscover    = ()      => navigation?.getParent()?.navigate('TabDiscove
 const goToProfile     = ()      => navigation?.getParent()?.navigate('TabProfile');
 const goToMessages    = ()      => navigation?.navigate('Conversations');
 const goToNotifications = ()    => navigation?.navigate('Notifications');
-  const { notifications: notifCount } = useTicketBadge();
+  const { notifications: notifCount, messages: msgCount } = useTicketBadge();
 
   // Invitations en attente de réponse
   const pendingInvitations = invitations.filter(i => i.status === 'sent');
@@ -544,9 +544,9 @@ const goToNotifications = ()    => navigation?.navigate('Notifications');
               style={styles.headerIconBtn}
               onPress={goToMessages}
               accessibilityRole="button"
-              accessibilityLabel="Messages des invités"
+              accessibilityLabel={messagesLabel(msgCount)}
             >
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color={C.text} />
+              <MessagesBubble size={20} />
             </TouchableOpacity>
             {/* Notifications (M17) */}
             <TouchableOpacity

@@ -56,6 +56,8 @@ import InviteGuestsScreen from './screens/InviteGuestsScreen';
 import GuestListScreen from './screens/GuestListScreen';
 import InvitationLandingScreen from './screens/InvitationLandingScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
+import ConversationsScreen from './screens/ConversationsScreen';
+import ChatScreen from './screens/ChatScreen';
 import { TicketBadgeProvider, useTicketBadge } from './context/TicketBadgeContext';
 
 // ─────────────────────────────────────────────────────────────────
@@ -166,8 +168,8 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="InviteGuests"       component={InviteGuestsScreen}   options={{ title: 'Inviter des participants' }} />
       <DashStack.Screen name="GuestList"          component={GuestListScreen}      options={{ title: 'Invités & réponses' }} />
       <DashStack.Screen name="RsvpQuestions"      {...soon('M14', 'Questions RSVP')} />
-      <DashStack.Screen name="Conversations"      {...soon('M15', 'Messagerie')} />
-      <DashStack.Screen name="Chat"               {...soon('M16', 'Conversation')} />
+      <DashStack.Screen name="Conversations"      component={ConversationsScreen}  options={{ title: 'Messages' }} />
+      <DashStack.Screen name="Chat"               component={ChatScreen}           options={{ title: 'Conversation' }} />
       <DashStack.Screen name="Notifications"      component={NotificationsScreen} options={{ title: 'Notifications' }} />
     </DashStack.Navigator>
   );
@@ -182,7 +184,7 @@ function DiscoverStackNavigator() {
       <DiscoverStack.Screen name="DiscoverHome"  component={HomeScreen}        options={{ title: 'Découvrir' }} />
       <DiscoverStack.Screen name="EventDetail"   component={EventDetailScreen} options={{ title: 'Événement' }} />
       <DiscoverStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
-      <DiscoverStack.Screen name="Chat"          {...soon('M16', 'Conversation')} />
+      <DiscoverStack.Screen name="Chat"          component={ChatScreen} options={{ title: 'Conversation' }} />
       <DiscoverStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
     </DiscoverStack.Navigator>
   );
@@ -197,6 +199,7 @@ function TicketsStackNavigator() {
       <TicketsStack.Screen name="Tickets"        component={TicketsScreen} options={{ title: 'Mes tickets' }} />
       <TicketsStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
       <TicketsStack.Screen name="InvitationLanding" component={InvitationLandingScreen} options={{ title: 'Invitation' }} />
+      <TicketsStack.Screen name="Chat"           component={ChatScreen} options={{ title: 'Conversation' }} />
     </TicketsStack.Navigator>
   );
 }
@@ -210,6 +213,7 @@ function ProfileStackNavigator() {
       <ProfileStack.Screen name="Profile"              component={ProfileScreen}       options={{ title: 'Mon profil' }} />
       <ProfileStack.Screen name="PrivacyPolicy"        component={PrivacyPolicyScreen} options={{ title: 'Confidentialité' }} />
       <ProfileStack.Screen name="Notifications"        component={NotificationsScreen} options={{ title: 'Notifications' }} />
+      <ProfileStack.Screen name="Chat"                 component={ChatScreen} options={{ title: 'Conversation' }} />
       <ProfileStack.Screen name="Payouts"              component={PayoutsScreen} options={{ title: 'Paiements & virements' }} />
       <ProfileStack.Screen name="Plans"                {...soon('M20', 'Choisir un plan')} />
       <ProfileStack.Screen name="SubscriptionCheckout" {...soon('M21', 'Paiement')} />
