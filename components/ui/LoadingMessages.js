@@ -22,6 +22,16 @@ export const MESSAGES = {
     'Vos invitations arrivent…',
     'Encore un instant…',
   ],
+  guests: [
+    'Nous rassemblons vos invités…',
+    'On compte les réponses…',
+    'Encore un instant…',
+  ],
+  invitation: [
+    'Nous ouvrons votre invitation…',
+    'On prépare votre place…',
+    'Encore un instant…',
+  ],
   generic: [
     'Chargement en cours…',
     'Nous préparons tout pour vous…',

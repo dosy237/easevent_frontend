@@ -26,7 +26,8 @@ import React, {
 
 import { setLogoutCallback } from '../services/apiClient';
 import { authService } from '../services/authService';
-import { KEYS, getItem, setItem, clearSession } from '../services/storage';
+import invitationService from '../services/invitationService';
+import { KEYS, getItem, setItem, deleteItem, clearSession } from '../services/storage';
 
 // ─────────────────────────────────────────────────────────────────
 // CRÉATION DU CONTEXTE
@@ -40,6 +41,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Onglet ouvert après la connexion (ex. « TabTickets » quand une invitation a été rattachée)
+  const [landingRoute, setLandingRoute] = useState(null);
 
   const isAuthenticated = user !== null;
 
@@ -70,6 +73,19 @@ export function AuthProvider({ children }) {
       await setItem(KEYS.ACCESS_TOKEN, access);
       await setItem(KEYS.REFRESH_TOKEN, refresh);
       await setItem(KEYS.USER, JSON.stringify(userData));
+
+      // Lien d'invitation ouvert avant la connexion (M31) : on le rattache
+      // au compte avant d'afficher l'application, qui ouvre alors Mes tickets.
+      const pendingInvite = await getItem(KEYS.PENDING_INVITE);
+      if (pendingInvite) {
+        try {
+          await invitationService.claim(pendingInvite);
+          setLandingRoute('TabTickets');
+        } catch { /* lien expiré ou déjà utilisé : connexion normale */ }
+        await deleteItem(KEYS.PENDING_INVITE);
+      } else {
+        setLandingRoute(null);
+      }
 
       setAccessToken(access);
       setUser(userData);
@@ -146,6 +162,7 @@ export function AuthProvider({ children }) {
     accessToken,
     isAuthenticated,
     isLoading,
+    landingRoute,
     login,
     logout,
     updateUser,

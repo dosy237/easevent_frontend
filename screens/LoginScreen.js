@@ -25,6 +25,7 @@
  * ════════════════════════════════════════════════════════════════
  */
 import { useAuth } from '../context/AuthContext';
+import { KEYS, setItem } from '../services/storage';
 import { authService } from '../services/authService';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -188,6 +189,11 @@ export default function LoginScreen({ navigation, route }) {
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const invitationToken = params.invitationToken;
+
+  // Lien d'invitation (M31) : rattaché au compte dès la connexion
+  useEffect(() => {
+    if (invitationToken) setItem(KEYS.PENDING_INVITE, invitationToken).catch(() => {});
+  }, [invitationToken]);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const logoScale = useRef(new Animated.Value(1)).current;
