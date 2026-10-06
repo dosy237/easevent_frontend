@@ -376,7 +376,7 @@ export default function HomeScreen({ navigation }) {
             <>
               <View style={styles.logoRow}>
                 <View style={styles.logoMark}>
-                  <LogoMark size={38} radius={12} simplified />
+                  <LogoMark size={38} simplified />
                 </View>
                 <Text style={styles.logoTxt} accessibilityRole="header" accessibilityLabel="Easevent">
                   <Text style={styles.logoEas}>Eas</Text>

@@ -331,7 +331,7 @@ export default function LoginScreen({ navigation, route }) {
         { transform: [{ scale: logoScale }] }
       ]}>
         <View style={styles.logoIconBox}>
-          <LogoMark size={80} radius={22} />
+          <LogoMark size={80} />
         </View>
         <Text style={styles.landingAppName} accessibilityRole="header" accessibilityLabel="Easevent">
           <Text style={styles.landingEas}>Eas</Text>

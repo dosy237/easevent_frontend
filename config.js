@@ -4,3 +4,6 @@ export const API_BASE =
   process.env.EXPO_PUBLIC_API_URL ||
   process.env.EXPO_PUBLIC_API_BASE ||
   'http://192.168.1.101:8003';
+
+// Images de l'application (logo, illustrations) : servies par le backend.
+export const ASSETS_BASE = `${API_BASE.replace(/\/$/, '')}/static/app`;
