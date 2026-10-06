@@ -34,7 +34,7 @@ export const TOUCH = 44;
 // Informations légales affichées dans la politique de confidentialité (M02).
 // À compléter par le juridique.
 export const LEGAL = {
-  company:  '[NOM DE LA SOCIÉTÉ]',
-  dpoEmail: '[EMAIL DPO]',
+  company:  'Eranis',
+  dpoEmail: 'eranistechnology@gmail.com',
   updatedAt: '6 octobre 2026',
 };

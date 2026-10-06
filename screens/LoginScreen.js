@@ -412,7 +412,7 @@ export default function LoginScreen({ navigation, route }) {
           <Text style={styles.footerLink}>Aide</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.footerCopy}>© 2026 Easevent Inc.</Text>
+      <Text style={styles.footerCopy}>© 2026 Easevent · Eranis</Text>
     </Animated.View>
   );
 
