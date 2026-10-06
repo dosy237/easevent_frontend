@@ -37,6 +37,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useTicketBadge } from '../context/TicketBadgeContext';
+import NotificationBell, { bellLabel } from '../components/ui/NotificationBell';
 import { useFocusEffect } from '@react-navigation/native';
 
 import eventService from '../services/eventService';
@@ -341,6 +343,7 @@ export default function HomeScreen({ navigation }) {
   const goToLogin = () => navigation?.navigate('Login');
   // Cloche : notifications si connecté, sinon page de bienvenue (MD §2)
   const goToNotifications = () => (isLoggedIn ? navigation?.navigate('Notifications') : goToLogin());
+  const { notifications: notifCount } = useTicketBadge();
 
   const featuredEvent = events[0] || null;
   const smallEvents = events.slice(1, 3);
@@ -400,12 +403,9 @@ export default function HomeScreen({ navigation }) {
                   style={styles.hdrBtn}
                   onPress={goToNotifications}
                   accessibilityRole="button"
-                  accessibilityLabel={isLoggedIn ? 'Notifications' : 'Notifications — se connecter'}
+                  accessibilityLabel={isLoggedIn ? bellLabel(notifCount) : 'Notifications — se connecter'}
                 >
-                  <View style={styles.notifWrap}>
-                    <Ionicons name="notifications-outline" size={22} color={C.text} />
-                    <View style={styles.notifDot} />
-                  </View>
+                  <NotificationBell enabled={isLoggedIn} />
                 </TouchableOpacity>
               </View>
             </>

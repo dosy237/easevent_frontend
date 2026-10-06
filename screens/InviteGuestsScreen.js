@@ -91,6 +91,9 @@ export default function InviteGuestsScreen({ navigation, route }) {
       const failed = res.created.filter((c) => c.delivery_status === 'failed').length;
       const smsOff = res.created.filter((c) => c.delivery_status === 'not_configured').length;
       const lines = [res.detail];
+      if (res.created.some((c) => c.delivery_status === 'pending')) {
+        lines.push('Les emails et SMS partent en arrière-plan : suivez leur envoi dans la liste des invités.');
+      }
       if (res.skipped.length) lines.push(`${res.skipped.length} contact(s) ignoré(s) : déjà invités ou invalides.`);
       if (failed) lines.push(`${failed} message(s) n'ont pas pu partir. Vous pourrez relancer depuis la liste des invités.`);
       if (smsOff) lines.push(`${smsOff} SMS en attente : l'envoi de SMS n'est pas encore activé sur le serveur. Les invitations sont créées.`);

@@ -59,6 +59,8 @@ import { useFocusEffect } from '@react-navigation/native';
 // useAuth : notre hook personnalisé pour accéder aux données d'authentification
 // Retourne : user (infos utilisateur), accessToken (JWT), refreshAccessToken (renouveler le token)
 import { useAuth } from '../context/AuthContext';
+import { useTicketBadge } from '../context/TicketBadgeContext';
+import NotificationBell, { bellLabel } from '../components/ui/NotificationBell';
 
 // ─────────────────────────────────────────────────────────────────
 // SERVICES
@@ -507,6 +509,7 @@ const goToDiscover    = ()      => navigation?.getParent()?.navigate('TabDiscove
 const goToProfile     = ()      => navigation?.getParent()?.navigate('TabProfile');
 const goToMessages    = ()      => navigation?.navigate('Conversations');
 const goToNotifications = ()    => navigation?.navigate('Notifications');
+  const { notifications: notifCount } = useTicketBadge();
 
   // Invitations en attente de réponse
   const pendingInvitations = invitations.filter(i => i.status === 'sent');
@@ -550,9 +553,9 @@ const goToNotifications = ()    => navigation?.navigate('Notifications');
               style={styles.headerIconBtn}
               onPress={goToNotifications}
               accessibilityRole="button"
-              accessibilityLabel="Notifications"
+              accessibilityLabel={bellLabel(notifCount)}
             >
-              <Ionicons name="notifications-outline" size={20} color={C.text} />
+              <NotificationBell size={20} />
             </TouchableOpacity>
 
             {/* Bouton "Créer" — orange pour se démarquer du reste de l'interface */}

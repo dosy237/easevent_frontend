@@ -53,6 +53,7 @@ function subtitle(g) {
   if (['failed', 'not_configured'].includes(g.delivery_status)) {
     return g.kind === 'phone' ? 'SMS non envoyé' : 'Email non envoyé';
   }
+  if (g.delivery_status === 'pending') return `${KIND[g.kind]} · envoi en cours…`;
   const parts = [KIND[g.kind]];
   if (g.responded_at && ['confirmed', 'to_validate', 'declined'].includes(g.display_status)) {
     parts.push(`répondu le ${shortDate(g.responded_at)}`);
