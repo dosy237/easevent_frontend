@@ -31,6 +31,7 @@ import { Ionicons }       from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth }        from '../context/AuthContext';
 import eventService   from '../services/eventService';
+import { showAlert } from '../utils/dialog';
 
 // QR Code — on utilise une librairie légère
 // Si elle n'est pas installée, on affiche un placeholder propre
@@ -338,7 +339,7 @@ const InvitationCard = ({ invitation, onPress, onRespond }) => {
   const statusConfig = {
     sent:      { label: 'En attente',  color: C.orange,  bg: C.orangeL,    icon: 'time-outline' },
     opened:    { label: 'Vu',          color: '#2563EB', bg: '#EFF6FF',    icon: 'eye-outline' },
-    confirmed: { label: 'Confirmé ✓',  color: C.green,   bg: C.greenLight, icon: 'checkmark-circle-outline' },
+    confirmed: { label: 'Confirmé',  color: C.green,   bg: C.greenLight, icon: 'checkmark-circle-outline' },
     declined:  { label: 'Décliné',     color: C.error,   bg: C.errorBg,   icon: 'close-circle-outline' },
   };
   const s = statusConfig[invitation.status] || statusConfig.sent;
@@ -500,14 +501,14 @@ export default function TicketsScreen({ navigation }) {
       );
 
       if (newStatus === 'confirmed') {
-        Alert.alert(
-          '🎉 Invitation acceptée !',
+        showAlert(
+          'Invitation acceptée',
           'Votre billet est maintenant disponible dans l\'onglet "Confirmés".',
           [{ text: 'Voir mon billet', onPress: () => setActiveSection('confirmed') }]
         );
       }
     } catch (err) {
-      Alert.alert('Erreur', 'Impossible de répondre à cette invitation.');
+      showAlert('Erreur', 'Impossible de répondre à cette invitation.');
     }
   };
 

@@ -23,21 +23,10 @@ import React, {
   useEffect,
   useCallback,
 } from 'react';
-import * as SecureStore from 'expo-secure-store';
 
-import { apiClient, setLogoutCallback } from '../services/apiClient';
+import { setLogoutCallback } from '../services/apiClient';
 import { authService } from '../services/authService';
-
-// ─────────────────────────────────────────────────────────────────
-// CLÉS DE STOCKAGE SÉCURISÉ
-// ─────────────────────────────────────────────────────────────────
-const KEYS = {
-  ACCESS_TOKEN: 'easevent_access_token',
-  REFRESH_TOKEN: 'easevent_refresh_token',
-  USER: 'easevent_user',
-};
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.101:8003';
+import { KEYS, getItem, setItem, clearSession } from '../services/storage';
 
 // ─────────────────────────────────────────────────────────────────
 // CRÉATION DU CONTEXTE
@@ -59,15 +48,10 @@ export function AuthProvider({ children }) {
     checkStoredAuth();
   }, []);
 
-  // ── Register logout callback for apiClient 401 auto-logout ──
-  useEffect(() => {
-    setLogoutCallback(() => logout());
-  }, [logout]);
-
   const checkStoredAuth = async () => {
     try {
-      const storedToken = await SecureStore.getItemAsync(KEYS.ACCESS_TOKEN);
-      const storedUser = await SecureStore.getItemAsync(KEYS.USER);
+      const storedToken = await getItem(KEYS.ACCESS_TOKEN);
+      const storedUser = await getItem(KEYS.USER);
 
       if (storedToken && storedUser) {
         setAccessToken(storedToken);
@@ -83,9 +67,9 @@ export function AuthProvider({ children }) {
   // ── Connexion ────────────────────────────────────────────────
   const login = useCallback(async ({ userData, access, refresh }) => {
     try {
-      await SecureStore.setItemAsync(KEYS.ACCESS_TOKEN, access);
-      await SecureStore.setItemAsync(KEYS.REFRESH_TOKEN, refresh);
-      await SecureStore.setItemAsync(KEYS.USER, JSON.stringify(userData));
+      await setItem(KEYS.ACCESS_TOKEN, access);
+      await setItem(KEYS.REFRESH_TOKEN, refresh);
+      await setItem(KEYS.USER, JSON.stringify(userData));
 
       setAccessToken(access);
       setUser(userData);
@@ -96,11 +80,15 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Déconnexion ──────────────────────────────────────────────
-  const logout = useCallback(async () => {
+  // revokeSession : true quand l'utilisateur se déconnecte lui-même →
+  // le refresh token est mis en liste noire côté serveur.
+  const logout = useCallback(async ({ revokeSession = false } = {}) => {
     try {
-      await SecureStore.deleteItemAsync(KEYS.ACCESS_TOKEN);
-      await SecureStore.deleteItemAsync(KEYS.REFRESH_TOKEN);
-      await SecureStore.deleteItemAsync(KEYS.USER);
+      if (revokeSession) {
+        const refresh = await getItem(KEYS.REFRESH_TOKEN);
+        if (refresh) await authService.logout(refresh).catch(() => {});
+      }
+      await clearSession();
     } catch (err) {
       console.error('Erreur suppression tokens:', err);
     } finally {
@@ -109,10 +97,15 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // ── Déconnexion forcée par apiClient (session expirée) ──────
+  useEffect(() => {
+    setLogoutCallback(() => logout());
+  }, [logout]);
+
   // ── Rafraîchissement automatique du token ────────────────────
   const refreshAccessToken = useCallback(async () => {
     try {
-      const storedRefresh = await SecureStore.getItemAsync(KEYS.REFRESH_TOKEN);
+      const storedRefresh = await getItem(KEYS.REFRESH_TOKEN);
 
       if (!storedRefresh) {
         await logout();
@@ -121,7 +114,8 @@ export function AuthProvider({ children }) {
 
       const data = await authService.refreshToken(storedRefresh);
 
-      await SecureStore.setItemAsync(KEYS.ACCESS_TOKEN, data.access);
+      await setItem(KEYS.ACCESS_TOKEN, data.access);
+      if (data.refresh) await setItem(KEYS.REFRESH_TOKEN, data.refresh);
       setAccessToken(data.access);
 
       return data.access;
@@ -139,7 +133,7 @@ export function AuthProvider({ children }) {
   const updateUser = useCallback(async (updatedUserData) => {
     try {
       const newUser = { ...user, ...updatedUserData };
-      await SecureStore.setItemAsync(KEYS.USER, JSON.stringify(newUser));
+      await setItem(KEYS.USER, JSON.stringify(newUser));
       setUser(newUser);
     } catch (err) {
       console.error('Erreur mise à jour user:', err);

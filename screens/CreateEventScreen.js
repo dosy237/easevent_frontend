@@ -28,6 +28,7 @@ import DateTimePicker       from '@react-native-community/datetimepicker';
 import { useAuth }          from '../context/AuthContext';
 
 import eventService from '../services/eventService';
+import { showAlert } from '../utils/dialog';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -334,7 +335,7 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
               <Ionicons name={imageUrl ? 'checkmark-circle' : 'cloud-upload-outline'} size={20}
                 color={imageUrl ? '#2ECC71' : C.white} />
               <Text style={styles.imageOverlayTxt}>
-                {imageUrl ? 'Uploadée ✓  — Appuyer pour changer' : 'Upload en attente...'}
+                {imageUrl ? 'Photo ajoutée — appuyer pour changer' : 'Upload en attente...'}
               </Text>
             </>
           )}
@@ -423,7 +424,7 @@ export default function CreateEventScreen({ navigation }) {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission refusée', 'Autorisez l\'accès à votre galerie dans les paramètres.');
+        showAlert('Permission refusée', 'Autorisez l\'accès à votre galerie dans les paramètres.');
         return;
       }
 
@@ -446,11 +447,11 @@ export default function CreateEventScreen({ navigation }) {
         const data = await eventService.uploadImage(base64Data, imageName);
         setUrl(data.url);
       } catch (err) {
-        Alert.alert('Erreur', 'Impossible d\'uploader l\'image. Réessayez.');
+        showAlert('Erreur', 'Impossible d\'uploader l\'image. Réessayez.');
         setUri(null);
       }
     } catch (err) {
-      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'upload.');
+      showAlert('Erreur', 'Une erreur est survenue lors de l\'upload.');
       console.error('Erreur upload:', err);
     } finally {
       setUploading(false);
@@ -527,8 +528,8 @@ export default function CreateEventScreen({ navigation }) {
         ambiance, palette, visibility, template_config,
       });
 
-      Alert.alert(
-        '🎉 Événement créé !',
+      showAlert(
+        'Événement créé',
         `"${title}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
         [{
           text: 'Voir mon tableau de bord',
@@ -540,7 +541,7 @@ export default function CreateEventScreen({ navigation }) {
       );
     } catch (err) {
       const detail = err.response?.data?.detail || 'Vérifiez votre connexion et réessayez.';
-      Alert.alert('Erreur', detail);
+      showAlert('Erreur', detail);
       console.error('Erreur création:', err);
     } finally {
       setSubmitting(false);

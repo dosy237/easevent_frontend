@@ -6,8 +6,36 @@ export const authService = {
     return response.data;
   },
 
+  // userData : email, password, first_name, last_name,
+  //            accepted_privacy, marketing_opt_in, invitation_token?
   register: async (userData) => {
     const response = await apiClient.post('/api/auth/register/', userData);
+    return response.data;
+  },
+
+  logout: async (refresh) => {
+    await apiClient.post('/api/auth/logout/', { refresh });
+  },
+
+  verifyEmail: async (token) => {
+    const response = await apiClient.post('/api/auth/verify-email/', { token });
+    return response.data;
+  },
+
+  resendVerification: async (email) => {
+    const response = await apiClient.post('/api/auth/resend-verification/', { email });
+    return response.data;
+  },
+
+  requestPasswordReset: async (email) => {
+    const response = await apiClient.post('/api/auth/password-reset/', { email });
+    return response.data;
+  },
+
+  confirmPasswordReset: async ({ uid, token, newPassword }) => {
+    const response = await apiClient.post('/api/auth/password-reset/confirm/', {
+      uid, token, new_password: newPassword,
+    });
     return response.data;
   },
 
@@ -17,7 +45,17 @@ export const authService = {
   },
 
   getProfile: async () => {
-    const response = await apiClient.get('/api/auth/profile/');
+    const response = await apiClient.get('/api/auth/me/');
+    return response.data;
+  },
+
+  getStats: async () => {
+    const response = await apiClient.get('/api/auth/me/stats/');
+    return response.data;
+  },
+
+  exportData: async () => {
+    const response = await apiClient.get('/api/auth/me/export/');
     return response.data;
   },
 
@@ -35,4 +73,19 @@ export const authService = {
     const response = await apiClient.post('/api/auth/delete-account/', { password });
     return response.data;
   }
+};
+
+/**
+ * Message lisible à partir d'une erreur axios renvoyée par le backend.
+ * Le backend renvoie { detail } ou { champ: 'message' }.
+ */
+export const apiErrorMessage = (err, fallback = 'Une erreur est survenue. Réessayez.') => {
+  if (!err?.response) return 'Connexion impossible. Vérifiez votre réseau et réessayez.';
+  if (err.response.status === 429) return 'Trop de tentatives. Patientez quelques minutes puis réessayez.';
+  const data = err.response.data;
+  if (!data || typeof data !== 'object') return fallback;
+  if (typeof data.detail === 'string') return data.detail;
+  const first = Object.values(data).find((v) => typeof v === 'string' || Array.isArray(v));
+  if (Array.isArray(first)) return String(first[0]);
+  return first || fallback;
 };

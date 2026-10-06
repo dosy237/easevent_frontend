@@ -3,45 +3,40 @@
  * ════════════════════════════════════════════════════════════════
  * Point d'entrée de l'application.
  *
- * ARCHITECTURE DE NAVIGATION :
- * ─────────────────────────────
- * L'app a deux univers distincts selon l'état d'authentification.
+ * ARCHITECTURE DE NAVIGATION (EASEVENT_PARCOURS_MVP.md §2) :
+ * ─────────────────────────────────────────────────────────────
+ * VISITEUR (non connecté) — PublicNavigator
+ * ├── Home (E01) · EventDetail (E02) · Login (E03–E06, M01)
+ * ├── ForgotPassword (M04) · ResetPassword (lien email)
+ * ├── VerifyEmail (M03) · PrivacyPolicy (M02)
+ * └── InvitationLanding (M31, lien easevent.app/i/:token)
  *
- * VISITEUR (non connecté) :
- * PublicStack
- * ├── HomeScreen → fil d'événements publics
- * ├── EventDetailScreen → détail d'un événement
- * └── LoginScreen → connexion / inscription
+ * UTILISATEUR CONNECTÉ — AppTabNavigator
+ * ├── Accueil   → DashboardStack (E07, création, mini-site, gestion, invités, messagerie, notifications)
+ * ├── Découvrir → DiscoverStack (E01 connecté, E02/M24)
+ * ├── Créer     → CreateEventScreen
+ * ├── Tickets   → TicketsStack (M25/M28, M26, M27)
+ * └── Profil    → ProfileStack (E12, M20–M22, M02)
  *
- * UTILISATEUR CONNECTÉ :
- * AppTabs (barre de navigation permanente en bas)
- * ├── Tab "Accueil" → DashboardStack
- * │   ├── DashboardScreen → tableau de bord personnel
- * │   └── EventDashboardScreen → gérer un événement
- * ├── Tab "Découvrir" → DiscoverStack
- * │   ├── HomeScreen → fil public
- * │   └── EventDetailScreen → détail événement
- * ├── Tab "Créer" → CreateEventScreen
- * ├── Tab "Billets" → TicketsScreen (placeholder)
- * └── Tab "Profil" → ProfileScreen
- *
- * AMÉLIORATIONS APPORTÉES :
- * - Ajout de `key` sur les navigateurs pour éviter les flicker
- *   lors du changement d'état d'authentification.
- * - Meilleure stabilité de la barre de navigation.
+ * Les écrans des lots suivants pointent vers ComingSoonScreen :
+ * chaque bouton mène déjà quelque part.
  * ════════════════════════════════════════════════════════════════
  */
 
 import React from 'react';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
+import DialogHost from './components/ui/DialogHost';
+import { C } from './constants/theme';
+
 import HomeScreen from './screens/HomeScreen';
 import EventDetailScreen from './screens/EventDetailScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -49,21 +44,12 @@ import ProfileScreen from './screens/ProfileScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import CreateEventScreen from './screens/CreateEventScreen';
 import EventDashboardScreen from './screens/EventDashboardScreen';
-import TicketsScreen from './screens/TicketsScreen'; // IMPORT AJOUTÉ
-
-// ─────────────────────────────────────────────────────────────────
-// PALETTE
-// ─────────────────────────────────────────────────────────────────
-const C = {
-  green:      '#1B6B4A',
-  greenLight: '#E8F5EE',
-  orange:     '#E76F51',
-  white:      '#FFFFFF',
-  bg:         '#F7F7F7',
-  text:       '#1A1A1A',
-  textMut:    '#9E9E9E',
-  border:     '#E8E8E8',
-};
+import TicketsScreen from './screens/TicketsScreen';
+import PrivacyPolicyScreen from './screens/PrivacyPolicyScreen';
+import VerifyEmailScreen from './screens/VerifyEmailScreen';
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
+import ComingSoonScreen from './screens/ComingSoonScreen';
 
 // ─────────────────────────────────────────────────────────────────
 // NAVIGATEURS
@@ -71,30 +57,95 @@ const C = {
 const PublicStack   = createNativeStackNavigator();
 const DashStack     = createNativeStackNavigator();
 const DiscoverStack = createNativeStackNavigator();
+const TicketsStack  = createNativeStackNavigator();
+const ProfileStack  = createNativeStackNavigator();
 const Tabs          = createBottomTabNavigator();
+
+const stackOptions = { headerShown: false };
+
+// Écran « à venir » : identifiant de maquette + titre (+ description)
+const soon = (screenId, title, description) => ({
+  component: ComingSoonScreen,
+  initialParams: { screenId, title, description },
+  options: { title },
+});
+
+// ════════════════════════════════════════════════════════════════
+// LIENS PROFONDS (web + mobile)
+// ════════════════════════════════════════════════════════════════
+const linking = {
+  prefixes: [Linking.createURL('/'), 'https://easevent.app', 'easevent://'],
+  config: {
+    screens: {
+      // Visiteur
+      Home:              '',
+      EventDetail:       'evenement',
+      Login:             'connexion',
+      ForgotPassword:    'mot-de-passe-oublie',
+      ResetPassword:     'reset-password/:uid/:token',
+      VerifyEmail:       'verify/:token',
+      PrivacyPolicy:     'confidentialite',
+      Terms:             'conditions',
+      Help:              'aide',
+      InvitationLanding: 'i/:token',
+      // Connecté
+      TabDashboard: {
+        screens: {
+          Dashboard:     'tableau-de-bord',
+          Notifications: 'notifications',
+          Conversations: 'messages',
+        },
+      },
+      TabDiscover: { screens: { DiscoverHome: 'decouvrir' } },
+      TabCreate:   'creer',
+      TabTickets:  { screens: { Tickets: 'tickets' } },
+      TabProfile:  { screens: { Profile: 'profil', Plans: 'profil/plans' } },
+    },
+  },
+};
 
 // ════════════════════════════════════════════════════════════════
 // NAVIGATEUR PUBLIC
 // ════════════════════════════════════════════════════════════════
 function PublicNavigator() {
   return (
-    <PublicStack.Navigator screenOptions={{ headerShown: false }}>
-      <PublicStack.Screen name="Home"        component={HomeScreen} />
-      <PublicStack.Screen name="EventDetail" component={EventDetailScreen} />
-      <PublicStack.Screen name="Login"       component={LoginScreen} />
+    <PublicStack.Navigator screenOptions={stackOptions}>
+      <PublicStack.Screen name="Home"           component={HomeScreen}           options={{ title: 'Découvrir' }} />
+      <PublicStack.Screen name="EventDetail"    component={EventDetailScreen}    options={{ title: 'Événement' }} />
+      <PublicStack.Screen name="Login"          component={LoginScreen}          options={{ title: 'Bienvenue' }} />
+      <PublicStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Mot de passe oublié' }} />
+      <PublicStack.Screen name="ResetPassword"  component={ResetPasswordScreen}  options={{ title: 'Nouveau mot de passe' }} />
+      <PublicStack.Screen name="VerifyEmail"    component={VerifyEmailScreen}    options={{ title: 'Vérifiez votre email' }} />
+      <PublicStack.Screen name="PrivacyPolicy"  component={PrivacyPolicyScreen}  options={{ title: 'Confidentialité' }} />
+      <PublicStack.Screen name="Terms"             {...soon('CGU', "Conditions d'utilisation", 'Les conditions d’utilisation seront publiées ici dès leur validation par le juridique.')} />
+      <PublicStack.Screen name="Help"              {...soon('Aide', 'Aide', 'Le centre d’aide arrive bientôt.')} />
+      <PublicStack.Screen name="InvitationLanding" {...soon('M31', 'Invitation')} />
     </PublicStack.Navigator>
   );
 }
 
 // ════════════════════════════════════════════════════════════════
-// STACK : Tableau de bord
+// STACK : Tableau de bord (création, gestion, invités, messagerie)
+// Le retour ramène toujours au tableau de bord.
 // ════════════════════════════════════════════════════════════════
 function DashboardStackNavigator() {
   return (
-    <DashStack.Navigator screenOptions={{ headerShown: false }}>
-      <DashStack.Screen name="Dashboard"     component={DashboardScreen} />
-      <DashStack.Screen name="CreateEvent"   component={CreateEventScreen} />
-      <DashStack.Screen name="EventDashboard" component={EventDashboardScreen} />
+    <DashStack.Navigator screenOptions={stackOptions}>
+      <DashStack.Screen name="Dashboard"          component={DashboardScreen}      options={{ title: 'Tableau de bord' }} />
+      <DashStack.Screen name="CreateEvent"        component={CreateEventScreen}    options={{ title: 'Créer un événement' }} />
+      <DashStack.Screen name="EventCreated"       {...soon('M05', 'Événement créé')} />
+      <DashStack.Screen name="MiniSiteGenerating" {...soon('M06', 'Génération du mini-site')} />
+      <DashStack.Screen name="TemplatePicker"     {...soon('M07', 'Choisir un modèle')} />
+      <DashStack.Screen name="MiniSiteEditor"     {...soon('M08', 'Éditeur du mini-site')} />
+      <DashStack.Screen name="EventPublished"     {...soon('M10', 'Événement publié')} />
+      <DashStack.Screen name="EventDashboard"     component={EventDashboardScreen} options={{ title: 'Gérer un événement' }} />
+      <DashStack.Screen name="EditEvent"          {...soon('M11', "Modifier l'événement")} />
+      <DashStack.Screen name="InviteGuests"       {...soon('M12', 'Inviter')} />
+      <DashStack.Screen name="GuestList"          {...soon('M13', 'Invités & réponses')} />
+      <DashStack.Screen name="RsvpQuestions"      {...soon('M14', 'Questions RSVP')} />
+      <DashStack.Screen name="Conversations"      {...soon('M15', 'Messagerie')} />
+      <DashStack.Screen name="Chat"               {...soon('M16', 'Conversation')} />
+      <DashStack.Screen name="Notifications"      {...soon('M17', 'Notifications')} />
     </DashStack.Navigator>
   );
 }
@@ -104,32 +155,66 @@ function DashboardStackNavigator() {
 // ════════════════════════════════════════════════════════════════
 function DiscoverStackNavigator() {
   return (
-    <DiscoverStack.Navigator screenOptions={{ headerShown: false }}>
-      <DiscoverStack.Screen name="DiscoverHome" component={HomeScreen} />
-      <DiscoverStack.Screen name="EventDetail"  component={EventDetailScreen} />
+    <DiscoverStack.Navigator screenOptions={stackOptions}>
+      <DiscoverStack.Screen name="DiscoverHome"  component={HomeScreen}        options={{ title: 'Découvrir' }} />
+      <DiscoverStack.Screen name="EventDetail"   component={EventDetailScreen} options={{ title: 'Événement' }} />
+      <DiscoverStack.Screen name="Notifications" {...soon('M17', 'Notifications')} />
+      <DiscoverStack.Screen name="Chat"          {...soon('M16', 'Conversation')} />
+      <DiscoverStack.Screen name="TicketCheckout" {...soon('M26', 'Payer et générer mon ticket')} />
     </DiscoverStack.Navigator>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// STACK : Tickets
+// ════════════════════════════════════════════════════════════════
+function TicketsStackNavigator() {
+  return (
+    <TicketsStack.Navigator screenOptions={stackOptions}>
+      <TicketsStack.Screen name="Tickets"        component={TicketsScreen} options={{ title: 'Mes tickets' }} />
+      <TicketsStack.Screen name="TicketCheckout" {...soon('M26', 'Payer et générer mon ticket')} />
+      <TicketsStack.Screen name="TicketView"     {...soon('M27', 'Mon ticket')} />
+    </TicketsStack.Navigator>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// STACK : Profil
+// ════════════════════════════════════════════════════════════════
+function ProfileStackNavigator() {
+  return (
+    <ProfileStack.Navigator screenOptions={stackOptions}>
+      <ProfileStack.Screen name="Profile"              component={ProfileScreen}       options={{ title: 'Mon profil' }} />
+      <ProfileStack.Screen name="PrivacyPolicy"        component={PrivacyPolicyScreen} options={{ title: 'Confidentialité' }} />
+      <ProfileStack.Screen name="Notifications"        {...soon('M17', 'Notifications')} />
+      <ProfileStack.Screen name="Plans"                {...soon('M20', 'Choisir un plan')} />
+      <ProfileStack.Screen name="SubscriptionCheckout" {...soon('M21', 'Paiement')} />
+      <ProfileStack.Screen name="SubscriptionSuccess"  {...soon('M22', 'Paiement confirmé')} />
+    </ProfileStack.Navigator>
   );
 }
 
 // ════════════════════════════════════════════════════════════════
 // NAVIGATEUR TABS — Utilisateurs connectés
 // ════════════════════════════════════════════════════════════════
+const TAB_ICONS = {
+  TabDashboard: ['home', 'home-outline'],
+  TabDiscover:  ['compass', 'compass-outline'],
+  TabCreate:    ['add-circle', 'add-circle-outline'],
+  TabTickets:   ['ticket', 'ticket-outline'],
+  TabProfile:   ['person', 'person-outline'],
+};
+
 function AppTabNavigator() {
   return (
     <Tabs.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ focused, color, size }) => {
-          const icons = {
-            TabDashboard: focused ? 'home' : 'home-outline',
-            TabDiscover:  focused ? 'compass' : 'compass-outline',
-            TabCreate:    focused ? 'add-circle' : 'add-circle-outline',
-            TabTickets:   focused ? 'mail' : 'mail-outline', // Updated for invitations
-            TabProfile:   focused ? 'person' : 'person-outline',
-          };
+          const [active, idle] = TAB_ICONS[route.name] || ['ellipse', 'ellipse-outline'];
           return (
             <Ionicons
-              name={icons[route.name] || 'ellipse-outline'}
+              name={focused ? active : idle}
               size={route.name === 'TabCreate' ? 30 : size}
               color={color}
             />
@@ -142,8 +227,8 @@ function AppTabNavigator() {
           borderTopWidth: 1,
           borderTopColor: C.border,
           paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-          paddingTop: 8,
-          height: Platform.OS === 'ios' ? 84 : 64,
+          paddingTop: 6,
+          height: Platform.OS === 'ios' ? 84 : 68,
         },
         tabBarLabelStyle: {
           fontSize: 10,
@@ -153,29 +238,30 @@ function AppTabNavigator() {
           marginTop: 2,
         },
         tabBarItemStyle: {
-          paddingVertical: 4,
+          paddingVertical: 0,
         },
       })}
     >
-      <Tabs.Screen name="TabDashboard" component={DashboardStackNavigator} options={{ tabBarLabel: 'Accueil' }} />
-      <Tabs.Screen name="TabDiscover"  component={DiscoverStackNavigator}  options={{ tabBarLabel: 'Découvrir' }} />
+      <Tabs.Screen name="TabDashboard" component={DashboardStackNavigator} options={{ tabBarLabel: 'Accueil', title: 'Accueil' }} />
+      <Tabs.Screen name="TabDiscover"  component={DiscoverStackNavigator}  options={{ tabBarLabel: 'Découvrir', title: 'Découvrir' }} />
       <Tabs.Screen
         name="TabCreate"
         component={CreateEventScreen}
         options={{
           tabBarLabel: 'Créer',
+          title: 'Créer un événement',
           tabBarActiveTintColor: C.orange,
           tabBarInactiveTintColor: C.orange,
         }}
       />
-      <Tabs.Screen name="TabTickets" component={TicketsScreen} options={{ tabBarLabel: 'Invitations' }} />
-      <Tabs.Screen name="TabProfile" component={ProfileScreen} options={{ tabBarLabel: 'Profil' }} />
+      <Tabs.Screen name="TabTickets" component={TicketsStackNavigator} options={{ tabBarLabel: 'Tickets', title: 'Mes tickets' }} />
+      <Tabs.Screen name="TabProfile" component={ProfileStackNavigator} options={{ tabBarLabel: 'Profil', title: 'Mon profil' }} />
     </Tabs.Navigator>
   );
 }
 
 // ════════════════════════════════════════════════════════════════
-// NAVIGATEUR RACINE (amélioré pour la stabilité)
+// NAVIGATEUR RACINE
 // ════════════════════════════════════════════════════════════════
 function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -183,14 +269,14 @@ function RootNavigator() {
   if (isLoading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.white }}>
-        <ActivityIndicator size="large" color={C.green} />
+        <ActivityIndicator size="large" color={C.green} accessibilityLabel="Chargement" />
       </View>
     );
   }
 
-  // Utilisation de `key` → évite les problèmes de flicker de la barre de navigation
-  return isAuthenticated 
-    ? <AppTabNavigator key="authenticated" /> 
+  // `key` → évite le scintillement de la barre d'onglets au changement d'état
+  return isAuthenticated
+    ? <AppTabNavigator key="authenticated" />
     : <PublicNavigator key="public" />;
 }
 
@@ -201,10 +287,14 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer>
+        <NavigationContainer
+          linking={linking}
+          documentTitle={{ formatter: (options) => (options?.title ? `${options.title} · Easevent` : 'Easevent') }}
+        >
           <StatusBar style="dark" />
           <RootNavigator />
         </NavigationContainer>
+        <DialogHost />
       </AuthProvider>
     </SafeAreaProvider>
   );

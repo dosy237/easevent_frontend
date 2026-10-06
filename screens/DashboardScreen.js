@@ -65,6 +65,9 @@ import { useAuth } from '../context/AuthContext';
 // ─────────────────────────────────────────────────────────────────
 
 import eventService from '../services/eventService';
+import { SkeletonGroup, StatsSkeleton, EventCardSkeleton, Bone } from '../components/ui/Skeleton';
+import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
+import { showAlert } from '../utils/dialog';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE DE COULEURS — identique aux autres écrans pour la cohérence
 // ─────────────────────────────────────────────────────────────────
@@ -78,7 +81,7 @@ const C = {
   bg:         '#F7F7F7',  // fond général
   text:       '#1A1A1A',  // texte principal
   textSub:    '#555555',  // texte secondaire
-  textMut:    '#9E9E9E',  // texte muet
+  textMut:    '#757575',  // texte muet (contraste AA sur blanc)
   border:     '#E8E8E8',  // bordures
 };
 
@@ -384,6 +387,9 @@ export default function DashboardScreen({ navigation }) {
   // refreshing : true pendant un pull-to-refresh
   const [refreshing,  setRefreshing]  = useState(false);
 
+  // loadError : message affiché si le chargement échoue (avec bouton Réessayer)
+  const [loadError,   setLoadError]   = useState('');
+
   // activeTab : onglet actif dans la navigation bas
   const [activeTab,   setActiveTab]   = useState('home');
 
@@ -423,9 +429,13 @@ export default function DashboardScreen({ navigation }) {
 
       setInvitations(invitData.invitations || []);
       setMyEvents(eventsData.events || []);
+      setLoadError('');
 
     } catch (err) {
       console.error('Erreur chargement dashboard:', err);
+      setLoadError(err.response
+        ? 'Impossible de charger vos données pour le moment.'
+        : 'Connexion impossible. Vérifiez votre réseau.');
       // NOTE: Le token refresh est potentiellement géré globalement ou via un intercepteur
     } finally {
       // finally s'exécute toujours — on arrête les spinners
@@ -456,14 +466,14 @@ export default function DashboardScreen({ navigation }) {
         )
       );
     } catch (err) {
-      Alert.alert('Erreur', 'Impossible de répondre à cette invitation. Réessayez.');
+      showAlert('Erreur', 'Impossible de répondre à cette invitation. Réessayez.');
     }
   };
 
   // ── Supprimer un événement ───────────────────────────────────
   // Demande confirmation avant de supprimer (irréversible)
   const handleDeleteEvent = (event) => {
-    Alert.alert(
+    showAlert(
       'Supprimer cet événement',
       `Voulez-vous vraiment supprimer "${event.title}" ? Cette action est irréversible.`,
       [
@@ -477,7 +487,7 @@ export default function DashboardScreen({ navigation }) {
               // Retirer l'événement de la liste sans recharger
               setMyEvents(prev => prev.filter(e => e.id !== event.id));
             } catch {
-              Alert.alert('Erreur', 'Impossible de supprimer cet événement.');
+              showAlert('Erreur', 'Impossible de supprimer cet événement.');
             }
           },
         },
@@ -495,6 +505,8 @@ export default function DashboardScreen({ navigation }) {
 const goToEventDetail = (event) => navigation?.navigate('EventDashboard', { event });
 const goToDiscover    = ()      => navigation?.getParent()?.navigate('TabDiscover');
 const goToProfile     = ()      => navigation?.getParent()?.navigate('TabProfile');
+const goToMessages    = ()      => navigation?.navigate('Conversations');
+const goToNotifications = ()    => navigation?.navigate('Notifications');
 
   // Invitations en attente de réponse
   const pendingInvitations = invitations.filter(i => i.status === 'sent');
@@ -520,18 +532,41 @@ const goToProfile     = ()      => navigation?.getParent()?.navigate('TabProfile
             {/* Salutation selon l'heure : "Bonjour", "Bon après-midi", "Bonsoir" */}
             <Text style={styles.salutation}>{getSalutation()},</Text>
             {/* Prénom de l'utilisateur connecté, récupéré depuis le contexte auth */}
-            <Text style={styles.userName}>{user.first_name} 👋</Text>
+            <Text style={styles.userName} accessibilityRole="header">{user.first_name}</Text>
           </View>
 
-          {/* Bouton "Créer" — orange pour se démarquer du reste de l'interface */}
-          <TouchableOpacity
-            style={styles.createBtn}
-            onPress={goToCreateEvent}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="add" size={18} color={C.white} />
-            <Text style={styles.createBtnTxt}>Créer</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {/* Messagerie (M15) */}
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={goToMessages}
+              accessibilityRole="button"
+              accessibilityLabel="Messages des invités"
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={C.text} />
+            </TouchableOpacity>
+            {/* Notifications (M17) */}
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={goToNotifications}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+            >
+              <Ionicons name="notifications-outline" size={20} color={C.text} />
+            </TouchableOpacity>
+
+            {/* Bouton "Créer" — orange pour se démarquer du reste de l'interface */}
+            <TouchableOpacity
+              style={styles.createBtn}
+              onPress={goToCreateEvent}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Créer un événement"
+            >
+              <Ionicons name="add" size={18} color={C.white} />
+              <Text style={styles.createBtnTxt}>Créer</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ══ SCROLL PRINCIPAL ══════════════════════════════════
@@ -554,11 +589,30 @@ const goToProfile     = ()      => navigation?.getParent()?.navigate('TabProfile
 
           {/* ── Spinner pendant le premier chargement ──────────── */}
           {loading ? (
-            <ActivityIndicator
-              size="large"
-              color={C.green}
-              style={{ marginTop: 80 }}
-            />
+            <SkeletonGroup label="Chargement du tableau de bord">
+              <StatsSkeleton />
+              <View style={{ paddingHorizontal: 20 }}>
+                <LoadingMessages messages={MESSAGES.dashboard} />
+                <Bone width={160} height={20} style={{ marginBottom: 14 }} />
+                <EventCardSkeleton horizontal />
+                <EventCardSkeleton horizontal />
+                <Bone width={160} height={20} style={{ marginVertical: 14 }} />
+                <EventCardSkeleton />
+              </View>
+            </SkeletonGroup>
+          ) : loadError && invitations.length === 0 && myEvents.length === 0 ? (
+            <View style={styles.errorState} accessibilityRole="alert">
+              <Ionicons name="cloud-offline-outline" size={40} color={C.textMut} />
+              <Text style={styles.errorStateTitle}>Oups</Text>
+              <Text style={styles.errorStateTxt}>{loadError}</Text>
+              <TouchableOpacity
+                style={styles.errorStateBtn}
+                onPress={() => { setLoading(true); loadData(); }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.errorStateBtnTxt}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
 
             // Animated.View : enveloppe le contenu dans une animation de fondu
@@ -739,6 +793,19 @@ const styles = StyleSheet.create({
   },
   salutation: { fontSize: 13, color: C.textMut, fontWeight: '500' },
   userName:   { fontSize: 22, fontWeight: '900', color: C.text, letterSpacing: -0.5 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerIconBtn: {
+    width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.bg, borderWidth: 1, borderColor: C.border,
+  },
+  errorState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 32, gap: 8 },
+  errorStateTitle: { fontSize: 18, fontWeight: '800', color: C.text },
+  errorStateTxt: { fontSize: 14, color: C.textSub, textAlign: 'center' },
+  errorStateBtn: {
+    marginTop: 8, minHeight: 44, paddingHorizontal: 24, borderRadius: 12,
+    backgroundColor: C.green, alignItems: 'center', justifyContent: 'center',
+  },
+  errorStateBtnTxt: { color: C.white, fontWeight: '700', fontSize: 14 },
   createBtn: {
     flexDirection:    'row',
     alignItems:       'center',

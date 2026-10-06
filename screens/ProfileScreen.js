@@ -8,7 +8,9 @@
  * - Modification inline prénom, nom, bio (PATCH /api/auth/me/update/)
  * - Changement de mot de passe (POST /api/auth/change-password/)
  * - Suppression de compte RGPD (POST /api/auth/delete-account/)
- * - Déconnexion (AuthContext.logout)
+ * - Statistiques (GET /api/auth/me/stats/)
+ * - Export de mes données RGPD Art. 20 (GET /api/auth/me/export/)
+ * - Déconnexion avec révocation de la session (POST /api/auth/logout/)
  * ════════════════════════════════════════════════════════════════
  */
 
@@ -24,6 +26,10 @@ import { Ionicons }     from '@expo/vector-icons';
 import { useAuth }      from '../context/AuthContext';
 
 import { authService }   from '../services/authService';
+import { useFocusEffect } from '@react-navigation/native';
+import { showAlert }     from '../utils/dialog';
+import { downloadJson }  from '../utils/files';
+import { Bone, SkeletonGroup } from '../components/ui/Skeleton';
 const C = {
   green:      '#1B6B4A',
   greenDark:  '#155C3C',
@@ -34,7 +40,7 @@ const C = {
   bg:         '#F7F7F7',
   text:       '#1A1A1A',
   textSub:    '#555555',
-  textMut:    '#9E9E9E',
+  textMut:    '#757575',
   border:     '#E8E8E8',
   error:      '#E53E3E',
   errorBg:    '#FFF5F5',
@@ -62,10 +68,14 @@ const AvatarPlaceholder = ({ firstName, lastName, size = 80 }) => {
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : StatCard
 // ════════════════════════════════════════════════════════════════
-const StatCard = ({ icon, value, label }) => (
-  <View style={styles.statCard}>
+const StatCard = ({ icon, value, label, loading }) => (
+  <View style={styles.statCard} accessible accessibilityLabel={loading ? `${label} : chargement` : `${label} : ${value}`}>
     <Ionicons name={icon} size={20} color={C.green} />
-    <Text style={styles.statValue}>{value}</Text>
+    {loading ? (
+      <SkeletonGroup label={`Chargement : ${label}`}><Bone width={28} height={22} /></SkeletonGroup>
+    ) : (
+      <Text style={styles.statValue}>{value}</Text>
+    )}
     <Text style={styles.statLabel}>{label}</Text>
   </View>
 );
@@ -91,7 +101,12 @@ const EditableField = ({ label, value, onSave, multiline = false, maxLength }) =
       <View style={styles.fieldHeader}>
         <Text style={styles.fieldLabel}>{label}</Text>
         {!editing && (
-          <TouchableOpacity onPress={() => setEditing(true)}>
+          <TouchableOpacity
+            onPress={() => setEditing(true)}
+            style={styles.editIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Modifier : ${label}`}
+          >
             <Ionicons name="pencil-outline" size={16} color={C.green} />
           </TouchableOpacity>
         )}
@@ -368,6 +383,19 @@ export default function ProfileScreen({ navigation }) {
   const [successMsg,       setSuccessMsg]       = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showDeleteModal,   setShowDeleteModal]   = useState(false);
+  const [stats,             setStats]             = useState(null);
+  const [exporting,         setExporting]         = useState(false);
+
+  // Statistiques rechargées à chaque retour sur l'onglet Profil
+  useFocusEffect(
+    React.useCallback(() => {
+      let active = true;
+      authService.getStats()
+        .then((data) => { if (active) setStats(data); })
+        .catch(() => { if (active) setStats((prev) => prev || { events_count: '–', participations_count: '–' }); });
+      return () => { active = false; };
+    }, [])
+  );
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -384,7 +412,7 @@ export default function ProfileScreen({ navigation }) {
       await updateUser(data);
       showSuccess('Profil mis à jour');
     } catch (err) {
-      Alert.alert(
+      showAlert(
         'Erreur',
         'Impossible de sauvegarder vos modifications. Vérifiez votre connexion et réessayez.'
       );
@@ -397,7 +425,7 @@ export default function ProfileScreen({ navigation }) {
 
   // ── Déconnexion ───────────────────────────────────────────────
   const handleLogout = () => {
-     Alert.alert(
+     showAlert(
        'Se déconnecter',
        'Voulez-vous vraiment vous déconnecter ?',
        [
@@ -406,12 +434,28 @@ export default function ProfileScreen({ navigation }) {
             text:  'Se déconnecter',
             style: 'destructive',
             onPress: async () => {
-              await logout();
+              await logout({ revokeSession: true });
             },
           },
         ]
    );
 };
+
+  // ── Export RGPD (Art. 20) ─────────────────────────────────────
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await authService.exportData();
+      await downloadJson('easevent-mes-donnees.json', data);
+      showSuccess('Vos données ont été exportées');
+    } catch {
+      showAlert('Export impossible', 'Réessayez dans quelques instants.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const goBack = () => (navigation?.canGoBack() ? navigation.goBack() : navigation?.getParent()?.navigate('TabDashboard'));
 
   // ── Après suppression du compte ───────────────────────────────
   const handleAccountDeleted = async () => {
@@ -430,7 +474,12 @@ export default function ProfileScreen({ navigation }) {
 
         {/* ── Header ──────────────────────────────────────── */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation?.goBack()}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={goBack}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
+          >
             <Ionicons name="arrow-back-outline" size={22} color={C.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Mon Profil</Text>
@@ -452,7 +501,12 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.heroSection}>
               <View style={styles.avatarWrap}>
                 <AvatarPlaceholder firstName={user.first_name} lastName={user.last_name} size={88} />
-                <TouchableOpacity style={styles.avatarEditBtn}>
+                <TouchableOpacity
+                  style={styles.avatarEditBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Changer la photo"
+                  onPress={() => showAlert('Photo de profil', 'L’ajout d’une photo arrive dans une prochaine mise à jour.')}
+                >
                   <Ionicons name="camera-outline" size={14} color={C.white} />
                 </TouchableOpacity>
               </View>
@@ -472,9 +526,9 @@ export default function ProfileScreen({ navigation }) {
 
             {/* ── Statistiques ─────────────────────────────── */}
             <View style={styles.statsRow}>
-              <StatCard icon="calendar-outline"  value="0" label="Événements" />
+              <StatCard icon="calendar-outline"  value={stats?.events_count} label="Événements" loading={!stats} />
               <View style={styles.statDivider} />
-              <StatCard icon="people-outline"    value="0" label="Participations" />
+              <StatCard icon="people-outline"    value={stats?.participations_count} label="Participations" loading={!stats} />
               <View style={styles.statDivider} />
               <StatCard
                 icon="star-outline"
@@ -531,7 +585,11 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.menuDivider} />
 
               {/* Notifications */}
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation?.navigate('Notifications')}
+                accessibilityRole="button"
+              >
                 <View style={styles.menuItemLeft}>
                   <View style={[styles.menuIconBox, { backgroundColor: C.greenLight }]}>
                     <Ionicons name="notifications-outline" size={18} color={C.green} />
@@ -547,14 +605,42 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.menuDivider} />
 
               {/* Télécharger mes données */}
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleExport}
+                disabled={exporting}
+                accessibilityRole="button"
+                accessibilityState={{ busy: exporting }}
+              >
                 <View style={styles.menuItemLeft}>
                   <View style={[styles.menuIconBox, { backgroundColor: C.orangeL }]}>
                     <Ionicons name="download-outline" size={18} color={C.orange} />
                   </View>
                   <View>
                     <Text style={styles.menuItemTitle}>Mes données</Text>
-                    <Text style={styles.menuItemSub}>Télécharger (RGPD Art. 20)</Text>
+                    <Text style={styles.menuItemSub}>{exporting ? 'Préparation du fichier…' : 'Télécharger (RGPD Art. 20)'}</Text>
+                  </View>
+                </View>
+                {exporting
+                  ? <ActivityIndicator size="small" color={C.orange} />
+                  : <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />}
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
+              {/* Politique de confidentialité (M02) */}
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation?.navigate('PrivacyPolicy')}
+                accessibilityRole="button"
+              >
+                <View style={styles.menuItemLeft}>
+                  <View style={[styles.menuIconBox, { backgroundColor: C.greenLight }]}>
+                    <Ionicons name="document-lock-outline" size={18} color={C.green} />
+                  </View>
+                  <View>
+                    <Text style={styles.menuItemTitle}>Confidentialité</Text>
+                    <Text style={styles.menuItemSub}>Comment nous protégeons vos données</Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
@@ -563,7 +649,13 @@ export default function ProfileScreen({ navigation }) {
 
             {/* ── Upgrade Plan ─────────────────────────────── */}
             {user.subscription_plan === 'free' && (
-              <TouchableOpacity style={styles.upgradeCard} activeOpacity={0.88}>
+              <TouchableOpacity
+                style={styles.upgradeCard}
+                activeOpacity={0.88}
+                onPress={() => navigation?.navigate('Plans')}
+                accessibilityRole="button"
+                accessibilityLabel="Passer au Plan Standard, 9,99 euros par mois"
+              >
                 <View style={styles.upgradeLeft}>
                   <Text style={styles.upgradeTitle}>Passer au Plan Standard</Text>
                   <Text style={styles.upgradeSub}>
@@ -686,6 +778,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 15, fontWeight: '800', color: C.text, marginBottom: 16 },
 
   fieldWrap:   { marginBottom: 4 },
+  editIconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -12 },
   fieldHeader: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: 4,
