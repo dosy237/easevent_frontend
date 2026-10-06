@@ -139,7 +139,7 @@ const StepIndicator = ({ currentStep, total }) => (
 const InputField = ({
   label, icon, value, onChangeText,
   placeholder, multiline = false,
-  keyboardType = 'default', maxLength, error,
+  keyboardType = 'default', maxLength, error, suffix,
 }) => {
   const [focused, setFocused] = useState(false);
   return (
@@ -162,6 +162,8 @@ const InputField = ({
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={C.textMut}
+          accessibilityLabel={label || placeholder}
+          aria-invalid={!!error}
           multiline={multiline}
           keyboardType={keyboardType}
           maxLength={maxLength}
@@ -170,11 +172,12 @@ const InputField = ({
           autoCapitalize="sentences"
           autoCorrect={false}
         />
+        {suffix ? <Text style={styles.fieldSuffix}>{suffix}</Text> : null}
         {maxLength && (
           <Text style={styles.charCount}>{value?.length || 0}/{maxLength}</Text>
         )}
       </View>
-      {error && <Text style={styles.fieldError}>{error}</Text>}
+      {error && <Text style={styles.fieldError} accessibilityLiveRegion="polite">{error}</Text>}
     </View>
   );
 };
@@ -238,6 +241,27 @@ const DatePickerField = ({ label, date, onChange, minDate, error }) => {
     onChange(tempDate);
     setShowPicker(false);
   };
+
+  // Web (outil de test uniquement — jamais utilisé dans l'APK) :
+  // le sélecteur natif n'existe pas dans un navigateur.
+  if (Platform.OS === 'web') {
+    const pad = (n) => String(n).padStart(2, '0');
+    const toLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return (
+      <View style={styles.fieldWrap}>
+        {label && <Text style={styles.fieldLabel}>{label}</Text>}
+        {React.createElement('input', {
+          type: 'datetime-local',
+          'aria-label': label || 'Date et heure',
+          value: date ? toLocal(date) : '',
+          min: minDate ? toLocal(minDate) : undefined,
+          onChange: (e) => { if (e.target.value) onChange(new Date(e.target.value)); },
+          style: { height: 52, borderRadius: 14, border: `1.5px solid ${error ? C.error : C.border}`, padding: '0 14px', fontSize: 15, background: '#F9F9F9' },
+        })}
+        {error && <Text style={styles.fieldError}>{error}</Text>}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.fieldWrap}>
@@ -322,7 +346,13 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
   <View style={styles.imageCard}>
     <Text style={styles.imageCardLabel}>{label}</Text>
     {imageUri ? (
-      <TouchableOpacity onPress={onPick} activeOpacity={0.85} style={{ position: 'relative' }}>
+      <TouchableOpacity
+        onPress={onPick}
+        activeOpacity={0.85}
+        style={{ position: 'relative' }}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} : changer la photo`}
+      >
         <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
         <View style={styles.imageOverlay}>
           {uploading ? (
@@ -342,7 +372,13 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
         </View>
       </TouchableOpacity>
     ) : (
-      <TouchableOpacity style={styles.imagePicker} onPress={onPick} activeOpacity={0.8}>
+      <TouchableOpacity
+        style={styles.imagePicker}
+        onPress={onPick}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} : choisir une photo`}
+      >
         <Ionicons name="cloud-upload-outline" size={32} color={C.green} />
         <Text style={styles.imagePickerTxt}>Choisir une photo</Text>
         <Text style={styles.imagePickerSub}>JPG, PNG — max 10 Mo</Text>
@@ -397,6 +433,10 @@ export default function CreateEventScreen({ navigation }) {
   const [maxGuests,  setMaxGuests]  = useState('');
   const [isPaid,     setIsPaid]     = useState(false);
   const [price,      setPrice]      = useState('');
+  // Dress code (M23) : puce rapide + précisions libres (80 caractères)
+  const [hasDressCode, setHasDressCode] = useState(false);
+  const [dressChoice,  setDressChoice]  = useState('');
+  const [dressCode,    setDressCode]    = useState('');
 
   // ── UI ────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
@@ -405,14 +445,17 @@ export default function CreateEventScreen({ navigation }) {
   // ── Transitions animées entre étapes ─────────────────────────
   const transitionToStep = (newStep) => {
     Animated.timing(fadeAnim, {
-      toValue: 0, duration: 150, useNativeDriver: true,
-    }).start(() => {
-      setStep(newStep);
-      Animated.timing(fadeAnim, {
-        toValue: 1, duration: 200, useNativeDriver: true,
-      }).start();
-    });
+      toValue: 0, duration: 150, useNativeDriver: Platform.OS !== 'web',
+    }).start(() => setStep(newStep));
   };
+
+  // Fondu d'entrée lancé après le rendu de la nouvelle étape
+  // (démarré avant le montage, il restait bloqué à 0 sur le web)
+  React.useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1, duration: 200, useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [step]);
 
 
   // ── Upload image vers Cloudinary ──────────────────────────────
@@ -458,6 +501,36 @@ export default function CreateEventScreen({ navigation }) {
     }
   };
 
+  // ── Billetterie : helpers ─────────────────────────────────────
+  // "25,00" / "25.5" → 25.5 ; null si invalide
+  const parsePrice = (raw) => {
+    const txt = String(raw || '').replace(',', '.').replace(/\s/g, '');
+    if (!/^\d+(\.\d{1,2})?$/.test(txt)) return null;
+    return parseFloat(txt);
+  };
+  const formatEuro = (value) => `${(value ?? 0).toFixed(2).replace('.', ',')} €`;
+  const finalDressCode = () => (dressCode.trim() || dressChoice).slice(0, 80);
+  const chooseDress = (label) => {
+    // La puce pré-remplit les précisions tant que l'utilisateur ne les a pas personnalisées
+    if (!dressCode.trim() || dressCode === dressChoice) setDressCode(label);
+    setDressChoice(label);
+    setErrors((prev) => ({ ...prev, dressCode: undefined }));
+  };
+
+  // Formulaire remis à zéro après la création (l'onglet Créer reste monté)
+  const resetForm = () => {
+    setStep(1);
+    setTitle(''); setEventType(''); setDescription('');
+    setStartDate(null); setEndDate(null); setLocationAddress('');
+    setIsOnline(false); setOnlineLink('');
+    setCoverImageUri(null); setCoverImageUrl(null);
+    setGallery1Uri(null); setGallery1Url(null); setGallery2Uri(null); setGallery2Url(null);
+    setAmbiance(''); setPrimaryColor(''); setSecondaryColor('');
+    setVisibility('public'); setMaxGuests(''); setIsPaid(false); setPrice('');
+    setHasDressCode(false); setDressChoice(''); setDressCode('');
+    setErrors({});
+  };
+
   // ── Validation par étape ──────────────────────────────────────
   const validateStep = () => {
     const e = {};
@@ -481,6 +554,19 @@ export default function CreateEventScreen({ navigation }) {
     }
     if (step === 4) {
       if (!ambiance) e.ambiance = 'Choisissez une ambiance';
+    }
+    if (step === 5) {
+      if (maxGuests.trim() && !/^\d+$/.test(maxGuests.trim())) {
+        e.maxGuests = 'Indiquez un nombre entier de places';
+      } else if (maxGuests.trim() && parseInt(maxGuests, 10) < 1) {
+        e.maxGuests = 'Au moins 1 place';
+      }
+      if (isPaid) {
+        const value = parsePrice(price);
+        if (value === null || value <= 0) e.price = 'Indiquez un prix valide (ex. 25,00)';
+        else if (value > 99999.99) e.price = 'Prix trop élevé';
+      }
+      if (hasDressCode && !finalDressCode()) e.dressCode = 'Choisissez un dress code ou décrivez-le';
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -510,9 +596,6 @@ export default function CreateEventScreen({ navigation }) {
         cover_image: coverImageUrl,
         gallery:     [gallery1Url, gallery2Url].filter(Boolean),
         ambiance, palette,
-        max_guests:  maxGuests ? parseInt(maxGuests) : null,
-        is_paid:     isPaid,
-        price:       isPaid && price ? parseFloat(price) : null,
       };
 
       await eventService.createEvent({
@@ -526,17 +609,24 @@ export default function CreateEventScreen({ navigation }) {
         online_link:      onlineLink || null,
         cover_image:      coverImageUrl,
         ambiance, palette, visibility, template_config,
+        // Billetterie & dress code (M23) — champs de premier niveau du modèle Event
+        is_paid:          isPaid,
+        price:            isPaid ? parsePrice(price).toFixed(2) : '0.00',
+        currency:         'EUR',
+        max_guests:       maxGuests.trim() ? parseInt(maxGuests, 10) : null,
+        dress_code:       hasDressCode ? finalDressCode() : null,
       });
 
+      const createdTitle = title;
+      resetForm();
+      // TODO lot « mini-site IA » : remplacer par la navigation vers M05 (EventCreated)
       showAlert(
         'Événement créé',
-        `"${title}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
+        `"${createdTitle}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
         [{
           text: 'Voir mon tableau de bord',
-          onPress: () => navigation?.reset({
-             index: 0,
-             routes: [{ name: 'TabDashboard' }],
-          }),
+          // navigate remonte jusqu'aux onglets, depuis l'onglet Créer comme depuis le tableau de bord
+          onPress: () => navigation?.navigate('TabDashboard', { screen: 'Dashboard' }),
         }]
       );
     } catch (err) {
@@ -817,42 +907,103 @@ export default function CreateEventScreen({ navigation }) {
         label="Nombre de places (optionnel)"
         icon="people-outline"
         value={maxGuests}
-        onChangeText={setMaxGuests}
+        onChangeText={(t) => { setMaxGuests(t.replace(/[^\d]/g, '')); setErrors((p) => ({ ...p, maxGuests: undefined })); }}
         placeholder="Laissez vide = illimité"
         keyboardType="numeric"
+        error={errors.maxGuests}
       />
-      {maxGuests !== '' && (
-        <View style={styles.infoCard}>
-          <Ionicons name="information-circle-outline" size={16} color={C.green} />
-          <Text style={styles.infoCardTxt}>
-            Une liste d'attente sera activée automatiquement dès que les {maxGuests} places seront épuisées.
-          </Text>
-        </View>
-      )}
 
-      <View style={styles.toggleRow}>
-        <View>
-          <Text style={styles.toggleLabel}>Événement payant</Text>
-          <Text style={styles.toggleSub}>Activez pour vendre des billets</Text>
+      {/* ── Billetterie (M23) ───────────────────────────────── */}
+      <View style={[styles.optionCard, isPaid && styles.optionCardActive]}>
+        <View style={styles.optionHead}>
+          <View style={[styles.optionIcon, { backgroundColor: C.greenLight }]}>
+            <Ionicons name="ticket-outline" size={20} color={C.green} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.optionTitle}>Événement payant</Text>
+            <Text style={styles.optionSub}>Le prix s'affiche sur chaque ticket</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.toggle, isPaid && styles.toggleActive]}
+            onPress={() => { setIsPaid(!isPaid); setErrors((p) => ({ ...p, price: undefined })); }}
+            accessibilityRole="switch"
+            accessibilityLabel="Événement payant"
+            accessibilityState={{ checked: isPaid }}
+            hitSlop={8}
+          >
+            <View style={[styles.toggleThumb, isPaid && styles.toggleThumbActive]} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={[styles.toggle, isPaid && styles.toggleActive]}
-          onPress={() => setIsPaid(!isPaid)}
-        >
-          <View style={[styles.toggleThumb, isPaid && styles.toggleThumbActive]} />
-        </TouchableOpacity>
+        {isPaid && (
+          <View style={{ marginTop: 14 }}>
+            <InputField
+              label="Prix du ticket"
+              icon="card-outline"
+              value={price}
+              onChangeText={(t) => { setPrice(t.replace(/[^\d.,]/g, '')); setErrors((p) => ({ ...p, price: undefined })); }}
+              placeholder="25,00"
+              keyboardType="decimal-pad"
+              suffix="€"
+              error={errors.price}
+            />
+          </View>
+        )}
+        <View style={styles.optionNote}>
+          <Ionicons name="information-circle-outline" size={14} color={C.green} />
+          <Text style={styles.optionNoteTxt}>Désactivé, chaque participant reçoit quand même un ticket à 0,00 €.</Text>
+        </View>
       </View>
 
-      {isPaid && (
-        <InputField
-          label="Prix du billet (€)"
-          icon="card-outline"
-          value={price}
-          onChangeText={setPrice}
-          placeholder="Ex: 25.00"
-          keyboardType="decimal-pad"
-        />
-      )}
+      {/* ── Dress code (M23) ───────────────────────────────── */}
+      <View style={[styles.optionCard, hasDressCode && styles.optionCardActive]}>
+        <View style={styles.optionHead}>
+          <View style={[styles.optionIcon, { backgroundColor: C.orangeL || '#FFF0EB' }]}>
+            <Ionicons name="shirt-outline" size={20} color="#C4502F" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.optionTitle}>Dress code</Text>
+            <Text style={styles.optionSub}>Affiché sur le ticket et le mini-site</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.toggle, hasDressCode && styles.toggleActive]}
+            onPress={() => { setHasDressCode(!hasDressCode); setErrors((p) => ({ ...p, dressCode: undefined })); }}
+            accessibilityRole="switch"
+            accessibilityLabel="Dress code"
+            accessibilityState={{ checked: hasDressCode }}
+            hitSlop={8}
+          >
+            <View style={[styles.toggleThumb, hasDressCode && styles.toggleThumbActive]} />
+          </TouchableOpacity>
+        </View>
+        {hasDressCode && (
+          <>
+            <View style={styles.dressChips}>
+              {['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème'].map((label) => {
+                const active = dressChoice === label;
+                return (
+                  <TouchableOpacity
+                    key={label}
+                    style={[styles.dressChip, active && styles.dressChipActive]}
+                    onPress={() => chooseDress(label)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.dressChipTxt, active && styles.dressChipTxtActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <InputField
+              icon="create-outline"
+              value={dressCode}
+              onChangeText={(t) => { setDressCode(t); setErrors((p) => ({ ...p, dressCode: undefined })); }}
+              placeholder="Précisions (ex. Business — veste conseillée)"
+              maxLength={80}
+              error={errors.dressCode}
+            />
+          </>
+        )}
+      </View>
 
       {/* Récapitulatif final */}
       <View style={styles.summaryCard}>
@@ -863,8 +1014,12 @@ export default function CreateEventScreen({ navigation }) {
           { icon: 'time-outline',     value: endDate   ? formatDateDisplay(endDate)   : '—' },
           { icon: 'location-outline', value: isOnline ? 'En ligne' : locationAddress || '—' },
           { icon: visibility === 'public' ? 'earth-outline' : 'lock-closed-outline',
-            value: visibility === 'public' ? 'Public' : 'Privé' },
-          { icon: 'ticket-outline',   value: isPaid ? `${price || '?'} € / personne` : 'Gratuit' },
+            value: `${visibility === 'public' ? 'Public' : 'Privé'} · ${maxGuests ? `${maxGuests} places` : 'places illimitées'}` },
+          { icon: 'ticket-outline',
+            value: isPaid
+              ? (parsePrice(price) ? `${formatEuro(parsePrice(price))} / personne` : 'Prix à indiquer')
+              : 'Gratuit — ticket à 0,00 €' },
+          ...(hasDressCode && finalDressCode() ? [{ icon: 'shirt-outline', value: `Dress code : ${finalDressCode()}` }] : []),
         ].map((row, i) => (
           <View key={i} style={styles.summaryRow}>
             <Ionicons name={row.icon} size={14} color={C.green} />
@@ -1000,7 +1155,7 @@ const styles = StyleSheet.create({
   fieldBoxFocused: { borderColor: C.green, backgroundColor: C.white },
   fieldBoxError:   { borderColor: C.error },
   fieldIcon:       { marginRight: 10 },
-  fieldInput:      { flex: 1, fontSize: 15, color: C.text, padding: 0, paddingVertical: 14 },
+  fieldInput:      { flex: 1, fontSize: 15, color: C.text, padding: 0, paddingVertical: 14, outlineStyle: 'none' },
   fieldInputMulti: { minHeight: 100, textAlignVertical: 'top' },
   charCount:       { fontSize: 11, color: C.textMut },
   fieldError:      { fontSize: 12, color: C.error, marginTop: 4, fontWeight: '500' },
@@ -1142,6 +1297,26 @@ const styles = StyleSheet.create({
   infoCardTxt: { fontSize: 13, color: C.green, flex: 1, lineHeight: 18 },
 
   // Récapitulatif
+  fieldSuffix: { fontSize: 16, fontWeight: '700', color: C.text, marginLeft: 8 },
+  optionCard: {
+    backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border,
+    padding: 16, marginBottom: 16,
+  },
+  optionCardActive: { borderWidth: 1.5, borderColor: C.green },
+  optionHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  optionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  optionTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+  optionSub: { fontSize: 12, color: '#757575', marginTop: 2 },
+  optionNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 12 },
+  optionNoteTxt: { flex: 1, fontSize: 12, color: C.textSub, lineHeight: 17 },
+  dressChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 10 },
+  dressChip: {
+    minHeight: 40, paddingHorizontal: 12, borderRadius: 100, borderWidth: 1.5, borderColor: C.border,
+    backgroundColor: C.white, alignItems: 'center', justifyContent: 'center',
+  },
+  dressChipActive: { backgroundColor: C.green, borderColor: C.green },
+  dressChipTxt: { fontSize: 13, fontWeight: '600', color: C.textSub },
+  dressChipTxtActive: { color: C.white },
   summaryCard: {
     backgroundColor: C.greenLight, borderRadius: 16, padding: 16,
     borderWidth: 1, borderColor: '#C5E8D3', marginTop: 8,
