@@ -74,6 +74,7 @@ const AMBIANCES = [
   { value: 'minimaliste',   label: 'Minimaliste',   color: '#555555' },
   { value: 'colore',        label: 'Coloré',        color: '#9B59B6' },
   { value: 'professionnel', label: 'Professionnel', color: '#1B6B4A' },
+  { value: 'autre',         label: 'Autre',         color: '#757575' },
 ];
 
 // ─────────────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ const StepIndicator = ({ currentStep, total }) => (
 const InputField = ({
   label, icon, value, onChangeText,
   placeholder, multiline = false,
-  keyboardType = 'default', maxLength, error, suffix,
+  keyboardType = 'default', maxLength, error, suffix, inputRef,
 }) => {
   const [focused, setFocused] = useState(false);
   return (
@@ -163,6 +164,7 @@ const InputField = ({
           />
         )}
         <TextInput
+          ref={inputRef}
           style={[styles.fieldInput, multiline && styles.fieldInputMulti]}
           value={value}
           onChangeText={onChangeText}
@@ -433,6 +435,8 @@ export default function CreateEventScreen({ navigation }) {
 
   // ── Étape 4 : Style ──────────────────────────────────────────
   const [ambiance,       setAmbiance]       = useState('');
+  // Ambiance libre quand « Autre » est choisi (ex. « Bohème »)
+  const [ambianceLabel,  setAmbianceLabel]  = useState('');
   const [primaryColor,   setPrimaryColor]   = useState('');
   const [secondaryColor, setSecondaryColor] = useState('');
   // Couleur en cours d'édition dans le sélecteur : 'primary' | 'secondary'
@@ -519,8 +523,17 @@ export default function CreateEventScreen({ navigation }) {
     return parseFloat(txt);
   };
   const formatEuro = (value) => `${(value ?? 0).toFixed(2).replace('.', ',')} €`;
-  const finalDressCode = () => (dressCode.trim() || dressChoice).slice(0, 80);
+  const finalDressCode = () => (dressCode.trim() || (dressChoice === 'Autre' ? '' : dressChoice)).slice(0, 80);
+  const dressInputRef = useRef(null);
   const chooseDress = (label) => {
+    // « Autre » : description entièrement libre
+    if (label === 'Autre') {
+      if (dressCode === dressChoice) setDressCode('');
+      setDressChoice('Autre');
+      setErrors((prev) => ({ ...prev, dressCode: undefined }));
+      setTimeout(() => dressInputRef.current?.focus?.(), 50);
+      return;
+    }
     // La puce pré-remplit les précisions tant que l'utilisateur ne les a pas personnalisées
     if (!dressCode.trim() || dressCode === dressChoice) setDressCode(label);
     setDressChoice(label);
@@ -535,7 +548,7 @@ export default function CreateEventScreen({ navigation }) {
     setIsOnline(false); setOnlineLink('');
     setCoverImageUri(null); setCoverImageUrl(null);
     setGallery1Uri(null); setGallery1Url(null); setGallery2Uri(null); setGallery2Url(null);
-    setAmbiance(''); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
+    setAmbiance(''); setAmbianceLabel(''); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
     setVisibility('public'); setMaxGuests(''); setIsPaid(false); setPrice('');
     setHasDressCode(false); setDressChoice(''); setDressCode('');
     setErrors({});
@@ -565,6 +578,7 @@ export default function CreateEventScreen({ navigation }) {
     }
     if (step === 4) {
       if (!ambiance) e.ambiance = 'Choisissez une ambiance';
+      if (ambiance === 'autre' && !ambianceLabel.trim()) e.ambianceLabel = 'Décrivez l\'ambiance de votre événement';
     }
     if (step === 5) {
       if (maxGuests.trim() && !/^\d+$/.test(maxGuests.trim())) {
@@ -621,6 +635,7 @@ export default function CreateEventScreen({ navigation }) {
         online_link:      onlineLink || null,
         cover_image:      coverImageUrl,
         ambiance, palette, visibility, template_config,
+        ambiance_label:   ambiance === 'autre' ? ambianceLabel.trim() : '',
         // Billetterie & dress code (M23) — champs de premier niveau du modèle Event
         is_paid:          isPaid,
         price:            isPaid ? parsePrice(price).toFixed(2) : '0.00',
@@ -855,10 +870,14 @@ export default function CreateEventScreen({ navigation }) {
             ]}
             onPress={() => {
               setAmbiance(a.value);
+              setErrors((prev) => ({ ...prev, ambiance: undefined }));
               const p = COLOR_PALETTES[a.value];
               if (p) { setPrimaryColor(p[0]); setSecondaryColor(p[1]); }
             }}
             activeOpacity={0.8}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: ambiance === a.value }}
+            accessibilityLabel={`Ambiance ${a.label}`}
           >
             <Text style={[styles.ambianceLabel, ambiance === a.value && { color: C.white, fontWeight: '800' }]}>
               {a.label}
@@ -866,6 +885,18 @@ export default function CreateEventScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </View>
+
+      {ambiance === 'autre' && (
+        <InputField
+          label="Votre ambiance *"
+          icon="color-wand-outline"
+          value={ambianceLabel}
+          onChangeText={(t) => { setAmbianceLabel(t); setErrors((p) => ({ ...p, ambianceLabel: undefined })); }}
+          placeholder="Ex : Bohème, Tropical, Rétro années 80…"
+          maxLength={40}
+          error={errors.ambianceLabel}
+        />
+      )}
 
       {/* Palette libre : n'importe quelle couleur (carré, teinte, code hexadécimal) */}
       <View style={styles.paletteSection}>
@@ -1018,7 +1049,7 @@ export default function CreateEventScreen({ navigation }) {
         {hasDressCode && (
           <>
             <View style={styles.dressChips}>
-              {['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème'].map((label) => {
+              {['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème', 'Autre'].map((label) => {
                 const active = dressChoice === label;
                 return (
                   <TouchableOpacity
@@ -1034,10 +1065,11 @@ export default function CreateEventScreen({ navigation }) {
               })}
             </View>
             <InputField
+              inputRef={dressInputRef}
               icon="create-outline"
               value={dressCode}
               onChangeText={(t) => { setDressCode(t); setErrors((p) => ({ ...p, dressCode: undefined })); }}
-              placeholder="Précisions (ex. Business — veste conseillée)"
+              placeholder={dressChoice === 'Autre' ? 'Décrivez votre dress code (ex. Tout en blanc)' : 'Précisions (ex. Business — veste conseillée)'}
               maxLength={80}
               error={errors.dressCode}
             />
