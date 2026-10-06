@@ -13,14 +13,42 @@
       "backgroundColor": "#FFFFFF"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eranis.easevent",
+      "associatedDomains": [
+        "applinks:easevent.nitypulse.com"
+      ],
+      "infoPlist": {
+        "NSContactsUsageDescription": "Easevent accède à vos contacts uniquement quand vous choisissez qui inviter. Seuls les contacts sélectionnés sont envoyés."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1B6B4A"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.eranis.easevent",
+      "permissions": [
+        "android.permission.READ_CONTACTS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "easevent.nitypulse.com",
+              "pathPrefix": "/i/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -33,7 +61,13 @@
     },
     "plugins": [
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Easevent accède à vos contacts uniquement quand vous choisissez qui inviter. Seuls les contacts sélectionnés sont envoyés."
+        }
+      ]
     ],
     "scheme": "easevent"
   }

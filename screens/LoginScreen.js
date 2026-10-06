@@ -26,6 +26,7 @@
  */
 import { useAuth } from '../context/AuthContext';
 import { KEYS, setItem } from '../services/storage';
+import { toE164 } from '../utils/contacts';
 import { authService } from '../services/authService';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -183,6 +184,7 @@ export default function LoginScreen({ navigation, route }) {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -265,6 +267,7 @@ export default function LoginScreen({ navigation, route }) {
     const errors = {};
     if (!firstName.trim()) errors.firstName = 'Le prénom est requis';
     if (!lastName.trim())  errors.lastName  = 'Le nom est requis';
+    if (phone.trim() && !toE164(phone, '33')) errors.phone = 'Numéro invalide (ex. +33 6 12 34 56 78)';
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -307,6 +310,7 @@ export default function LoginScreen({ navigation, route }) {
         password,
         first_name:       firstName.trim(),
         last_name:        lastName.trim(),
+        ...(phone.trim() ? { phone_number: toE164(phone, '33') } : {}),
         accepted_privacy: true,
         marketing_opt_in: marketingOptIn,
         ...(invitationToken ? { invitation_token: invitationToken } : {}),
@@ -597,6 +601,17 @@ export default function LoginScreen({ navigation, route }) {
             autoCapitalize="words"
             error={fieldErrors.lastName}
           />
+          <InputField
+            icon="call-outline"
+            placeholder="Téléphone (facultatif) · +33 6 12 34 56 78"
+            value={phone}
+            onChangeText={(t) => { setPhone(t); setFieldErrors(p => ({ ...p, phone: '' })); }}
+            keyboardType="phone-pad"
+            error={fieldErrors.phone}
+          />
+          <Text style={styles.phoneHint}>
+            Invité par SMS ? Ajoutez votre numéro : vos invitations vous attendront dans l'application.
+          </Text>
 
           {/* ── Consentement RGPD (M01) ─────────────────────── */}
           <View style={styles.consentBox}>
@@ -687,6 +702,7 @@ export default function LoginScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
+  phoneHint: { fontSize: 12, color: '#555555', lineHeight: 17, marginTop: -6, marginBottom: 12 },
   root:  { flex: 1, backgroundColor: C.white },
   safe:  { flex: 1 },
   kav:   { flex: 1 },

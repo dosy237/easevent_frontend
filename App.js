@@ -58,6 +58,10 @@ import InvitationLandingScreen from './screens/InvitationLandingScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ConversationsScreen from './screens/ConversationsScreen';
 import ChatScreen from './screens/ChatScreen';
+import ContactPickerScreen from './screens/ContactPickerScreen';
+import VerifyPhoneScreen from './screens/VerifyPhoneScreen';
+import * as Application from 'expo-application';
+import { KEYS, getItem, setItem } from './services/storage';
 import { TicketBadgeProvider, useTicketBadge } from './context/TicketBadgeContext';
 
 // ─────────────────────────────────────────────────────────────────
@@ -87,7 +91,22 @@ let linkingAuthenticated = false;
 const INVITE_PATH = /^\/?i\/([^/?#]+)/;
 
 const linking = {
-  prefixes: [Linking.createURL('/'), 'https://easevent.app', 'easevent://'],
+  prefixes: [Linking.createURL('/'), 'https://easevent.nitypulse.com', 'https://easevent.app', 'easevent://'],
+  // Premier lancement après installation depuis un lien d'invitation :
+  // le Play Store transmet « invite=<jeton> » (referrer) → on ouvre M31.
+  async getInitialURL() {
+    const url = await Linking.getInitialURL();
+    if (url || Platform.OS !== 'android') return url;
+    try {
+      if (await getItem(KEYS.INSTALL_REFERRER_DONE)) return null;
+      await setItem(KEYS.INSTALL_REFERRER_DONE, '1');
+      const referrer = decodeURIComponent(await Application.getInstallReferrerAsync() || '');
+      const match = referrer.match(/invite=([A-Za-z0-9_-]{20,64})/);
+      return match ? `easevent://i/${match[1]}` : null;
+    } catch {
+      return null;
+    }
+  },
   getStateFromPath(path, options) {
     const match = path.match(INVITE_PATH);
     if (match && linkingAuthenticated) {
@@ -166,6 +185,7 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="EventDashboard"     component={EventDashboardScreen} options={{ title: 'Gérer un événement' }} />
       <DashStack.Screen name="EditEvent"          {...soon('M11', "Modifier l'événement")} />
       <DashStack.Screen name="InviteGuests"       component={InviteGuestsScreen}   options={{ title: 'Inviter des participants' }} />
+      <DashStack.Screen name="ContactPicker"      component={ContactPickerScreen}  options={{ title: 'Mes contacts' }} />
       <DashStack.Screen name="GuestList"          component={GuestListScreen}      options={{ title: 'Invités & réponses' }} />
       <DashStack.Screen name="RsvpQuestions"      {...soon('M14', 'Questions RSVP')} />
       <DashStack.Screen name="Conversations"      component={ConversationsScreen}  options={{ title: 'Messages' }} />
@@ -200,6 +220,7 @@ function TicketsStackNavigator() {
       <TicketsStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
       <TicketsStack.Screen name="InvitationLanding" component={InvitationLandingScreen} options={{ title: 'Invitation' }} />
       <TicketsStack.Screen name="Chat"           component={ChatScreen} options={{ title: 'Conversation' }} />
+      <TicketsStack.Screen name="VerifyPhone"    component={VerifyPhoneScreen} options={{ title: 'Mon numéro' }} />
     </TicketsStack.Navigator>
   );
 }
@@ -213,6 +234,7 @@ function ProfileStackNavigator() {
       <ProfileStack.Screen name="Profile"              component={ProfileScreen}       options={{ title: 'Mon profil' }} />
       <ProfileStack.Screen name="PrivacyPolicy"        component={PrivacyPolicyScreen} options={{ title: 'Confidentialité' }} />
       <ProfileStack.Screen name="Notifications"        component={NotificationsScreen} options={{ title: 'Notifications' }} />
+      <ProfileStack.Screen name="VerifyPhone"          component={VerifyPhoneScreen} options={{ title: 'Mon numéro' }} />
       <ProfileStack.Screen name="Chat"                 component={ChatScreen} options={{ title: 'Conversation' }} />
       <ProfileStack.Screen name="Payouts"              component={PayoutsScreen} options={{ title: 'Paiements & virements' }} />
       <ProfileStack.Screen name="Plans"                {...soon('M20', 'Choisir un plan')} />

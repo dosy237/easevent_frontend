@@ -584,6 +584,28 @@ export default function ProfileScreen({ navigation }) {
 
               <View style={styles.menuDivider} />
 
+              {/* Téléphone : retrouver les invitations reçues par SMS */}
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation?.navigate('VerifyPhone')}
+                accessibilityRole="button"
+              >
+                <View style={styles.menuItemLeft}>
+                  <View style={[styles.menuIconBox, { backgroundColor: C.greenLight }]}>
+                    <Ionicons name="call-outline" size={18} color={C.green} />
+                  </View>
+                  <View>
+                    <Text style={styles.menuItemTitle}>Téléphone</Text>
+                    <Text style={styles.menuItemSub}>
+                      {user?.phone_verified ? `${user.phone} · vérifié` : user?.phone ? `${user.phone} · à confirmer` : 'Retrouver vos invitations SMS'}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
               {/* Notifications */}
               <TouchableOpacity
                 style={styles.menuItem}

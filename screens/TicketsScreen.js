@@ -34,6 +34,7 @@ import TicketView from '../components/TicketView';
 import { SkeletonGroup, EventCardSkeleton, Bone } from '../components/ui/Skeleton';
 import LoadingMessages from '../components/ui/LoadingMessages';
 import { useTicketBadge } from '../context/TicketBadgeContext';
+import { useAuth } from '../context/AuthContext';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -277,6 +278,7 @@ const ArchivedRow = ({ title, date, label }) => (
 // ÉCRAN PRINCIPAL : TicketsScreen
 // ════════════════════════════════════════════════════════════════
 export default function TicketsScreen({ navigation, route }) {
+  const { user: authUser } = useAuth();
   const { refresh: refreshBadge } = useTicketBadge();
 
   const [tickets,       setTickets]       = useState([]);
@@ -420,12 +422,29 @@ export default function TicketsScreen({ navigation, route }) {
         : generated.map((t) => <GeneratedTicketCard key={t.id} ticket={t} onOpen={(x) => { setJustPaid(false); setOpenTicket(x); }} />);
     }
     if (activeSection === 'pending') {
+      // Invité par SMS : le numéro vérifié relie les invitations au compte
+      const phoneBanner = !authUser?.phone_verified ? (
+        <TouchableOpacity style={styles.phoneBanner} onPress={() => navigation.navigate('VerifyPhone')}
+          activeOpacity={0.85} accessibilityRole="button">
+          <Ionicons name="call-outline" size={18} color={C.green} />
+          <Text style={styles.phoneBannerTxt}>
+            {authUser?.phone ? `Confirmez votre numéro ${authUser.phone}` : 'Invité par SMS ? Ajoutez votre numéro'} pour retrouver vos invitations.
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={C.green} />
+        </TouchableOpacity>
+      ) : null;
       if (toAnswer.length === 0 && pendingTix.length === 0) {
-        return <Empty icon="hourglass-outline" title="Rien en attente"
-          text="Les invitations reçues et les tickets à valider apparaîtront ici." cta={discoverBtn} />;
+        return (
+          <>
+            {phoneBanner}
+            <Empty icon="hourglass-outline" title="Rien en attente"
+              text="Les invitations reçues et les tickets à valider apparaîtront ici." cta={discoverBtn} />
+          </>
+        );
       }
       return (
         <>
+          {phoneBanner}
           {toAnswer.length > 0 && (
             <>
               <Text style={styles.sectionLabel} accessibilityRole="header">Invitation à répondre</Text>
@@ -530,6 +549,11 @@ export default function TicketsScreen({ navigation, route }) {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  phoneBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#E8F5EE', borderRadius: 14,
+    borderWidth: 1, borderColor: '#C5E8D3', padding: 12, marginBottom: 14, minHeight: 48,
+  },
+  phoneBannerTxt: { flex: 1, fontSize: 13, color: '#155C3C', fontWeight: '600', lineHeight: 18 },
   root: { flex: 1, backgroundColor: C.bg },
   safe: { flex: 1, backgroundColor: C.white },
 

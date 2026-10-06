@@ -35,6 +35,8 @@ export const KEYS = {
   USER:          'easevent_user',
   // Jeton d'un lien d'invitation (M31) à rattacher après connexion
   PENDING_INVITE: 'easevent_pending_invite',
+  // Referrer du Play Store déjà lu (premier lancement)
+  INSTALL_REFERRER_DONE: 'easevent_install_referrer_done',
 };
 
 export const getItem    = (key)        => storage.getItemAsync(key);

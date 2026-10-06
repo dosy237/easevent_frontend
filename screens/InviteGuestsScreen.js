@@ -38,6 +38,7 @@ const MODES = [
 ];
 const PLAN_LABEL = { free: 'Plan Gratuit', standard: 'Plan Standard', pro: 'Plan Pro' };
 const MESSAGE_MAX = 100;
+const BATCH = 100;   // destinataires par requête (limite du serveur)
 
 async function readPickedFile(asset) {
   if (Platform.OS === 'web') {
@@ -60,6 +61,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
 
   const { user } = useAuth();
   const [sending, setSending] = useState(false);
+  const [progress, setProgress] = useState('');
   const total = members.length + emails.length + phones.length;
 
   useEffect(() => {
@@ -81,12 +83,27 @@ export default function InviteGuestsScreen({ navigation, route }) {
     }
     setSending(true);
     try {
-      const res = await invitationService.invite(event.id, {
-        userIds: members.map((m) => m.id),
-        emails: emails.map((e) => e.email),
-        phoneNumbers: phones.map((p) => ({ phone: p.phone, name: p.name })),
-        message: message.trim(),
-      });
+      // Grandes listes : plusieurs requêtes de 100 ; le serveur étale ensuite
+      // les envois par vagues (emails et SMS).
+      const items = [
+        ...members.map((m) => ['userIds', m.id]),
+        ...emails.map((e) => ['emails', e.email]),
+        ...phones.map((p) => ['phoneNumbers', { phone: p.phone, name: p.name }]),
+      ];
+      const chunks = [];
+      for (let i = 0; i < items.length; i += BATCH) chunks.push(items.slice(i, i + BATCH));
+      const res = { created: [], skipped: [], usage: null, detail: '' };
+      for (let i = 0; i < chunks.length; i += 1) {
+        setProgress(chunks.length > 1 ? `${i + 1}/${chunks.length}` : '');
+        const body = { userIds: [], emails: [], phoneNumbers: [], message: message.trim() };
+        chunks[i].forEach(([key, value]) => body[key].push(value));
+        const part = await invitationService.invite(event.id, body);
+        res.created.push(...part.created);
+        res.skipped.push(...part.skipped);
+        res.usage = part.usage;
+      }
+      const n = res.created.length;
+      res.detail = n ? `${n} invitation${n > 1 ? 's' : ''} envoyée${n > 1 ? 's' : ''}.` : 'Aucune nouvelle invitation : ces personnes sont déjà invitées ou les contacts sont invalides.';
       if (res.usage) setUsage(res.usage);
       const failed = res.created.filter((c) => c.delivery_status === 'failed').length;
       const smsOff = res.created.filter((c) => c.delivery_status === 'not_configured').length;
@@ -113,8 +130,36 @@ export default function InviteGuestsScreen({ navigation, route }) {
       }
     } finally {
       setSending(false);
+      setProgress('');
     }
   };
+
+  // Retour du sélecteur de contacts (ContactPicker)
+  const pickedAt = route.params?.pickedAt;
+  useEffect(() => {
+    const picked = route.params?.picked;
+    if (!pickedAt || !picked?.length) return;
+    if (route.params?.mode === 'email') {
+      const fresh = picked.map((p) => p.email).filter((e) => !emails.some((x) => x.email === e));
+      setMode('email');
+      setEmails((prev) => [...prev, ...fresh.map((email) => ({ email, checking: true }))]);
+      invitationService.lookupEmails(fresh.slice(0, 50))
+        .then((results) => setEmails((prev) => prev.map((item) => {
+          const r = results.find((x) => x.email === item.email);
+          return r ? { email: item.email, has_account: r.has_account, name: r.name, initials: r.initials } : { ...item, checking: false };
+        }).filter((item) => !results.find((x) => x.email === item.email && x.is_self))))
+        .catch(() => setEmails((prev) => prev.map((item) => ({ ...item, checking: false }))));
+    } else {
+      setMode('phone');
+      setPhones((prev) => [...prev, ...picked.filter((p) => !prev.some((x) => x.phone === p.phone))]);
+    }
+    navigation.setParams({ picked: undefined, pickedAt: undefined });
+  }, [pickedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickContacts = (pickMode, countryCode) => navigation.navigate('ContactPicker', {
+    mode: pickMode, countryCode, event,
+    already: pickMode === 'phone' ? phones.map((p) => p.phone) : emails.map((e) => e.email),
+  });
 
   return (
     <View style={styles.root}>
@@ -159,10 +204,10 @@ export default function InviteGuestsScreen({ navigation, route }) {
               <MembersMode eventId={event.id} selected={members} onChange={setMembers} />
             )}
             {mode === 'email' && (
-              <EmailMode list={emails} onChange={setEmails} event={event} />
+              <EmailMode list={emails} onChange={setEmails} event={event} onPickContacts={() => pickContacts('email', '33')} />
             )}
             {mode === 'phone' && (
-              <PhoneMode list={phones} onChange={setPhones} />
+              <PhoneMode list={phones} onChange={setPhones} onPickContacts={(cc) => pickContacts('phone', cc)} />
             )}
 
             <Text style={styles.label} nativeID="msgLabel">Message personnalisé</Text>
@@ -211,7 +256,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
             >
               {sending ? <ActivityIndicator color={C.white} /> : <Ionicons name="paper-plane-outline" size={18} color={C.white} />}
               <Text style={styles.sendTxt}>
-                {sending ? 'Envoi en cours…' : total ? `Envoyer ${total} invitation${total > 1 ? 's' : ''}` : 'Ajoutez des invités'}
+                {sending ? `Envoi en cours${progress ? ` · ${progress}` : ''}…` : total ? `Envoyer ${total} invitation${total > 1 ? 's' : ''}` : 'Ajoutez des invités'}
               </Text>
             </Pressable>
           </View>
@@ -319,7 +364,7 @@ function MembersMode({ eventId, selected, onChange }) {
 // ─────────────────────────────────────────────────────────────
 // Mode Email (M29)
 // ─────────────────────────────────────────────────────────────
-function EmailMode({ list, onChange }) {
+function EmailMode({ list, onChange, onPickContacts }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
 
@@ -354,7 +399,16 @@ function EmailMode({ list, onChange }) {
 
   return (
     <View>
-      <Text style={styles.label} nativeID="emailLabel">Adresse email</Text>
+      <Pressable onPress={onPickContacts} style={styles.contactsBtn} accessibilityRole="button"
+        accessibilityHint="Ouvre vos contacts pour en sélectionner plusieurs">
+        <View style={styles.contactsIcon}><Ionicons name="people" size={20} color={C.white} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.contactsTitle}>Choisir dans mes contacts</Text>
+          <Text style={styles.contactsSub}>Cochez une ou plusieurs personnes</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={C.green} />
+      </Pressable>
+      <Text style={styles.label} nativeID="emailLabel">Ou saisissez une adresse</Text>
       <View style={styles.row}>
         <View style={[styles.inputBox, { flex: 1 }, !!error && { borderColor: C.error }]}>
           <Ionicons name="mail-outline" size={18} color={C.green} />
@@ -416,7 +470,7 @@ function EmailMode({ list, onChange }) {
 // ─────────────────────────────────────────────────────────────
 // Mode Téléphone (M12)
 // ─────────────────────────────────────────────────────────────
-function PhoneMode({ list, onChange }) {
+function PhoneMode({ list, onChange, onPickContacts }) {
   const [country, setCountry] = useState(COUNTRIES[0]);
   const [picker, setPicker] = useState(false);
   const [value, setValue] = useState('');
@@ -462,7 +516,16 @@ function PhoneMode({ list, onChange }) {
         <Text style={styles.infoTxt}>Un SMS avec un lien personnel est envoyé. La personne n'a pas besoin de compte.</Text>
       </View>
 
-      <Text style={styles.label}>Numéro de téléphone</Text>
+      <Pressable onPress={() => onPickContacts(country.code)} style={styles.contactsBtn} accessibilityRole="button"
+        accessibilityHint="Ouvre vos contacts pour en sélectionner plusieurs">
+        <View style={styles.contactsIcon}><Ionicons name="people" size={20} color={C.white} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.contactsTitle}>Choisir dans mes contacts</Text>
+          <Text style={styles.contactsSub}>Comme sur WhatsApp : cochez autant de contacts que vous voulez</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={C.green} />
+      </Pressable>
+      <Text style={styles.label}>Ou saisissez un numéro</Text>
       <View style={styles.row}>
         <Pressable onPress={() => setPicker(true)} style={styles.ccBtn} accessibilityRole="button"
           accessibilityLabel={`Indicatif pays : ${country.name} +${country.code}. Modifier`}>
@@ -582,6 +645,13 @@ const styles = StyleSheet.create({
   chip: { minHeight: 34, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 2, borderRadius: 17, backgroundColor: C.greenLight },
   chipTxt: { fontSize: 13, fontWeight: '600', color: C.greenDark },
   chipX: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  contactsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, borderRadius: 16, padding: 12, marginBottom: 18,
+    backgroundColor: '#F6FBF8', borderWidth: 1.5, borderColor: C.greenSoft,
+  },
+  contactsIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#25A35A', alignItems: 'center', justifyContent: 'center' },
+  contactsTitle: { fontSize: 15, fontWeight: '800', color: C.text },
+  contactsSub: { fontSize: 12, color: C.textSub, marginTop: 2 },
   csvBtn: {
     minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14,
     borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.green, backgroundColor: '#F6FBF8', marginTop: 6, marginBottom: 18,
