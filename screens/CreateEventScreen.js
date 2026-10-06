@@ -28,6 +28,9 @@ import DateTimePicker       from '@react-native-community/datetimepicker';
 import { useAuth }          from '../context/AuthContext';
 
 import eventService from '../services/eventService';
+import ColorPicker from '../components/ui/ColorPicker';
+import ticketService from '../services/ticketService';
+import { showAlert } from '../utils/dialog';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -55,7 +58,12 @@ const EVENT_TYPES = [
   { value: 'anniversaire', label: 'Anniversaire', icon: 'gift' },
   { value: 'soiree',       label: 'Soirée',       icon: 'musical-notes' },
   { value: 'concert',      label: 'Concert',      icon: 'headset' },
-  { value: 'autre',        label: 'Autre',        icon: 'calendar' },
+  { value: 'seminaire',    label: 'Séminaire',    icon: 'school' },
+  { value: 'gala',         label: 'Gala',         icon: 'sparkles' },
+  { value: 'exposition',   label: 'Exposition',   icon: 'image' },
+  { value: 'festival',     label: 'Festival',     icon: 'flame' },
+  { value: 'atelier',      label: 'Atelier',      icon: 'color-palette' },
+  { value: 'autre',        label: 'Autre',        icon: 'create' },
 ];
 
 // ─────────────────────────────────────────────────────────────────
@@ -67,6 +75,7 @@ const AMBIANCES = [
   { value: 'minimaliste',   label: 'Minimaliste',   color: '#555555' },
   { value: 'colore',        label: 'Coloré',        color: '#9B59B6' },
   { value: 'professionnel', label: 'Professionnel', color: '#1B6B4A' },
+  { value: 'autre',         label: 'Autre',         color: '#757575' },
 ];
 
 // ─────────────────────────────────────────────────────────────────
@@ -138,7 +147,7 @@ const StepIndicator = ({ currentStep, total }) => (
 const InputField = ({
   label, icon, value, onChangeText,
   placeholder, multiline = false,
-  keyboardType = 'default', maxLength, error,
+  keyboardType = 'default', maxLength, error, suffix, inputRef,
 }) => {
   const [focused, setFocused] = useState(false);
   return (
@@ -156,11 +165,14 @@ const InputField = ({
           />
         )}
         <TextInput
+          ref={inputRef}
           style={[styles.fieldInput, multiline && styles.fieldInputMulti]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={C.textMut}
+          accessibilityLabel={label || placeholder}
+          aria-invalid={!!error}
           multiline={multiline}
           keyboardType={keyboardType}
           maxLength={maxLength}
@@ -169,11 +181,12 @@ const InputField = ({
           autoCapitalize="sentences"
           autoCorrect={false}
         />
+        {suffix ? <Text style={styles.fieldSuffix}>{suffix}</Text> : null}
         {maxLength && (
           <Text style={styles.charCount}>{value?.length || 0}/{maxLength}</Text>
         )}
       </View>
-      {error && <Text style={styles.fieldError}>{error}</Text>}
+      {error && <Text style={styles.fieldError} accessibilityLiveRegion="polite">{error}</Text>}
     </View>
   );
 };
@@ -237,6 +250,27 @@ const DatePickerField = ({ label, date, onChange, minDate, error }) => {
     onChange(tempDate);
     setShowPicker(false);
   };
+
+  // Web (outil de test uniquement — jamais utilisé dans l'APK) :
+  // le sélecteur natif n'existe pas dans un navigateur.
+  if (Platform.OS === 'web') {
+    const pad = (n) => String(n).padStart(2, '0');
+    const toLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return (
+      <View style={styles.fieldWrap}>
+        {label && <Text style={styles.fieldLabel}>{label}</Text>}
+        {React.createElement('input', {
+          type: 'datetime-local',
+          'aria-label': label || 'Date et heure',
+          value: date ? toLocal(date) : '',
+          min: minDate ? toLocal(minDate) : undefined,
+          onChange: (e) => { if (e.target.value) onChange(new Date(e.target.value)); },
+          style: { height: 52, borderRadius: 14, border: `1.5px solid ${error ? C.error : C.border}`, padding: '0 14px', fontSize: 15, background: '#F9F9F9' },
+        })}
+        {error && <Text style={styles.fieldError}>{error}</Text>}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.fieldWrap}>
@@ -321,7 +355,13 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
   <View style={styles.imageCard}>
     <Text style={styles.imageCardLabel}>{label}</Text>
     {imageUri ? (
-      <TouchableOpacity onPress={onPick} activeOpacity={0.85} style={{ position: 'relative' }}>
+      <TouchableOpacity
+        onPress={onPick}
+        activeOpacity={0.85}
+        style={{ position: 'relative' }}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} : changer la photo`}
+      >
         <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
         <View style={styles.imageOverlay}>
           {uploading ? (
@@ -334,14 +374,20 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
               <Ionicons name={imageUrl ? 'checkmark-circle' : 'cloud-upload-outline'} size={20}
                 color={imageUrl ? '#2ECC71' : C.white} />
               <Text style={styles.imageOverlayTxt}>
-                {imageUrl ? 'Uploadée ✓  — Appuyer pour changer' : 'Upload en attente...'}
+                {imageUrl ? 'Photo ajoutée — appuyer pour changer' : 'Upload en attente...'}
               </Text>
             </>
           )}
         </View>
       </TouchableOpacity>
     ) : (
-      <TouchableOpacity style={styles.imagePicker} onPress={onPick} activeOpacity={0.8}>
+      <TouchableOpacity
+        style={styles.imagePicker}
+        onPress={onPick}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} : choisir une photo`}
+      >
         <Ionicons name="cloud-upload-outline" size={32} color={C.green} />
         <Text style={styles.imagePickerTxt}>Choisir une photo</Text>
         <Text style={styles.imagePickerSub}>JPG, PNG — max 10 Mo</Text>
@@ -364,6 +410,8 @@ export default function CreateEventScreen({ navigation }) {
   // ── Étape 1 : Informations de base ───────────────────────────
   const [title,       setTitle]       = useState('');
   const [eventType,   setEventType]   = useState('');
+  // Nom libre quand le type « Autre » est choisi (ex. « Baptême »)
+  const [eventTypeLabel, setEventTypeLabel] = useState('');
   const [description, setDescription] = useState('');
 
   // ── Étape 2 : Date et lieu ────────────────────────────────────
@@ -388,14 +436,28 @@ export default function CreateEventScreen({ navigation }) {
 
   // ── Étape 4 : Style ──────────────────────────────────────────
   const [ambiance,       setAmbiance]       = useState('');
+  // Ambiance libre quand « Autre » est choisi (ex. « Bohème »)
+  const [ambianceLabel,  setAmbianceLabel]  = useState('');
   const [primaryColor,   setPrimaryColor]   = useState('');
   const [secondaryColor, setSecondaryColor] = useState('');
+  // Couleur en cours d'édition dans le sélecteur : 'primary' | 'secondary'
+  const [editingColor,   setEditingColor]   = useState('primary');
 
   // ── Étape 5 : Paramètres ─────────────────────────────────────
   const [visibility, setVisibility] = useState('public');
   const [maxGuests,  setMaxGuests]  = useState('');
   const [isPaid,     setIsPaid]     = useState(false);
   const [price,      setPrice]      = useState('');
+  // Dress code (M23) : puce rapide + précisions libres (80 caractères)
+  const [hasDressCode, setHasDressCode] = useState(false);
+  // Stripe Connect : l'organisateur peut-il encaisser ? (null = inconnu)
+  const [canCharge,    setCanCharge]    = useState(null);
+  React.useEffect(() => {
+    if (!isPaid) return;
+    ticketService.connectStatus().then((st) => setCanCharge(!!st.charges_enabled)).catch(() => setCanCharge(null));
+  }, [isPaid]);
+  const [dressChoice,  setDressChoice]  = useState('');
+  const [dressCode,    setDressCode]    = useState('');
 
   // ── UI ────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
@@ -404,14 +466,17 @@ export default function CreateEventScreen({ navigation }) {
   // ── Transitions animées entre étapes ─────────────────────────
   const transitionToStep = (newStep) => {
     Animated.timing(fadeAnim, {
-      toValue: 0, duration: 150, useNativeDriver: true,
-    }).start(() => {
-      setStep(newStep);
-      Animated.timing(fadeAnim, {
-        toValue: 1, duration: 200, useNativeDriver: true,
-      }).start();
-    });
+      toValue: 0, duration: 150, useNativeDriver: Platform.OS !== 'web',
+    }).start(() => setStep(newStep));
   };
+
+  // Fondu d'entrée lancé après le rendu de la nouvelle étape
+  // (démarré avant le montage, il restait bloqué à 0 sur le web)
+  React.useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1, duration: 200, useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [step]);
 
 
   // ── Upload image vers Cloudinary ──────────────────────────────
@@ -423,7 +488,7 @@ export default function CreateEventScreen({ navigation }) {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission refusée', 'Autorisez l\'accès à votre galerie dans les paramètres.');
+        showAlert('Permission refusée', 'Autorisez l\'accès à votre galerie dans les paramètres.');
         return;
       }
 
@@ -446,15 +511,54 @@ export default function CreateEventScreen({ navigation }) {
         const data = await eventService.uploadImage(base64Data, imageName);
         setUrl(data.url);
       } catch (err) {
-        Alert.alert('Erreur', 'Impossible d\'uploader l\'image. Réessayez.');
+        showAlert('Erreur', 'Impossible d\'uploader l\'image. Réessayez.');
         setUri(null);
       }
     } catch (err) {
-      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'upload.');
+      showAlert('Erreur', 'Une erreur est survenue lors de l\'upload.');
       console.error('Erreur upload:', err);
     } finally {
       setUploading(false);
     }
+  };
+
+  // ── Billetterie : helpers ─────────────────────────────────────
+  // "25,00" / "25.5" → 25.5 ; null si invalide
+  const parsePrice = (raw) => {
+    const txt = String(raw || '').replace(',', '.').replace(/\s/g, '');
+    if (!/^\d+(\.\d{1,2})?$/.test(txt)) return null;
+    return parseFloat(txt);
+  };
+  const formatEuro = (value) => `${(value ?? 0).toFixed(2).replace('.', ',')} €`;
+  const finalDressCode = () => (dressCode.trim() || (dressChoice === 'Autre' ? '' : dressChoice)).slice(0, 80);
+  const dressInputRef = useRef(null);
+  const chooseDress = (label) => {
+    // « Autre » : description entièrement libre
+    if (label === 'Autre') {
+      if (dressCode === dressChoice) setDressCode('');
+      setDressChoice('Autre');
+      setErrors((prev) => ({ ...prev, dressCode: undefined }));
+      setTimeout(() => dressInputRef.current?.focus?.(), 50);
+      return;
+    }
+    // La puce pré-remplit les précisions tant que l'utilisateur ne les a pas personnalisées
+    if (!dressCode.trim() || dressCode === dressChoice) setDressCode(label);
+    setDressChoice(label);
+    setErrors((prev) => ({ ...prev, dressCode: undefined }));
+  };
+
+  // Formulaire remis à zéro après la création (l'onglet Créer reste monté)
+  const resetForm = () => {
+    setStep(1);
+    setTitle(''); setEventType(''); setEventTypeLabel(''); setDescription('');
+    setStartDate(null); setEndDate(null); setLocationAddress('');
+    setIsOnline(false); setOnlineLink('');
+    setCoverImageUri(null); setCoverImageUrl(null);
+    setGallery1Uri(null); setGallery1Url(null); setGallery2Uri(null); setGallery2Url(null);
+    setAmbiance(''); setAmbianceLabel(''); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
+    setVisibility('public'); setMaxGuests(''); setIsPaid(false); setPrice('');
+    setHasDressCode(false); setDressChoice(''); setDressCode('');
+    setErrors({});
   };
 
   // ── Validation par étape ──────────────────────────────────────
@@ -463,6 +567,7 @@ export default function CreateEventScreen({ navigation }) {
     if (step === 1) {
       if (!title.trim())       e.title       = 'Le titre est obligatoire';
       if (!eventType)          e.eventType   = 'Choisissez un type d\'événement';
+      if (eventType === 'autre' && !eventTypeLabel.trim()) e.eventTypeLabel = 'Indiquez le type de votre événement';
       if (!description.trim()) e.description = 'Ajoutez une description';
     }
     if (step === 2) {
@@ -480,6 +585,20 @@ export default function CreateEventScreen({ navigation }) {
     }
     if (step === 4) {
       if (!ambiance) e.ambiance = 'Choisissez une ambiance';
+      if (ambiance === 'autre' && !ambianceLabel.trim()) e.ambianceLabel = 'Décrivez l\'ambiance de votre événement';
+    }
+    if (step === 5) {
+      if (maxGuests.trim() && !/^\d+$/.test(maxGuests.trim())) {
+        e.maxGuests = 'Indiquez un nombre entier de places';
+      } else if (maxGuests.trim() && parseInt(maxGuests, 10) < 1) {
+        e.maxGuests = 'Au moins 1 place';
+      }
+      if (isPaid) {
+        const value = parsePrice(price);
+        if (value === null || value <= 0) e.price = 'Indiquez un prix valide (ex. 25,00)';
+        else if (value > 99999.99) e.price = 'Prix trop élevé';
+      }
+      if (hasDressCode && !finalDressCode()) e.dressCode = 'Choisissez un dress code ou décrivez-le';
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -509,14 +628,12 @@ export default function CreateEventScreen({ navigation }) {
         cover_image: coverImageUrl,
         gallery:     [gallery1Url, gallery2Url].filter(Boolean),
         ambiance, palette,
-        max_guests:  maxGuests ? parseInt(maxGuests) : null,
-        is_paid:     isPaid,
-        price:       isPaid && price ? parseFloat(price) : null,
       };
 
       await eventService.createEvent({
         title,
         event_type:       eventType,
+        event_type_label: eventType === 'autre' ? eventTypeLabel.trim() : '',
         description,
         start_date:       formatDateISO(startDate),
         end_date:         formatDateISO(endDate),
@@ -525,22 +642,30 @@ export default function CreateEventScreen({ navigation }) {
         online_link:      onlineLink || null,
         cover_image:      coverImageUrl,
         ambiance, palette, visibility, template_config,
+        ambiance_label:   ambiance === 'autre' ? ambianceLabel.trim() : '',
+        // Billetterie & dress code (M23) — champs de premier niveau du modèle Event
+        is_paid:          isPaid,
+        price:            isPaid ? parsePrice(price).toFixed(2) : '0.00',
+        currency:         'EUR',
+        max_guests:       maxGuests.trim() ? parseInt(maxGuests, 10) : null,
+        dress_code:       hasDressCode ? finalDressCode() : null,
       });
 
-      Alert.alert(
-        '🎉 Événement créé !',
-        `"${title}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
+      const createdTitle = title;
+      resetForm();
+      // TODO lot « mini-site IA » : remplacer par la navigation vers M05 (EventCreated)
+      showAlert(
+        'Événement créé',
+        `"${createdTitle}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
         [{
           text: 'Voir mon tableau de bord',
-          onPress: () => navigation?.reset({
-             index: 0,
-             routes: [{ name: 'TabDashboard' }],
-          }),
+          // navigate remonte jusqu'aux onglets, depuis l'onglet Créer comme depuis le tableau de bord
+          onPress: () => navigation?.navigate('TabDashboard', { screen: 'Dashboard' }),
         }]
       );
     } catch (err) {
       const detail = err.response?.data?.detail || 'Vérifiez votre connexion et réessayez.';
-      Alert.alert('Erreur', detail);
+      showAlert('Erreur', detail);
       console.error('Erreur création:', err);
     } finally {
       setSubmitting(false);
@@ -574,8 +699,11 @@ export default function CreateEventScreen({ navigation }) {
           <TouchableOpacity
             key={t.value}
             style={[styles.typeCard, eventType === t.value && styles.typeCardActive]}
-            onPress={() => setEventType(t.value)}
+            onPress={() => { setEventType(t.value); setErrors((p) => ({ ...p, eventType: undefined })); }}
             activeOpacity={0.8}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: eventType === t.value }}
+            accessibilityLabel={t.label}
           >
             <Ionicons name={t.icon} size={22} color={eventType === t.value ? C.white : C.green} />
             <Text style={[styles.typeCardLabel, eventType === t.value && { color: C.white }]}>
@@ -584,6 +712,18 @@ export default function CreateEventScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </View>
+
+      {eventType === 'autre' && (
+        <InputField
+          label="Type de votre événement *"
+          icon="pricetag-outline"
+          value={eventTypeLabel}
+          onChangeText={(t) => { setEventTypeLabel(t); setErrors((p) => ({ ...p, eventTypeLabel: undefined })); }}
+          placeholder="Ex : Baptême, Remise de diplômes, Pique-nique…"
+          maxLength={40}
+          error={errors.eventTypeLabel}
+        />
+      )}
 
       <InputField
         label="Description *"
@@ -737,10 +877,14 @@ export default function CreateEventScreen({ navigation }) {
             ]}
             onPress={() => {
               setAmbiance(a.value);
+              setErrors((prev) => ({ ...prev, ambiance: undefined }));
               const p = COLOR_PALETTES[a.value];
               if (p) { setPrimaryColor(p[0]); setSecondaryColor(p[1]); }
             }}
             activeOpacity={0.8}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: ambiance === a.value }}
+            accessibilityLabel={`Ambiance ${a.label}`}
           >
             <Text style={[styles.ambianceLabel, ambiance === a.value && { color: C.white, fontWeight: '800' }]}>
               {a.label}
@@ -749,39 +893,64 @@ export default function CreateEventScreen({ navigation }) {
         ))}
       </View>
 
-      {ambiance && COLOR_PALETTES[ambiance] && (
-        <View style={styles.paletteSection}>
-          <Text style={styles.fieldLabel}>Couleur principale</Text>
-          <View style={styles.colorRow}>
-            {COLOR_PALETTES[ambiance].map(color => (
-              <TouchableOpacity
-                key={color}
-                style={[styles.colorDot, { backgroundColor: color }, primaryColor === color && styles.colorDotSelected]}
-                onPress={() => setPrimaryColor(color)}
-              />
-            ))}
-          </View>
-
-          <Text style={styles.fieldLabel}>Couleur secondaire</Text>
-          <View style={styles.colorRow}>
-            {COLOR_PALETTES[ambiance].map(color => (
-              <TouchableOpacity
-                key={color}
-                style={[styles.colorDot, { backgroundColor: color }, secondaryColor === color && styles.colorDotSelected]}
-                onPress={() => setSecondaryColor(color)}
-              />
-            ))}
-          </View>
-
-          {primaryColor && secondaryColor && (
-            <View style={styles.colorPreview}>
-              <View style={[styles.colorPreviewBar, { backgroundColor: primaryColor }]} />
-              <View style={[styles.colorPreviewBar, { backgroundColor: secondaryColor }]} />
-              <Text style={styles.colorPreviewTxt}>Aperçu de votre palette</Text>
-            </View>
-          )}
-        </View>
+      {ambiance === 'autre' && (
+        <InputField
+          label="Votre ambiance *"
+          icon="color-wand-outline"
+          value={ambianceLabel}
+          onChangeText={(t) => { setAmbianceLabel(t); setErrors((p) => ({ ...p, ambianceLabel: undefined })); }}
+          placeholder="Ex : Bohème, Tropical, Rétro années 80…"
+          maxLength={40}
+          error={errors.ambianceLabel}
+        />
       )}
+
+      {/* Palette libre : n'importe quelle couleur (carré, teinte, code hexadécimal) */}
+      <View style={styles.paletteSection}>
+        <Text style={styles.fieldLabel}>Vos couleurs</Text>
+        <Text style={styles.paletteHint}>
+          {ambiance ? 'L’ambiance propose des couleurs : modifiez-les librement.' : 'Choisissez librement vos couleurs, ou partez d’une ambiance.'}
+        </Text>
+        <View style={styles.colorSlots}>
+          {[
+            { key: 'primary',   label: 'Principale', value: primaryColor },
+            { key: 'secondary', label: 'Secondaire', value: secondaryColor },
+          ].map((slot) => {
+            const active = editingColor === slot.key;
+            return (
+              <TouchableOpacity
+                key={slot.key}
+                style={[styles.colorSlot, active && styles.colorSlotActive]}
+                onPress={() => setEditingColor(slot.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Couleur ${slot.label.toLowerCase()} ${slot.value || 'non choisie'}`}
+              >
+                <View style={[styles.colorSlotDot, { backgroundColor: slot.value || C.bg }]} />
+                <View>
+                  <Text style={styles.colorSlotLabel}>{slot.label}</Text>
+                  <Text style={styles.colorSlotHex}>{slot.value || 'À choisir'}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <ColorPicker
+          label={editingColor === 'primary' ? 'Couleur principale' : 'Couleur secondaire'}
+          value={(editingColor === 'primary' ? primaryColor : secondaryColor) || (editingColor === 'primary' ? '#1B6B4A' : '#E76F51')}
+          onChange={editingColor === 'primary' ? setPrimaryColor : setSecondaryColor}
+          suggestions={COLOR_PALETTES[ambiance] || Object.values(COLOR_PALETTES).map((p) => p[0])}
+        />
+
+        {primaryColor && secondaryColor ? (
+          <View style={styles.colorPreview}>
+            <View style={[styles.colorPreviewBar, { backgroundColor: primaryColor }]} />
+            <View style={[styles.colorPreviewBar, { backgroundColor: secondaryColor }]} />
+            <Text style={styles.colorPreviewTxt}>Aperçu de votre palette</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 
@@ -816,42 +985,117 @@ export default function CreateEventScreen({ navigation }) {
         label="Nombre de places (optionnel)"
         icon="people-outline"
         value={maxGuests}
-        onChangeText={setMaxGuests}
+        onChangeText={(t) => { setMaxGuests(t.replace(/[^\d]/g, '')); setErrors((p) => ({ ...p, maxGuests: undefined })); }}
         placeholder="Laissez vide = illimité"
         keyboardType="numeric"
+        error={errors.maxGuests}
       />
-      {maxGuests !== '' && (
-        <View style={styles.infoCard}>
-          <Ionicons name="information-circle-outline" size={16} color={C.green} />
-          <Text style={styles.infoCardTxt}>
-            Une liste d'attente sera activée automatiquement dès que les {maxGuests} places seront épuisées.
-          </Text>
-        </View>
-      )}
 
-      <View style={styles.toggleRow}>
-        <View>
-          <Text style={styles.toggleLabel}>Événement payant</Text>
-          <Text style={styles.toggleSub}>Activez pour vendre des billets</Text>
+      {/* ── Billetterie (M23) ───────────────────────────────── */}
+      <View style={[styles.optionCard, isPaid && styles.optionCardActive]}>
+        <View style={styles.optionHead}>
+          <View style={[styles.optionIcon, { backgroundColor: C.greenLight }]}>
+            <Ionicons name="ticket-outline" size={20} color={C.green} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.optionTitle}>Événement payant</Text>
+            <Text style={styles.optionSub}>Le prix s'affiche sur chaque ticket</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.toggle, isPaid && styles.toggleActive]}
+            onPress={() => { setIsPaid(!isPaid); setErrors((p) => ({ ...p, price: undefined })); }}
+            accessibilityRole="switch"
+            accessibilityLabel="Événement payant"
+            accessibilityState={{ checked: isPaid }}
+            hitSlop={8}
+          >
+            <View style={[styles.toggleThumb, isPaid && styles.toggleThumbActive]} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={[styles.toggle, isPaid && styles.toggleActive]}
-          onPress={() => setIsPaid(!isPaid)}
-        >
-          <View style={[styles.toggleThumb, isPaid && styles.toggleThumbActive]} />
-        </TouchableOpacity>
+        {isPaid && (
+          <View style={{ marginTop: 14 }}>
+            <InputField
+              label="Prix du ticket"
+              icon="card-outline"
+              value={price}
+              onChangeText={(t) => { setPrice(t.replace(/[^\d.,]/g, '')); setErrors((p) => ({ ...p, price: undefined })); }}
+              placeholder="25,00"
+              keyboardType="decimal-pad"
+              suffix="€"
+              error={errors.price}
+            />
+          </View>
+        )}
+        <View style={styles.optionNote}>
+          <Ionicons name="information-circle-outline" size={14} color={C.green} />
+          <Text style={styles.optionNoteTxt}>Désactivé, chaque participant reçoit quand même un ticket à 0,00 €.</Text>
+        </View>
+        {isPaid && canCharge === false && (
+          <TouchableOpacity
+            style={styles.payoutHint}
+            onPress={() => navigation?.navigate('TabProfile', { screen: 'Payouts' })}
+            accessibilityRole="button"
+          >
+            <Ionicons name="wallet-outline" size={16} color="#2563EB" />
+            <Text style={styles.payoutHintTxt}>
+              Pour encaisser vos ventes, activez les paiements (IBAN). Vous pouvez le faire après la création.
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color="#2563EB" />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {isPaid && (
-        <InputField
-          label="Prix du billet (€)"
-          icon="card-outline"
-          value={price}
-          onChangeText={setPrice}
-          placeholder="Ex: 25.00"
-          keyboardType="decimal-pad"
-        />
-      )}
+      {/* ── Dress code (M23) ───────────────────────────────── */}
+      <View style={[styles.optionCard, hasDressCode && styles.optionCardActive]}>
+        <View style={styles.optionHead}>
+          <View style={[styles.optionIcon, { backgroundColor: C.orangeL || '#FFF0EB' }]}>
+            <Ionicons name="shirt-outline" size={20} color="#C4502F" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.optionTitle}>Dress code</Text>
+            <Text style={styles.optionSub}>Affiché sur le ticket et le mini-site</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.toggle, hasDressCode && styles.toggleActive]}
+            onPress={() => { setHasDressCode(!hasDressCode); setErrors((p) => ({ ...p, dressCode: undefined })); }}
+            accessibilityRole="switch"
+            accessibilityLabel="Dress code"
+            accessibilityState={{ checked: hasDressCode }}
+            hitSlop={8}
+          >
+            <View style={[styles.toggleThumb, hasDressCode && styles.toggleThumbActive]} />
+          </TouchableOpacity>
+        </View>
+        {hasDressCode && (
+          <>
+            <View style={styles.dressChips}>
+              {['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème', 'Autre'].map((label) => {
+                const active = dressChoice === label;
+                return (
+                  <TouchableOpacity
+                    key={label}
+                    style={[styles.dressChip, active && styles.dressChipActive]}
+                    onPress={() => chooseDress(label)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.dressChipTxt, active && styles.dressChipTxtActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <InputField
+              inputRef={dressInputRef}
+              icon="create-outline"
+              value={dressCode}
+              onChangeText={(t) => { setDressCode(t); setErrors((p) => ({ ...p, dressCode: undefined })); }}
+              placeholder={dressChoice === 'Autre' ? 'Décrivez votre dress code (ex. Tout en blanc)' : 'Précisions (ex. Business — veste conseillée)'}
+              maxLength={80}
+              error={errors.dressCode}
+            />
+          </>
+        )}
+      </View>
 
       {/* Récapitulatif final */}
       <View style={styles.summaryCard}>
@@ -862,8 +1106,12 @@ export default function CreateEventScreen({ navigation }) {
           { icon: 'time-outline',     value: endDate   ? formatDateDisplay(endDate)   : '—' },
           { icon: 'location-outline', value: isOnline ? 'En ligne' : locationAddress || '—' },
           { icon: visibility === 'public' ? 'earth-outline' : 'lock-closed-outline',
-            value: visibility === 'public' ? 'Public' : 'Privé' },
-          { icon: 'ticket-outline',   value: isPaid ? `${price || '?'} € / personne` : 'Gratuit' },
+            value: `${visibility === 'public' ? 'Public' : 'Privé'} · ${maxGuests ? `${maxGuests} places` : 'places illimitées'}` },
+          { icon: 'ticket-outline',
+            value: isPaid
+              ? (parsePrice(price) ? `${formatEuro(parsePrice(price))} / personne` : 'Prix à indiquer')
+              : 'Gratuit — ticket à 0,00 €' },
+          ...(hasDressCode && finalDressCode() ? [{ icon: 'shirt-outline', value: `Dress code : ${finalDressCode()}` }] : []),
         ].map((row, i) => (
           <View key={i} style={styles.summaryRow}>
             <Ionicons name={row.icon} size={14} color={C.green} />
@@ -999,7 +1247,7 @@ const styles = StyleSheet.create({
   fieldBoxFocused: { borderColor: C.green, backgroundColor: C.white },
   fieldBoxError:   { borderColor: C.error },
   fieldIcon:       { marginRight: 10 },
-  fieldInput:      { flex: 1, fontSize: 15, color: C.text, padding: 0, paddingVertical: 14 },
+  fieldInput:      { flex: 1, fontSize: 15, color: C.text, padding: 0, paddingVertical: 14, outlineStyle: 'none' },
   fieldInputMulti: { minHeight: 100, textAlignVertical: 'top' },
   charCount:       { fontSize: 11, color: C.textMut },
   fieldError:      { fontSize: 12, color: C.error, marginTop: 4, fontWeight: '500' },
@@ -1141,6 +1389,41 @@ const styles = StyleSheet.create({
   infoCardTxt: { fontSize: 13, color: C.green, flex: 1, lineHeight: 18 },
 
   // Récapitulatif
+  payoutHint: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, minHeight: 44,
+    backgroundColor: '#EFF6FF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
+  },
+  payoutHintTxt: { flex: 1, fontSize: 12, color: '#1E40AF', lineHeight: 17, fontWeight: '600' },
+  fieldSuffix: { fontSize: 16, fontWeight: '700', color: C.text, marginLeft: 8 },
+  optionCard: {
+    backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border,
+    padding: 16, marginBottom: 16,
+  },
+  optionCardActive: { borderWidth: 1.5, borderColor: C.green },
+  optionHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  optionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  optionTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+  optionSub: { fontSize: 12, color: '#757575', marginTop: 2 },
+  optionNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 12 },
+  optionNoteTxt: { flex: 1, fontSize: 12, color: C.textSub, lineHeight: 17 },
+  dressChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 10 },
+  dressChip: {
+    minHeight: 40, paddingHorizontal: 12, borderRadius: 100, borderWidth: 1.5, borderColor: C.border,
+    backgroundColor: C.white, alignItems: 'center', justifyContent: 'center',
+  },
+  dressChipActive: { backgroundColor: C.green, borderColor: C.green },
+  dressChipTxt: { fontSize: 13, fontWeight: '600', color: C.textSub },
+  dressChipTxtActive: { color: C.white },
+  paletteHint: { fontSize: 13, color: C.textSub, marginBottom: 12, lineHeight: 18 },
+  colorSlots: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  colorSlot: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56,
+    padding: 10, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white,
+  },
+  colorSlotActive: { borderColor: C.green, borderWidth: 2 },
+  colorSlotDot: { width: 32, height: 32, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' },
+  colorSlotLabel: { fontSize: 12, color: C.textSub, fontWeight: '600' },
+  colorSlotHex: { fontSize: 14, color: C.text, fontWeight: '800', letterSpacing: 0.5 },
   summaryCard: {
     backgroundColor: C.greenLight, borderRadius: 16, padding: 16,
     borderWidth: 1, borderColor: '#C5E8D3', marginTop: 8,

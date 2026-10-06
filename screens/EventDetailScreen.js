@@ -36,6 +36,7 @@ import {
   Platform,
   Linking,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 
 // SafeAreaView de react-native-safe-area-context est plus fiable
@@ -45,6 +46,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../services/apiClient';
 import { useAuth } from '../context/AuthContext';
+import ticketService from '../services/ticketService';
+import { apiErrorMessage } from '../services/authService';
+import { showAlert } from '../utils/dialog';
+import { formatPrice } from '../utils/format';
+import { useTicketBadge } from '../context/TicketBadgeContext';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -61,7 +67,7 @@ const C = {
   bg:         '#F7F7F7',
   text:       '#1A1A1A',
   textSub:    '#555555',
-  textMut:    '#9E9E9E',
+  textMut:    '#757575',
   border:     '#E8E8E8',
   overlay:    'rgba(15, 30, 20, 0.52)',
 };
@@ -193,6 +199,9 @@ export default function EventDetailScreen({ route, navigation }) {
   // useSafeAreaInsets() nous donne les valeurs exactes pour chaque bord
   const insets = useSafeAreaInsets();
 
+  const { isAuthenticated, user } = useAuth();
+  const { refresh: refreshBadge } = useTicketBadge();
+  const [ticketBusy, setTicketBusy] = useState(false);
   const [fullEvent, setFullEvent] = useState(event);
   const [loading, setLoading]   = useState(!event?.description);
   const [error, setError]       = useState(null);
@@ -271,6 +280,53 @@ export default function EventDetailScreen({ route, navigation }) {
     );
   }
 
+  // ── M24 : bouton du bas selon l'état du ticket de l'utilisateur ──
+  const isPaid    = !!fullEvent.is_paid && Number(fullEvent.price) > 0;
+  const priceTxt  = isPaid ? formatPrice(fullEvent.price, fullEvent.currency) : 'Gratuit';
+  const myTicket  = fullEvent.my_ticket;
+  const isOrganizer = !!user && fullEvent.organizer?.id === user.id;
+  const soldOut   = fullEvent.spots_left === 0 && !myTicket;
+
+  const openTicket = (ticketId) => navigation.navigate('TabTickets', {
+    screen: 'Tickets', params: { tab: 'generated', openTicketId: ticketId },
+  });
+
+  const ticketAction = async () => {
+    if (isOrganizer) {
+      navigation.navigate('TabDashboard', { screen: 'EventDashboard', params: { event: fullEvent } });
+      return;
+    }
+    if (myTicket?.status === 'generated') { openTicket(myTicket.id); return; }
+    setTicketBusy(true);
+    try {
+      if (myTicket?.status === 'pending') {
+        if (isPaid) navigation.navigate('TicketCheckout', { ticketId: myTicket.id });
+        else openTicket((await ticketService.validate(myTicket.id)).id);
+        return;
+      }
+      const ticket = await ticketService.take(fullEvent.id);
+      refreshBadge({ force: true });
+      if (ticket.status === 'generated') openTicket(ticket.id);
+      else navigation.navigate('TicketCheckout', { ticketId: ticket.id });
+    } catch (err) {
+      showAlert('Impossible de continuer', apiErrorMessage(err));
+    } finally {
+      setTicketBusy(false);
+      loadEventDetail(fullEvent.id);
+    }
+  };
+
+  const ticketLabel = isOrganizer ? 'Gérer mon événement'
+    : myTicket?.status === 'generated' ? 'Voir mon ticket'
+    : myTicket?.status === 'pending' ? 'Finaliser mon ticket'
+    : soldOut ? 'Complet'
+    : isPaid ? 'Payer et générer mon ticket'
+    : 'Participer — ticket gratuit';
+
+  const contactOrganizer = () => navigation.navigate('Chat', {
+    eventId: fullEvent.id, organizerName: fullEvent.organizer?.name,
+  });
+
   const handleParticipate = async () => {
     // Ouvre le store pour télécharger l'app
     // En production : si l'utilisateur est connecté, on l'amène
@@ -311,7 +367,7 @@ export default function EventDetailScreen({ route, navigation }) {
 
         {/* Badge type d'événement */}
         <View style={styles.typeBadge}>
-          <Text style={styles.typeBadgeTxt}>{typeLabel(fullEvent.event_type)}</Text>
+          <Text style={styles.typeBadgeTxt}>{fullEvent.event_type_display || typeLabel(fullEvent.event_type)}</Text>
         </View>
       </View>
 
@@ -343,9 +399,15 @@ export default function EventDetailScreen({ route, navigation }) {
           <View style={[styles.heroContent, { paddingBottom: insets.bottom + 24 }]}>
 
             {/* Date en badge orange */}
-            <View style={styles.heroDateBadge}>
-              <Ionicons name="calendar-outline" size={12} color={C.white} />
-              <Text style={styles.heroDateTxt}>{fullEvent.date_formatted}</Text>
+            <View style={styles.heroBadges}>
+              <View style={styles.heroDateBadge}>
+                <Ionicons name="calendar-outline" size={12} color={C.white} />
+                <Text style={styles.heroDateTxt}>{fullEvent.date_formatted}</Text>
+              </View>
+              <View style={styles.heroPriceBadge}>
+                <Ionicons name="ticket-outline" size={12} color={C.green} />
+                <Text style={styles.heroPriceTxt}>{priceTxt}</Text>
+              </View>
             </View>
 
             {/* Titre principal */}
@@ -418,6 +480,20 @@ export default function EventDetailScreen({ route, navigation }) {
               onPress={() => openGoogleMaps(fullEvent.location_address)}
             />
 
+            {/* Prix du ticket + places restantes (M24) */}
+            <View style={styles.divider} />
+            <InfoRow
+              icon="ticket-outline"
+              label="Prix du ticket"
+              value={`${isPaid ? priceTxt : '0,00 € · gratuit'}${fullEvent.spots_left != null ? ` · ${fullEvent.spots_left} place${fullEvent.spots_left > 1 ? 's' : ''} restante${fullEvent.spots_left > 1 ? 's' : ''}` : ''}`}
+            />
+            {fullEvent.dress_code ? (
+              <>
+                <View style={styles.divider} />
+                <InfoRow icon="shirt-outline" label="Dress code" value={fullEvent.dress_code} />
+              </>
+            ) : null}
+
             {/* Ambiance si renseignée */}
             {fullEvent.ambiance ? (
               <>
@@ -425,7 +501,9 @@ export default function EventDetailScreen({ route, navigation }) {
                 <InfoRow
                   icon="color-palette-outline"
                   label="Ambiance"
-                  value={fullEvent.ambiance.charAt(0).toUpperCase() + fullEvent.ambiance.slice(1)}
+                  value={fullEvent.ambiance === 'autre' && fullEvent.ambiance_label
+                    ? fullEvent.ambiance_label
+                    : fullEvent.ambiance.charAt(0).toUpperCase() + fullEvent.ambiance.slice(1)}
                 />
               </>
             ) : null}
@@ -439,6 +517,29 @@ export default function EventDetailScreen({ route, navigation }) {
             </View>
           ) : null}
 
+          {/* ── Organisateur (connecté) ─────────────────────── */}
+          {isAuthenticated && fullEvent.organizer ? (
+            <View style={styles.orgCard}>
+              <View style={styles.orgAvatar}>
+                <Text style={styles.orgAvatarTxt}>
+                  {fullEvent.organizer.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.orgLabel}>Organisé par</Text>
+                <Text style={styles.orgName} numberOfLines={1}>{fullEvent.organizer.name}</Text>
+              </View>
+              {!isOrganizer && (
+                <TouchableOpacity style={styles.orgContact} onPress={contactOrganizer} accessibilityRole="button"
+                  accessibilityLabel={`Contacter ${fullEvent.organizer.name}`}>
+                  <Ionicons name="chatbubble-outline" size={15} color={C.text} />
+                  <Text style={styles.orgContactTxt}>Contacter</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : null}
+
+          {!isAuthenticated && (<>
           {/* ── Bannière participation ──────────────────────── */}
           <View style={styles.participateBanner}>
             <View style={styles.participateBannerLeft}>
@@ -495,10 +596,36 @@ export default function EventDetailScreen({ route, navigation }) {
               </View>
             </TouchableOpacity>
           </View>
+          </>)}
 
-          <View style={{ height: 40 }} />
+          <View style={{ height: isAuthenticated ? 130 : 40 }} />
         </Animated.View>
       </Animated.ScrollView>
+
+      {/* ══ BARRE FIXE (connecté, M24) ══════════════════════════ */}
+      {isAuthenticated && (
+        <View style={[styles.ticketBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View>
+            <Text style={styles.ticketBarLabel}>Ticket</Text>
+            <Text style={styles.ticketBarPrice}>{isPaid ? priceTxt : '0,00 €'}</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.ticketBarBtn, soldOut && !isOrganizer && styles.ticketBarBtnOff]}
+            onPress={ticketAction}
+            disabled={ticketBusy || (soldOut && !isOrganizer)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: soldOut && !isOrganizer, busy: ticketBusy }}
+          >
+            {ticketBusy ? <ActivityIndicator color={C.white} /> : (
+              <>
+                <Ionicons name={myTicket?.status === 'generated' ? 'qr-code-outline' : 'ticket-outline'} size={18} color={C.white} />
+                <Text style={styles.ticketBarBtnTxt}>{ticketLabel}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -507,6 +634,39 @@ export default function EventDetailScreen({ route, navigation }) {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  // ── M24 : badges, organisateur, barre fixe
+  heroBadges: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  heroPriceBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 10,
+  },
+  heroPriceTxt: { fontSize: 12, fontWeight: '800', color: C.green },
+  orgCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.white, borderRadius: 18,
+    paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: C.border, marginBottom: 14,
+  },
+  orgAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
+  orgAvatarTxt: { color: C.white, fontSize: 15, fontWeight: '800' },
+  orgLabel: { fontSize: 11, color: C.textMut, fontWeight: '600' },
+  orgName: { fontSize: 14, fontWeight: '700', color: C.text },
+  orgContact: {
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12,
+    borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
+  },
+  orgContactTxt: { fontSize: 13, fontWeight: '700', color: C.text },
+  ticketBar: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: 'rgba(255,255,255,0.96)', borderTopWidth: 1, borderTopColor: C.border, paddingHorizontal: 20, paddingTop: 14,
+  },
+  ticketBarLabel: { fontSize: 12, color: C.textMut, fontWeight: '600' },
+  ticketBarPrice: { fontSize: 22, fontWeight: '900', color: C.text, letterSpacing: -0.5 },
+  ticketBarBtn: {
+    flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: C.green, borderRadius: 16, paddingHorizontal: 12,
+    shadowColor: C.green, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4,
+  },
+  ticketBarBtnOff: { backgroundColor: '#8DB5A3', shadowOpacity: 0, elevation: 0 },
+  ticketBarBtnTxt: { color: C.white, fontSize: 15, fontWeight: '800' },
 
   root:   { flex: 1, backgroundColor: C.bg },
   scroll: { flex: 1 },

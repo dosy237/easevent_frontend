@@ -18,7 +18,7 @@
  */
 
 import { StatusBar as RNStatusBar } from 'react-native';
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -40,6 +40,9 @@ import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 
 import eventService from '../services/eventService';
+import { LogoMark } from '../components/illustrations';
+import { SkeletonGroup, Bone, EventCardSkeleton } from '../components/ui/Skeleton';
+import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -168,7 +171,7 @@ const CardFeatured = React.memo(({ event, onPress }) => (
   <TouchableOpacity style={styles.cardFeatured} onPress={() => onPress(event)} activeOpacity={0.92}>
     <Image source={{ uri: event.cover_image }} style={styles.cardFeaturedImg} resizeMode="cover" />
     <View style={styles.cardFeaturedBadge}>
-      <Text style={styles.cardFeaturedBadgeTxt}>{event.event_type?.toUpperCase()}</Text>
+      <Text style={styles.cardFeaturedBadgeTxt}>{(event.event_type_display || event.event_type)?.toUpperCase()}</Text>
     </View>
     <View style={styles.cardFeaturedFooter}>
       <Text style={styles.cardFeaturedDate}>{event.date_formatted}</Text>
@@ -258,6 +261,10 @@ export default function HomeScreen({ navigation }) {
   const [searchText, setSearchText] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
+  // Minuteur de la recherche (debounce 400 ms) — n'était pas déclaré :
+  // chaque frappe dans la recherche levait une erreur
+  const debounceTimer = useRef(null);
+  useEffect(() => () => clearTimeout(debounceTimer.current), []);
 
   const fetchEvents = useCallback(async (search = '', filter = activeFilter) => {
     try {
@@ -332,6 +339,8 @@ export default function HomeScreen({ navigation }) {
 
   const goToDetail = (event) => navigation?.navigate('EventDetail', { event });
   const goToLogin = () => navigation?.navigate('Login');
+  // Cloche : notifications si connecté, sinon page de bienvenue (MD §2)
+  const goToNotifications = () => (isLoggedIn ? navigation?.navigate('Notifications') : goToLogin());
 
   const featuredEvent = events[0] || null;
   const smallEvents = events.slice(1, 3);
@@ -371,18 +380,28 @@ export default function HomeScreen({ navigation }) {
             <>
               <View style={styles.logoRow}>
                 <View style={styles.logoMark}>
-                  <Ionicons name="calendar-outline" size={20} color={C.white} />
+                  <LogoMark size={38} simplified />
                 </View>
-                <Text style={styles.logoTxt}>
+                <Text style={styles.logoTxt} accessibilityRole="header" accessibilityLabel="Easevent">
                   <Text style={styles.logoEas}>Eas</Text>
-                  <Text style={styles.logoEven}>Even</Text>
+                  <Text style={styles.logoEven}>event</Text>
                 </Text>
               </View>
               <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.hdrBtn} onPress={() => setSearchActive(true)}>
+                <TouchableOpacity
+                  style={styles.hdrBtn}
+                  onPress={() => setSearchActive(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Rechercher un événement"
+                >
                   <Ionicons name="search-outline" size={22} color={C.text} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.hdrBtn}>
+                <TouchableOpacity
+                  style={styles.hdrBtn}
+                  onPress={goToNotifications}
+                  accessibilityRole="button"
+                  accessibilityLabel={isLoggedIn ? 'Notifications' : 'Notifications — se connecter'}
+                >
                   <View style={styles.notifWrap}>
                     <Ionicons name="notifications-outline" size={22} color={C.text} />
                     <View style={styles.notifDot} />
@@ -463,7 +482,18 @@ export default function HomeScreen({ navigation }) {
           )}
 
           {/* États */}
-          {loading && <ActivityIndicator size="large" color={C.green} style={{ marginTop: 60 }} />}
+          {loading && (
+            <SkeletonGroup label="Chargement des événements" style={{ paddingTop: 8, paddingHorizontal: 20 }}>
+              <LoadingMessages messages={MESSAGES.feed} />
+              <Bone width={140} height={20} style={{ marginBottom: 14 }} />
+              <EventCardSkeleton />
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}><EventCardSkeleton /></View>
+                <View style={{ flex: 1 }}><EventCardSkeleton /></View>
+              </View>
+              <EventCardSkeleton horizontal />
+            </SkeletonGroup>
+          )}
 
           {!loading && error && (
             <View style={styles.errorBox}>
@@ -606,10 +636,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoTxt: { fontSize: 22, letterSpacing: -0.3 },
-  logoEas: { color: C.text, fontWeight: '800' },
+  logoEas: { color: C.green, fontWeight: '800' },
   logoEven: { color: C.orange, fontWeight: '800' },
   headerRight: { flexDirection: 'row', gap: 2 },
-  hdrBtn: { padding: 8 },
+  hdrBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   notifWrap: { position: 'relative' },
   notifDot: {
     position: 'absolute',

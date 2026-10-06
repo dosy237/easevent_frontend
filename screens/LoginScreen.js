@@ -11,11 +11,17 @@
  *                connecté à POST /api/auth/login/
  *
  * 3. REGISTER  : formulaire en 2 étapes
- *                Étape 1 : email + mot de passe
- *                Étape 2 : prénom + nom
+ *                Étape 1 : email + mot de passe (E05)
+ *                Étape 2 : prénom + nom + consentement RGPD (M01)
  *                connecté à POST /api/auth/register/
  *
- * Après connexion réussie → navigation vers HomeScreen
+ * Paramètres de navigation acceptés :
+ *   mode            : 'login' | 'register' (ouvre directement le formulaire)
+ *   prefillEmail    : email pré-rempli (lien d'invitation, M03 « Modifier »)
+ *   invitationToken : token d'invitation transmis à l'inscription (parcours G)
+ *
+ * Après inscription → M03 « Vérifiez votre email ».
+ * Après connexion réussie → espace connecté (AuthContext).
  * ════════════════════════════════════════════════════════════════
  */
 import { useAuth } from '../context/AuthContext';
@@ -39,7 +45,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons }     from '@expo/vector-icons';
 
+import Checkbox from '../components/ui/Checkbox';
+import { LogoMark } from '../components/illustrations';
+import { apiErrorMessage } from '../services/authService';
+import { showAlert } from '../utils/dialog';
+
 const { height: H } = Dimensions.get('window');
+
+// Le pilote natif d'Animated n'existe pas sur le web
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -53,7 +67,7 @@ const C = {
   bg:         '#F7F7F7',
   text:       '#1A1A1A',
   textSub:    '#555555',
-  textMut:    '#9E9E9E',
+  textMut:    '#757575',
   border:     '#E8E8E8',
   inputBg:    '#F9F9F9',
   error:      '#E53E3E',
@@ -78,6 +92,9 @@ const InputField = ({
   error,
   keyboardType = 'default',
   autoCapitalize = 'none',
+  autoComplete,
+  onSubmitEditing,
+  returnKeyType,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -99,19 +116,27 @@ const InputField = ({
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor={C.textMut}
+          accessibilityLabel={placeholder}
+          aria-invalid={!!error}
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={secureEntry && !showPassword}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
+          autoComplete={autoComplete}
+          onSubmitEditing={onSubmitEditing}
+          returnKeyType={returnKeyType}
           autoCorrect={false}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
         {secureEntry && (
           <TouchableOpacity
+          accessibilityRole="button"
             onPress={() => setShowPassword(!showPassword)}
             style={styles.eyeBtn}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
           >
             <Ionicons
               name={showPassword ? 'eye-off-outline' : 'eye-outline'}
@@ -146,17 +171,23 @@ const ProgressBar = ({ step, total }) => (
   </View>
 );
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation, route }) {
   const { login } = useAuth();
-  const [screen, setScreen] = useState(SCREEN.LANDING);
+  const params = route?.params || {};
+  const [screen, setScreen] = useState(
+    params.mode === 'login' ? SCREEN.LOGIN : params.mode === 'register' ? SCREEN.REGISTER : SCREEN.LANDING
+  );
   const [registerStep, setRegisterStep] = useState(1);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(params.prefillEmail || '');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const invitationToken = params.invitationToken;
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const logoScale = useRef(new Animated.Value(1)).current;
@@ -166,23 +197,42 @@ export default function LoginScreen({ navigation }) {
       toValue:  1,
       friction: 6,
       tension:  80,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
     }).start();
   }, []);
+
+  // Navigation vers Login avec de nouveaux paramètres (ex. depuis M03 « Modifier »)
+  useEffect(() => {
+    if (params.prefillEmail) setEmail(params.prefillEmail);
+    if (params.mode === 'login') setScreen(SCREEN.LOGIN);
+    if (params.mode === 'register') { setScreen(SCREEN.REGISTER); setRegisterStep(1); }
+  }, [params.mode, params.prefillEmail]);
+
+  const goToPrivacy = () => navigation?.navigate('PrivacyPolicy');
+  const goToForgotPassword = () => navigation?.navigate('ForgotPassword', { email: email.trim() });
+  const showOAuthSoon = (provider) => showAlert(
+    `Connexion avec ${provider}`,
+    'Bientôt disponible. En attendant, utilisez votre adresse email.',
+  );
 
   const transitionTo = (newScreen) => {
     setError('');
     setFieldErrors({});
     Animated.timing(fadeAnim, {
-      toValue: 0, duration: 150, useNativeDriver: true,
+      toValue: 0, duration: 150, useNativeDriver: USE_NATIVE_DRIVER,
     }).start(() => {
       setScreen(newScreen);
       setRegisterStep(1);
-      Animated.timing(fadeAnim, {
-        toValue: 1, duration: 200, useNativeDriver: true,
-      }).start();
     });
   };
+
+  // Fondu d'entrée lancé APRÈS le rendu du nouveau formulaire : sur le web,
+  // l'animation démarrée avant le montage laissait l'opacité bloquée à 0.
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1, duration: 200, useNativeDriver: USE_NATIVE_DRIVER,
+    }).start();
+  }, [screen]);
 
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -225,11 +275,12 @@ export default function LoginScreen({ navigation }) {
         refresh:  data.refresh,
       });
     } catch (err) {
-      const msg = err.response?.data?.detail 
-        || err.response?.data?.non_field_errors?.[0]
-        || 'Email ou mot de passe incorrect.';
-      setError(msg);
-      console.error('Erreur login:', err);
+      // Compte non vérifié → écran M03 avec renvoi immédiat possible
+      if (err.response?.data?.code === 'email_not_verified') {
+        navigation?.navigate('VerifyEmail', { email: err.response.data.email || email.trim(), canResendNow: true });
+        return;
+      }
+      setError(apiErrorMessage(err, 'Email ou mot de passe incorrect.'));
     } finally {
       setLoading(false);
     }
@@ -241,32 +292,33 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleRegisterStep2 = async () => {
-    if (!validateRegisterStep2()) return;
+    if (!validateRegisterStep2() || !acceptedPrivacy) return;
     setLoading(true);
     setError('');
     try {
       const data = await authService.register({
-        email,
+        email:            email.trim(),
         password,
-        first_name: firstName.trim(),
-        last_name:  lastName.trim(),
+        first_name:       firstName.trim(),
+        last_name:        lastName.trim(),
+        accepted_privacy: true,
+        marketing_opt_in: marketingOptIn,
+        ...(invitationToken ? { invitation_token: invitationToken } : {}),
       });
       if (data.access) {
-         await login({
-           userData: data.user,
-           access:   data.access,
-           refresh:  data.refresh,
-         });
+        // Compte déjà vérifié (ex. invitation reçue sur cette adresse)
+        await login({ userData: data.user, access: data.access, refresh: data.refresh });
       } else {
-        setError("Compte créé ! Veuillez vous connecter.");
-        transitionTo(SCREEN.LOGIN);
+        navigation?.navigate('VerifyEmail', { email: data.email || email.trim() });
       }
     } catch (err) {
-      const msg = err.response?.data?.email?.[0]
-        || err.response?.data?.detail
-        || 'Une erreur est survenue lors de l\'inscription.';
-      setError(msg);
-      console.error('Erreur register:', err);
+      const body = err.response?.data || {};
+      // Erreur sur l'email ou le mot de passe → retour à l'étape 1
+      if (body.email || body.password) {
+        setRegisterStep(1);
+        setFieldErrors({ email: body.email || '', password: body.password || '' });
+      }
+      setError(apiErrorMessage(err, 'Une erreur est survenue lors de l\'inscription.'));
     } finally {
       setLoading(false);
     }
@@ -279,11 +331,11 @@ export default function LoginScreen({ navigation }) {
         { transform: [{ scale: logoScale }] }
       ]}>
         <View style={styles.logoIconBox}>
-          <Ionicons name="calendar-outline" size={36} color={C.white} />
+          <LogoMark size={80} />
         </View>
-        <Text style={styles.landingAppName}>
+        <Text style={styles.landingAppName} accessibilityRole="header" accessibilityLabel="Easevent">
           <Text style={styles.landingEas}>Eas</Text>
-          <Text style={styles.landingEven}>even</Text>
+          <Text style={styles.landingEven}>event</Text>
         </Text>
         <Text style={styles.landingTagline}>Créez l'exceptionnel</Text>
         <View style={styles.landingDivider} />
@@ -291,6 +343,7 @@ export default function LoginScreen({ navigation }) {
 
       <View style={styles.landingButtons}>
         <TouchableOpacity
+          accessibilityRole="button"
           style={styles.btnPrimary}
           onPress={() => transitionTo(SCREEN.REGISTER)}
           activeOpacity={0.85}
@@ -300,6 +353,7 @@ export default function LoginScreen({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity
+          accessibilityRole="button"
           style={styles.btnSecondary}
           onPress={() => transitionTo(SCREEN.LOGIN)}
           activeOpacity={0.85}
@@ -314,23 +368,51 @@ export default function LoginScreen({ navigation }) {
         </View>
 
         <View style={styles.oauthRow}>
-          <TouchableOpacity style={styles.oauthBtn} activeOpacity={0.8}>
+          <TouchableOpacity
+          accessibilityRole="button"
+            style={styles.oauthBtn}
+            activeOpacity={0.8}
+            onPress={() => showOAuthSoon('Google')}
+            accessibilityRole="button"
+            accessibilityLabel="Continuer avec Google"
+          >
             <Ionicons name="logo-google" size={22} color="#4285F4" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.oauthBtn} activeOpacity={0.8}>
+          <TouchableOpacity
+          accessibilityRole="button"
+            style={styles.oauthBtn}
+            activeOpacity={0.8}
+            onPress={() => showOAuthSoon('Apple')}
+            accessibilityRole="button"
+            accessibilityLabel="Continuer avec Apple"
+          >
             <Ionicons name="logo-apple" size={22} color={C.text} />
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity><Text style={styles.footerLink}>Conditions</Text></TouchableOpacity>
+        <TouchableOpacity
+          style={styles.footerBtn}
+          accessibilityRole="link"
+          onPress={() => navigation?.navigate('Terms')}
+        >
+          <Text style={styles.footerLink}>Conditions</Text>
+        </TouchableOpacity>
         <Text style={styles.footerDot}>·</Text>
-        <TouchableOpacity><Text style={styles.footerLink}>Confidentialité</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.footerBtn} accessibilityRole="link" onPress={goToPrivacy}>
+          <Text style={styles.footerLink}>Confidentialité</Text>
+        </TouchableOpacity>
         <Text style={styles.footerDot}>·</Text>
-        <TouchableOpacity><Text style={styles.footerLink}>Aide</Text></TouchableOpacity>
+        <TouchableOpacity
+          style={styles.footerBtn}
+          accessibilityRole="link"
+          onPress={() => navigation?.navigate('Help')}
+        >
+          <Text style={styles.footerLink}>Aide</Text>
+        </TouchableOpacity>
       </View>
-      <Text style={styles.footerCopy}>© 2026 Easevent Inc.</Text>
+      <Text style={styles.footerCopy}>© 2026 Easevent · Eranis</Text>
     </Animated.View>
   );
 
@@ -338,8 +420,11 @@ export default function LoginScreen({ navigation }) {
     <Animated.View style={[styles.formContent, { opacity: fadeAnim }]}>
       <View style={styles.formHeader}>
         <TouchableOpacity
+          accessibilityRole="button"
           style={styles.backBtn}
           onPress={() => transitionTo(SCREEN.LANDING)}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
         >
           <Ionicons name="arrow-back-outline" size={20} color={C.text} />
         </TouchableOpacity>
@@ -348,7 +433,7 @@ export default function LoginScreen({ navigation }) {
       </View>
 
       <Text style={styles.formSubtitle}>
-        Bon retour parmi nous 👋{"\n"}
+        Bon retour parmi nous.{"\n"}
         Entrez vos identifiants pour continuer.
       </Text>
 
@@ -365,6 +450,7 @@ export default function LoginScreen({ navigation }) {
         value={email}
         onChangeText={(t) => { setEmail(t); setFieldErrors(p => ({ ...p, email: '' })); }}
         keyboardType="email-address"
+        autoComplete="email"
         error={fieldErrors.email}
       />
 
@@ -374,14 +460,22 @@ export default function LoginScreen({ navigation }) {
         value={password}
         onChangeText={(t) => { setPassword(t); setFieldErrors(p => ({ ...p, password: '' })); }}
         secureEntry
+        autoComplete="current-password"
+        returnKeyType="go"
+        onSubmitEditing={handleLogin}
         error={fieldErrors.password}
       />
 
-      <TouchableOpacity style={styles.forgotBtn}>
+      <TouchableOpacity
+        style={styles.forgotBtn}
+        onPress={goToForgotPassword}
+        accessibilityRole="link"
+      >
         <Text style={styles.forgotTxt}>Mot de passe oublié ?</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
+          accessibilityRole="button"
         style={[styles.btnPrimary, loading && styles.btnDisabled]}
         onPress={handleLogin}
         disabled={loading}
@@ -399,7 +493,8 @@ export default function LoginScreen({ navigation }) {
 
       <View style={styles.switchRow}>
         <Text style={styles.switchTxt}>Pas encore de compte ?</Text>
-        <TouchableOpacity onPress={() => transitionTo(SCREEN.REGISTER)}>
+        <TouchableOpacity
+          accessibilityRole="button" onPress={() => transitionTo(SCREEN.REGISTER)}>
           <Text style={styles.switchLink}> S'inscrire</Text>
         </TouchableOpacity>
       </View>
@@ -411,6 +506,8 @@ export default function LoginScreen({ navigation }) {
       <View style={styles.formHeader}>
         <TouchableOpacity
           style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
           onPress={() => {
             if (registerStep === 2) {
               setRegisterStep(1);
@@ -459,9 +556,13 @@ export default function LoginScreen({ navigation }) {
             value={password}
             onChangeText={(t) => { setPassword(t); setFieldErrors(p => ({ ...p, password: '' })); }}
             secureEntry
+            autoComplete="new-password"
+            returnKeyType="next"
+            onSubmitEditing={handleRegisterStep1}
             error={fieldErrors.password}
           />
           <TouchableOpacity
+          accessibilityRole="button"
             style={styles.btnPrimary}
             onPress={handleRegisterStep1}
             activeOpacity={0.85}
@@ -490,11 +591,42 @@ export default function LoginScreen({ navigation }) {
             autoCapitalize="words"
             error={fieldErrors.lastName}
           />
+
+          {/* ── Consentement RGPD (M01) ─────────────────────── */}
+          <View style={styles.consentBox}>
+            <Checkbox
+              checked={acceptedPrivacy}
+              onChange={setAcceptedPrivacy}
+              required
+              accessibilityLabel="J'ai lu et j'accepte la politique de confidentialité et les conditions d'utilisation. Obligatoire."
+            >
+              <Text style={styles.consentTxt}>
+                J'ai lu et j'accepte la{' '}
+                <Text style={styles.consentLink} onPress={goToPrivacy} accessibilityRole="link">politique de confidentialité</Text>
+                {' '}et les{' '}
+                <Text style={styles.consentLink} onPress={() => navigation?.navigate('Terms')} accessibilityRole="link">conditions d'utilisation</Text>.{' '}
+                <Text style={styles.consentRequired}>*</Text>
+              </Text>
+            </Checkbox>
+            <View style={styles.consentDivider} />
+            <Checkbox
+              checked={marketingOptIn}
+              onChange={setMarketingOptIn}
+              accessibilityLabel="Recevoir les nouveautés Easevent par email, facultatif"
+            >
+              <Text style={styles.consentTxtSub}>
+                Recevoir les nouveautés Easevent par email <Text style={{ color: C.textMut }}>(facultatif)</Text>
+              </Text>
+            </Checkbox>
+          </View>
+
           <TouchableOpacity
-            style={[styles.btnPrimary, loading && styles.btnDisabled]}
+            style={[styles.btnPrimary, (loading || !acceptedPrivacy) && styles.btnInactive]}
             onPress={handleRegisterStep2}
-            disabled={loading}
+            disabled={loading || !acceptedPrivacy}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: loading || !acceptedPrivacy, busy: loading }}
           >
             {loading ? (
               <ActivityIndicator size="small" color={C.white} />
@@ -505,12 +637,19 @@ export default function LoginScreen({ navigation }) {
               </>
             )}
           </TouchableOpacity>
+          {!acceptedPrivacy && (
+            <View style={styles.consentHint}>
+              <Ionicons name="shield-outline" size={14} color={C.textMut} />
+              <Text style={styles.consentHintTxt}>Le bouton s'active une fois la case cochée.</Text>
+            </View>
+          )}
         </>
       )}
 
       <View style={styles.switchRow}>
         <Text style={styles.switchTxt}>Déjà un compte ?</Text>
-        <TouchableOpacity onPress={() => transitionTo(SCREEN.LOGIN)}>
+        <TouchableOpacity
+          accessibilityRole="button" onPress={() => transitionTo(SCREEN.LOGIN)}>
           <Text style={styles.switchLink}> Se connecter</Text>
         </TouchableOpacity>
       </View>
@@ -562,7 +701,7 @@ const styles = StyleSheet.create({
   },
   logoIconBox: {
     width: 80, height: 80, borderRadius: 22,
-    backgroundColor: C.green,
+    backgroundColor: C.green, overflow: 'hidden',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 20,
     shadowColor: C.green,
@@ -571,8 +710,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   landingAppName: { fontSize: 36, letterSpacing: -1, marginBottom: 8 },
-  landingEas:     { color: C.text,   fontWeight: '900' },
-  landingEven:    { color: C.green,  fontWeight: '900' },
+  landingEas:     { color: C.green,  fontWeight: '900' },
+  landingEven:    { color: C.orange, fontWeight: '900' },
   landingTagline: {
     fontSize: 18, color: C.textSub,
     fontStyle: 'italic', marginBottom: 14,
@@ -596,6 +735,20 @@ const styles = StyleSheet.create({
     color: C.white, fontSize: 16, fontWeight: '800',
   },
   btnDisabled: { opacity: 0.7 },
+  btnInactive: { backgroundColor: '#8DB5A3', shadowOpacity: 0, elevation: 0 },
+  consentBox: {
+    gap: 14, backgroundColor: C.bg, borderRadius: 16, padding: 16, marginBottom: 24,
+  },
+  consentDivider: { height: 1, backgroundColor: C.border },
+  consentTxt: { fontSize: 14, lineHeight: 20, color: C.text },
+  consentTxtSub: { fontSize: 14, lineHeight: 20, color: C.textSub },
+  consentLink: { color: C.green, fontWeight: '700' },
+  consentRequired: { color: '#C0392B' },
+  consentHint: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14,
+  },
+  consentHintTxt: { fontSize: 12, color: C.textMut },
+  footerBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 2 },
   btnSecondary: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center',
@@ -637,7 +790,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 32,
   },
   backBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center',
   },
   formTitle: { fontSize: 24, fontWeight: '900', color: C.text },
@@ -664,15 +817,15 @@ const styles = StyleSheet.create({
   inputIcon: { marginRight: 12 },
   input: {
     flex: 1, color: C.text, fontSize: 16,
-    fontWeight: '500', height: '100%',
+    fontWeight: '500', height: '100%', outlineStyle: 'none',
   },
-  eyeBtn: { padding: 8 },
+  eyeBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -10 },
   fieldError: {
     flexDirection: 'row', alignItems: 'center',
     gap: 4, marginTop: 6, paddingLeft: 4,
   },
   fieldErrorTxt: { color: C.error, fontSize: 12 },
-  forgotBtn: { alignSelf: 'flex-end', marginBottom: 32 },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: 32, minHeight: 44, justifyContent: 'center' },
   forgotTxt: { color: C.green, fontSize: 14, fontWeight: '700' },
   switchRow: {
     flexDirection: 'row', justifyContent: 'center',

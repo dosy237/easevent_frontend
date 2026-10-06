@@ -29,6 +29,7 @@ import { Ionicons }        from '@expo/vector-icons';
 import { useFocusEffect }  from '@react-navigation/native';
 import { useAuth }         from '../context/AuthContext';
 import eventService    from '../services/eventService';
+import { showAlert } from '../utils/dialog';
 
 // ─────────────────────────────────────────────────────────────────
 // API
@@ -357,7 +358,7 @@ const handlePublish = async () => {
   const isPublished  = event.status === 'published';
   const isPrivate    = event.visibility === 'private';
 
-  Alert.alert(
+  showAlert(
     isPublished ? 'Dépublier l\'événement' : 'Publier l\'événement',
     isPublished
       ? 'L\'événement sera retiré. Les invitations restent actives.'
@@ -378,8 +379,8 @@ const handlePublish = async () => {
               ...prev,
               status: isPublished ? 'draft' : 'published',
             }));
-            Alert.alert(
-              isPublished ? 'Événement dépublié' : '🎉 Événement publié !',
+            showAlert(
+              isPublished ? 'Événement dépublié' : 'Événement publié',
               isPublished
                 ? 'L\'événement n\'est plus accessible.'
                 : isPrivate
@@ -388,7 +389,7 @@ const handlePublish = async () => {
             );
           } catch (err) {
             const detail = err.response?.data?.detail || 'Impossible de modifier le statut.';
-            Alert.alert('Erreur', detail);
+            showAlert('Erreur', detail);
           } finally {
             setPublishing(false);
           }
@@ -400,7 +401,7 @@ const handlePublish = async () => {
 
   // ── Supprimer l'événement ────────────────────────────────────
   const handleDelete = () => {
-    Alert.alert(
+    showAlert(
       'Supprimer cet événement',
       `Voulez-vous vraiment supprimer "${event.title}" ? Cette action est irréversible.`,
       [
@@ -411,12 +412,12 @@ const handlePublish = async () => {
           onPress: async () => {
             try {
               await eventService.deleteEvent(event.id);
-              Alert.alert('Supprimé', 'L\'événement a été supprimé.', [{
+              showAlert('Supprimé', 'L\'événement a été supprimé.', [{
                 text: 'OK',
                 onPress: () => navigation?.goBack(),
               }]);
             } catch {
-              Alert.alert('Erreur', 'Impossible de supprimer cet événement.');
+              showAlert('Erreur', 'Impossible de supprimer cet événement.');
             }
           },
         },
@@ -430,11 +431,11 @@ const handlePublish = async () => {
     try {
       const resData = await eventService.inviteParticipant(event.id, data);
       setShowInvite(false);
-      Alert.alert('✅ Invitation envoyée', resData.message || 'L\'invitation a été envoyée.');
+      showAlert('Invitation envoyée', resData.message || 'L\'invitation a été envoyée.');
       loadData(); // Recharger la liste
     } catch (err) {
       const detail = err.response?.data?.detail || 'Impossible d\'envoyer l\'invitation.';
-      Alert.alert('Erreur', detail);
+      showAlert('Erreur', detail);
     } finally {
       setInviting(false);
     }
@@ -446,7 +447,7 @@ const handlePublish = async () => {
       ? `${participant.user.first_name} ${participant.user.last_name}`
       : participant.user?.phone_number || 'ce participant';
 
-    Alert.alert(
+    showAlert(
       'Retirer l\'invitation',
       `Voulez-vous retirer l\'invitation de ${name} ?`,
       [
@@ -460,7 +461,7 @@ const handlePublish = async () => {
               // Retirer localement sans recharger
               setParticipants(prev => prev.filter(p => p.id !== participant.id));
             } catch {
-              Alert.alert('Erreur', 'Impossible de retirer cette invitation.');
+              showAlert('Erreur', 'Impossible de retirer cette invitation.');
             }
           },
         },
@@ -476,7 +477,7 @@ const handlePublish = async () => {
   // ── Badge de statut de l'événement ───────────────────────────
   const statusConfig = {
     draft:     { label: 'Brouillon',  color: C.textMut, bg: C.bg },
-    published: { label: 'Publié ✓',   color: C.green,   bg: C.greenLight },
+    published: { label: 'Publié',   color: C.green,   bg: C.greenLight },
     live:      { label: 'En cours',   color: '#D97706', bg: '#FFFBEB' },
     ended:     { label: 'Terminé',    color: C.textMut, bg: C.bg },
     archived:  { label: 'Archivé',    color: C.textMut, bg: C.bg },

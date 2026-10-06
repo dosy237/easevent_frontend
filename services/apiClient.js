@@ -1,23 +1,20 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.101:8003';
+import { API_BASE } from '../config';
+import { KEYS, getItem, setItem, clearSession } from './storage';
 
-const KEYS = {
-  ACCESS_TOKEN:  'easevent_access_token',
-  REFRESH_TOKEN: 'easevent_refresh_token',
-  USER:          'easevent_user',
-};
+const API_URL = API_BASE;
 
 const apiClient = axios.create({
   baseURL: API_URL,
+  timeout: 20000,
   headers: { 'Content-Type': 'application/json' },
 });
 
 // ── Request interceptor: attach access token ────────────────────
 apiClient.interceptors.request.use(
   async (config) => {
-    const token = await SecureStore.getItemAsync(KEYS.ACCESS_TOKEN);
+    const token = await getItem(KEYS.ACCESS_TOKEN);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -50,10 +47,8 @@ const triggerLogout = async () => {
   if (_logoutCallback) {
     await _logoutCallback();
   } else {
-    // Fallback: manually clear SecureStore if context hasn't registered callback yet
-    await SecureStore.deleteItemAsync(KEYS.ACCESS_TOKEN);
-    await SecureStore.deleteItemAsync(KEYS.REFRESH_TOKEN);
-    await SecureStore.deleteItemAsync(KEYS.USER);
+    // Fallback: clear stored session if context hasn't registered callback yet
+    await clearSession();
     // Note: This won't trigger a React rerender, but next mount will follow suit
   }
 };
@@ -90,7 +85,7 @@ apiClient.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      const refreshToken = await SecureStore.getItemAsync(KEYS.REFRESH_TOKEN);
+      const refreshToken = await getItem(KEYS.REFRESH_TOKEN);
 
       if (!refreshToken) {
         console.warn('[apiClient] 401: No refresh token found');
@@ -107,8 +102,9 @@ apiClient.interceptors.response.use(
 
       const newAccessToken = data.access;
 
-      // Persist the new token
-      await SecureStore.setItemAsync(KEYS.ACCESS_TOKEN, newAccessToken);
+      // Persist the new tokens (the refresh token rotates on each use)
+      await setItem(KEYS.ACCESS_TOKEN, newAccessToken);
+      if (data.refresh) await setItem(KEYS.REFRESH_TOKEN, data.refresh);
 
       // Update the default header for future requests
       apiClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
