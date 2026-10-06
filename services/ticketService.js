@@ -12,6 +12,8 @@ const ticketService = {
   take: async (eventId) => (await apiClient.post(`/api/events/${eventId}/tickets/`)).data,
   validate: async (id) => (await apiClient.post(`/api/tickets/${id}/validate/`)).data,
   cancel: async (id) => (await apiClient.post(`/api/tickets/${id}/cancel/`)).data,
+  // Lien de téléchargement du PDF, signé et valable 5 minutes
+  pdfLink: async (id) => (await apiClient.post(`/api/tickets/${id}/pdf-link/`)).data,
   // Paiement : URL de la page sécurisée Stripe Checkout
   checkout: async (id) => (await apiClient.post(`/api/tickets/${id}/checkout/`)).data,
 

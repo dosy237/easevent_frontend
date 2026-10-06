@@ -4,19 +4,23 @@
  * Billet affiché dans TicketModal (Mes tickets) et après un paiement.
  * Structure reprise de l'ancien TicketModal : photo, découpe, lignes
  * d'info, QR, avertissement. Ajouts M27 : badges GÉNÉRÉ / PAYÉ ou
- * GRATUIT, prix, dress code, n° de ticket, Calendrier, Partager.
+ * GRATUIT, prix, dress code, n° de ticket, Calendrier, Télécharger (PDF).
  *
  * Le QR encode uniquement l'identifiant signé du ticket (qr_payload),
  * jamais de donnée personnelle.
  * ════════════════════════════════════════════════════════════════
  */
-import React from 'react';
-import { Image, Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 
 import { C } from '../constants/theme';
 import { formatDateLong, formatPrice } from '../utils/format';
+import ticketService from '../services/ticketService';
+import { apiErrorMessage } from '../services/authService';
+import { showAlert } from '../utils/dialog';
 
 // Lien « Ajouter à Google Agenda » : fonctionne sur tous les appareils, sans permission
 const calendarUrl = (ticket) => {
@@ -35,6 +39,24 @@ const calendarUrl = (ticket) => {
 export default function TicketView({ ticket, justPaid = false }) {
   const e = ticket.event || {};
   const paid = ticket.payment_status === 'paid';
+
+  const [downloading, setDownloading] = useState(false);
+
+  // PDF généré par le serveur : lien signé valable 5 minutes.
+  // Android / web : le navigateur enregistre le fichier dans Téléchargements.
+  // iOS : aperçu du PDF, enregistrable depuis la feuille de partage.
+  const downloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const { url } = await ticketService.pdfLink(ticket.id);
+      if (Platform.OS === 'ios') await WebBrowser.openBrowserAsync(url);
+      else await Linking.openURL(url);
+    } catch (err) {
+      showAlert('Téléchargement impossible', apiErrorMessage(err));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const shareTicket = () => Share.share({
     message: `Mon ticket ${ticket.number} pour « ${e.title} » — ${formatDateLong(e.start_date)}`
@@ -130,14 +152,22 @@ export default function TicketView({ ticket, justPaid = false }) {
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.action, pressed && { opacity: 0.85 }]}
-          onPress={shareTicket}
+          onPress={downloadPdf}
+          disabled={downloading}
           accessibilityRole="button"
-          accessibilityLabel="Partager mon ticket"
+          accessibilityLabel="Télécharger mon ticket en PDF"
+          accessibilityState={{ busy: downloading }}
         >
-          <Ionicons name="share-outline" size={16} color={C.text} />
-          <Text style={styles.actionTxt}>Partager</Text>
+          {downloading
+            ? <ActivityIndicator size="small" color={C.text} />
+            : <Ionicons name="download-outline" size={16} color={C.text} />}
+          <Text style={styles.actionTxt}>Télécharger</Text>
         </Pressable>
       </View>
+      <Pressable onPress={shareTicket} accessibilityRole="button" style={styles.shareLink}>
+        <Ionicons name="share-social-outline" size={14} color={C.green} />
+        <Text style={styles.shareLinkTxt}>Partager mon ticket</Text>
+      </Pressable>
     </View>
   );
 }
@@ -184,4 +214,6 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white,
   },
   actionTxt: { fontSize: 14, fontWeight: '700', color: C.text },
+  shareLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
+  shareLinkTxt: { fontSize: 13, fontWeight: '700', color: C.green },
 });
