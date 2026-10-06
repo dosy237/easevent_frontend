@@ -9,10 +9,9 @@
  * - Voir les stats de l'événement (vues, participants, invités)
  * - Publier / Dépublier l'événement
  * - Modifier les informations
- * - Inviter des personnes (par email ou téléphone)
- * - Voir la liste des participants confirmés
- * - Voir les invitations en attente
- * - Révoquer une invitation
+ * - Inviter des personnes → M12 (InviteGuests)
+ * - Invités & réponses (confirmés, en attente, relances) → M13 (GuestList)
+ * - Messages des invités (M15), questions RSVP (M14), mini-site (M06)
  * - Supprimer l'événement
  * ════════════════════════════════════════════════════════════════
  */
@@ -21,7 +20,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, StatusBar, Animated, Alert, ActivityIndicator,
-  TextInput, Modal, RefreshControl, Platform,
+  RefreshControl,
 } from 'react-native';
 
 import { SafeAreaView }    from 'react-native-safe-area-context';
@@ -85,217 +84,32 @@ const StatBadge = ({ icon, value, label, color = C.green }) => (
 );
 
 // ════════════════════════════════════════════════════════════════
-// COMPOSANT : ParticipantRow
-// Ligne représentant un participant ou invité
+// COMPOSANT : ActionRow (M11 — Inviter, Invités, Messages, RSVP)
 // ════════════════════════════════════════════════════════════════
-const ParticipantRow = ({ participant, onRevoke }) => {
-  const user = participant.user || {};
-
-  // Couleur et label selon le statut
-  const statusConfig = {
-    sent:      { label: 'En attente', color: C.orange,  bg: C.orangeL    },
-    opened:    { label: 'Vu',         color: '#2563EB', bg: '#EFF6FF'    },
-    confirmed: { label: 'Confirmé',   color: C.green,   bg: C.greenLight },
-    declined:  { label: 'Décliné',    color: C.error,   bg: C.errorBg   },
-  };
-  const s = statusConfig[participant.status] || statusConfig.sent;
-
-  const name = user.first_name
-    ? `${user.first_name} ${user.last_name}`
-    : user.phone_number || 'Inconnu';
-
-  const initial = (user.first_name?.[0] || user.phone_number?.[0] || '?').toUpperCase();
-
-  return (
-    <View style={styles.participantRow}>
-      {/* Avatar ou initiale */}
-      {user.avatar_url ? (
-        <Image source={{ uri: user.avatar_url }} style={styles.participantAvatar} />
-      ) : (
-        <View style={[styles.participantAvatar, styles.participantAvatarPlaceholder]}>
-          <Text style={styles.participantInitial}>{initial}</Text>
-        </View>
-      )}
-
-      {/* Infos */}
-      <View style={styles.participantInfo}>
-        <Text style={styles.participantName} numberOfLines={1}>{name}</Text>
-        {user.email && (
-          <Text style={styles.participantEmail} numberOfLines={1}>{user.email}</Text>
-        )}
-      </View>
-
-      {/* Badge statut */}
-      <View style={[styles.participantBadge, { backgroundColor: s.bg }]}>
-        <Text style={[styles.participantBadgeTxt, { color: s.color }]}>{s.label}</Text>
-      </View>
-
-      {/* Bouton révoquer — seulement si en attente ou confirmé */}
-      {['sent', 'opened', 'confirmed'].includes(participant.status) && (
-        <TouchableOpacity
-          style={styles.revokeBtn}
-          onPress={() => onRevoke(participant)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="close-circle-outline" size={20} color={C.error} />
-        </TouchableOpacity>
-      )}
+const ActionRow = ({ icon, title, subtitle, onPress, badge, last }) => (
+  <TouchableOpacity
+    style={[styles.actionRow, last && { borderBottomWidth: 0 }]}
+    onPress={onPress}
+    activeOpacity={0.8}
+    accessibilityRole="button"
+    accessibilityLabel={`${title}. ${subtitle}`}
+  >
+    <View style={styles.actionRowIcon}><Ionicons name={icon} size={20} color={C.green} /></View>
+    <View style={{ flex: 1 }}>
+      <Text style={styles.actionRowTitle}>{title}</Text>
+      <Text style={styles.actionRowSub} numberOfLines={1}>{subtitle}</Text>
     </View>
-  );
+    {badge ? <View style={styles.actionRowBadge}><Text style={styles.actionRowBadgeTxt}>{badge}</Text></View> : null}
+    <Ionicons name="chevron-forward" size={18} color={C.textMut} />
+  </TouchableOpacity>
+);
+
+const formatPriceLabel = (event) => {
+  const value = Number(event?.price || 0);
+  if (!event?.is_paid || value <= 0) return 'Gratuit (0,00 €)';
+  return `${value.toFixed(2).replace('.', ',')} ${event.currency === 'EUR' || !event.currency ? '€' : event.currency}`;
 };
 
-// ════════════════════════════════════════════════════════════════
-// COMPOSANT : InviteModal
-// Modal pour inviter un participant par email ou téléphone
-// ════════════════════════════════════════════════════════════════
-const InviteModal = ({ visible, onClose, onInvite, loading }) => {
-  const [email,       setEmail]       = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [mode,        setMode]        = useState('email'); // 'email' ou 'phone'
-  const [error,       setError]       = useState('');
-
-  const handleInvite = () => {
-    setError('');
-    if (mode === 'email') {
-      if (!email.trim() || !email.includes('@')) {
-        setError('Entrez un email valide.');
-        return;
-      }
-      onInvite({ email: email.trim() });
-    } else {
-      if (!phoneNumber.trim()) {
-        setError('Entrez un numéro de téléphone valide.');
-        return;
-      }
-      onInvite({ phone_number: phoneNumber.trim() });
-    }
-  };
-
-  const handleClose = () => {
-    setEmail('');
-    setPhoneNumber('');
-    setError('');
-    onClose();
-  };
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.modalRoot}>
-
-        {/* Header du modal */}
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Inviter un participant</Text>
-          <TouchableOpacity onPress={handleClose}>
-            <Ionicons name="close" size={24} color={C.text} />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
-
-          {/* Sélecteur de mode : email ou téléphone */}
-          <View style={styles.modeSelector}>
-            <TouchableOpacity
-              style={[styles.modeBtn, mode === 'email' && styles.modeBtnActive]}
-              onPress={() => setMode('email')}
-            >
-              <Ionicons name="mail-outline" size={16}
-                color={mode === 'email' ? C.white : C.textMut} />
-              <Text style={[styles.modeBtnTxt, mode === 'email' && { color: C.white }]}>
-                Email
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeBtn, mode === 'phone' && styles.modeBtnActive]}
-              onPress={() => setMode('phone')}
-            >
-              <Ionicons name="phone-portrait-outline" size={16}
-                color={mode === 'phone' ? C.white : C.textMut} />
-              <Text style={[styles.modeBtnTxt, mode === 'phone' && { color: C.white }]}>
-                Téléphone
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Explication contextuelle */}
-          <View style={styles.infoBox}>
-            <Ionicons name="information-circle-outline" size={16} color={C.green} />
-            <Text style={styles.infoBoxTxt}>
-              {mode === 'email'
-                ? 'Si la personne a un compte Easevent, elle recevra une notification. Sinon, elle recevra un email avec un lien d\'accès.'
-                : 'Un SMS sera envoyé avec un lien d\'accès à l\'événement. La personne n\'a pas besoin d\'avoir un compte.'
-              }
-            </Text>
-          </View>
-
-          {/* Champ email ou téléphone */}
-          {mode === 'email' ? (
-            <View style={styles.modalField}>
-              <Text style={styles.modalFieldLabel}>Adresse email</Text>
-              <View style={styles.modalInputBox}>
-                <Ionicons name="mail-outline" size={18} color={C.textMut} />
-                <TextInput
-                  style={styles.modalInput}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="exemple@email.com"
-                  placeholderTextColor={C.textMut}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-            </View>
-          ) : (
-            <View style={styles.modalField}>
-              <Text style={styles.modalFieldLabel}>Numéro de téléphone</Text>
-              <View style={styles.modalInputBox}>
-                <Ionicons name="phone-portrait-outline" size={18} color={C.textMut} />
-                <TextInput
-                  style={styles.modalInput}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  placeholder="+33 6 12 34 56 78"
-                  placeholderTextColor={C.textMut}
-                  keyboardType="phone-pad"
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Message d'erreur */}
-          {error ? (
-            <View style={styles.errorBanner}>
-              <Ionicons name="alert-circle-outline" size={16} color={C.error} />
-              <Text style={styles.errorBannerTxt}>{error}</Text>
-            </View>
-          ) : null}
-
-          {/* Bouton envoyer */}
-          <TouchableOpacity
-            style={[styles.inviteBtn, loading && { opacity: 0.7 }]}
-            onPress={handleInvite}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={C.white} />
-            ) : (
-              <>
-                <Ionicons name="send-outline" size={18} color={C.white} />
-                <Text style={styles.inviteBtnTxt}>Envoyer l'invitation</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-};
-
-// ════════════════════════════════════════════════════════════════
-// ÉCRAN PRINCIPAL : EventDashboardScreen
-// ════════════════════════════════════════════════════════════════
 export default function EventDashboardScreen({ route, navigation }) {
 
   // L'événement est passé en paramètre depuis DashboardScreen
@@ -305,14 +119,11 @@ export default function EventDashboardScreen({ route, navigation }) {
 
   // ── États ────────────────────────────────────────────────────
   const [event,         setEvent]         = useState(initialEvent);
-  const [participants,  setParticipants]  = useState([]);
+  const [counts,        setCounts]        = useState({ confirmed: 0, pending: 0, declined: 0, total: 0 });
   const [stats,         setStats]         = useState(null);
   const [loading,       setLoading]       = useState(true);
   const [refreshing,    setRefreshing]    = useState(false);
   const [publishing,    setPublishing]    = useState(false);
-  const [showInvite,    setShowInvite]    = useState(false);
-  const [inviting,      setInviting]      = useState(false);
-  const [activeSection, setActiveSection] = useState('overview'); // 'overview' | 'participants' | 'invitations'
 
   // Animation d'entrée
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -336,7 +147,7 @@ export default function EventDashboardScreen({ route, navigation }) {
 
       setEvent(detailData.event);
       setStats(detailData.invitations);
-      setParticipants(participantsData.participants || []);
+      setCounts(participantsData.counts || { confirmed: 0, pending: 0, declined: 0, total: 0 });
 
     } catch (err) {
       console.error('Erreur chargement event dashboard:', err);
@@ -425,54 +236,9 @@ const handlePublish = async () => {
     );
   };
 
-  // ── Inviter un participant ────────────────────────────────────
-  const handleInvite = async (data) => {
-    setInviting(true);
-    try {
-      const resData = await eventService.inviteParticipant(event.id, data);
-      setShowInvite(false);
-      showAlert('Invitation envoyée', resData.message || 'L\'invitation a été envoyée.');
-      loadData(); // Recharger la liste
-    } catch (err) {
-      const detail = err.response?.data?.detail || 'Impossible d\'envoyer l\'invitation.';
-      showAlert('Erreur', detail);
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  // ── Révoquer une invitation ──────────────────────────────────
-  const handleRevoke = (participant) => {
-    const name = participant.user?.first_name
-      ? `${participant.user.first_name} ${participant.user.last_name}`
-      : participant.user?.phone_number || 'ce participant';
-
-    showAlert(
-      'Retirer l\'invitation',
-      `Voulez-vous retirer l\'invitation de ${name} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text:  'Retirer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await eventService.revokeInvitation(participant.id);
-              // Retirer localement sans recharger
-              setParticipants(prev => prev.filter(p => p.id !== participant.id));
-            } catch {
-              showAlert('Erreur', 'Impossible de retirer cette invitation.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // ── Filtres participants ──────────────────────────────────────
-  const confirmed   = participants.filter(p => p.status === 'confirmed');
-  const pending     = participants.filter(p => ['sent', 'opened'].includes(p.status));
-  const declined    = participants.filter(p => p.status === 'declined');
+  // ── Invités (M12, M13) ────────────────────────────────────────
+  const goInvite = () => navigation.navigate('InviteGuests', { event });
+  const goGuests = (filter = 'all') => navigation.navigate('GuestList', { event, filter });
 
   // ── Badge de statut de l'événement ───────────────────────────
   const statusConfig = {
@@ -505,31 +271,41 @@ const handlePublish = async () => {
               </Text>
             </View>
           </View>
-          {/* Bouton modifier */}
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => navigation?.navigate('EditEvent', { event })}
-          >
-            <Ionicons name="create-outline" size={20} color={C.green} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => navigation?.navigate('Conversations', { eventId: event.id })}
+              accessibilityRole="button"
+              accessibilityLabel="Messages des invités"
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={C.green} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => navigation?.navigate('EditEvent', { event })}
+              accessibilityRole="button"
+              accessibilityLabel="Modifier l'événement"
+            >
+              <Ionicons name="create-outline" size={20} color={C.green} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* ── ONGLETS DE SECTION ──────────────────────────────── */}
-        <View style={styles.sectionTabs}>
+        {/* ── ONGLETS : Aperçu ici ; Confirmés / En attente ouvrent M13 ── */}
+        <View style={styles.sectionTabs} accessibilityRole="tablist">
           {[
-            { id: 'overview',      label: 'Aperçu' },
-            { id: 'participants',  label: `Confirmés (${confirmed.length})` },
-            { id: 'invitations',   label: `En attente (${pending.length})` },
+            { id: 'overview',  label: 'Aperçu',                           onPress: null },
+            { id: 'confirmed', label: `Confirmés (${counts.confirmed})`,  onPress: () => goGuests('confirmed') },
+            { id: 'pending',   label: `En attente (${counts.pending})`,   onPress: () => goGuests('pending') },
           ].map(tab => (
             <TouchableOpacity
               key={tab.id}
-              style={[styles.sectionTab, activeSection === tab.id && styles.sectionTabActive]}
-              onPress={() => setActiveSection(tab.id)}
+              style={[styles.sectionTab, tab.id === 'overview' && styles.sectionTabActive]}
+              onPress={tab.onPress || undefined}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab.id === 'overview' }}
             >
-              <Text style={[
-                styles.sectionTabTxt,
-                activeSection === tab.id && styles.sectionTabTxtActive,
-              ]}>
+              <Text style={[styles.sectionTabTxt, tab.id === 'overview' && styles.sectionTabTxtActive]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -559,7 +335,7 @@ const handlePublish = async () => {
                   SECTION : APERÇU
                   Stats + Actions principales + Infos de l'événement
                   ════════════════════════════════════════════════ */}
-              {activeSection === 'overview' && (
+              {(
                 <View>
 
                   {/* Image de couverture */}
@@ -587,24 +363,53 @@ const handlePublish = async () => {
                     <View style={styles.statDivider} />
                     <StatBadge
                       icon="people-outline"
-                      value={confirmed.length}
+                      value={counts.confirmed}
                       label="Confirmés"
                       color={C.green}
                     />
                     <View style={styles.statDivider} />
                     <StatBadge
                       icon="mail-outline"
-                      value={pending.length}
+                      value={counts.pending}
                       label="En attente"
                       color={C.orange}
                     />
                     <View style={styles.statDivider} />
                     <StatBadge
                       icon="close-circle-outline"
-                      value={declined.length}
+                      value={counts.declined}
                       label="Déclinés"
                       color={C.error}
                     />
+                  </View>
+
+                  {/* Mini-site (lot IA) */}
+                  <TouchableOpacity
+                    style={styles.minisiteCard}
+                    onPress={() => navigation.navigate('MiniSiteGenerating', { event })}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Générer le mini-site avec l'IA"
+                  >
+                    <View style={styles.actionRowIcon}><Ionicons name="sparkles-outline" size={20} color={C.green} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.actionRowTitle}>Pas encore de mini-site</Text>
+                      <Text style={styles.actionRowSub}>Générez-le avec l'IA à partir de vos photos.</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={C.textMut} />
+                  </TouchableOpacity>
+
+                  {/* Invités, messages, RSVP */}
+                  <View style={styles.rowsCard}>
+                    <ActionRow icon="person-add-outline" title="Inviter des participants"
+                      subtitle="Membres, email, SMS ou fichier CSV" onPress={goInvite} />
+                    <ActionRow icon="people-outline" title="Invités & réponses"
+                      subtitle={counts.total ? `${counts.total} invité${counts.total > 1 ? 's' : ''} · ${counts.confirmed} confirmé${counts.confirmed > 1 ? 's' : ''}` : 'Aucun invité pour le moment'}
+                      onPress={() => goGuests('all')} />
+                    <ActionRow icon="chatbubbles-outline" title="Messages des invités"
+                      subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id })} />
+                    <ActionRow icon="help-circle-outline" title="Questions RSVP" last
+                      subtitle="Posez jusqu'à 5 questions à vos invités" onPress={() => navigation.navigate('RsvpQuestions', { event })} />
                   </View>
 
                   {/* Actions principales */}
@@ -647,18 +452,6 @@ const handlePublish = async () => {
                       </View>
                     )}
 
-                    {/* Bouton Inviter */}
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.actionBtnSecondary]}
-                      onPress={() => setShowInvite(true)}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="person-add-outline" size={18} color={C.green} />
-                      <Text style={[styles.actionBtnTxt, { color: C.green }]}>
-                        Inviter des participants
-                      </Text>
-                    </TouchableOpacity>
-
                     {/* Bouton Supprimer */}
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionBtnDanger]}
@@ -680,6 +473,8 @@ const handlePublish = async () => {
                       { icon: 'calendar-outline',  label: 'Début',       value: formatDate(event.start_date) },
                       { icon: 'calendar-outline',  label: 'Fin',         value: formatDate(event.end_date) },
                       { icon: 'location-outline',  label: 'Lieu',        value: event.is_online ? 'En ligne' : (event.location_address || '—') },
+                      { icon: 'pricetag-outline',  label: 'Prix du ticket', value: formatPriceLabel(event) },
+                      { icon: 'shirt-outline',     label: 'Dress code',  value: event.dress_code || '—' },
                       { icon: 'eye-outline',       label: 'Visibilité',  value: event.visibility === 'public' ? 'Public' : 'Privé' },
                       { icon: 'color-palette-outline', label: 'Ambiance', value: event.ambiance || '—' },
                       { icon: 'link-outline',      label: 'Lien',        value: event.subdomain ? `easevent.app/${event.subdomain}` : '—' },
@@ -705,118 +500,11 @@ const handlePublish = async () => {
                 </View>
               )}
 
-              {/* ════════════════════════════════════════════════
-                  SECTION : PARTICIPANTS CONFIRMÉS
-                  ════════════════════════════════════════════════ */}
-              {activeSection === 'participants' && (
-                <View>
-                  <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>
-                      {confirmed.length} participant{confirmed.length > 1 ? 's' : ''} confirmé{confirmed.length > 1 ? 's' : ''}
-                    </Text>
-                  </View>
-
-                  {confirmed.length === 0 ? (
-                    <View style={styles.emptyCard}>
-                      <Ionicons name="people-outline" size={40} color={C.textMut} />
-                      <Text style={styles.emptyTitle}>Aucun participant confirmé</Text>
-                      <Text style={styles.emptySub}>
-                        Les personnes qui acceptent votre invitation apparaîtront ici.
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.emptyBtn}
-                        onPress={() => setShowInvite(true)}
-                      >
-                        <Ionicons name="person-add-outline" size={16} color={C.white} />
-                        <Text style={styles.emptyBtnTxt}>Inviter des participants</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    confirmed.map(p => (
-                      <ParticipantRow
-                        key={p.id}
-                        participant={p}
-                        onRevoke={handleRevoke}
-                      />
-                    ))
-                  )}
-                </View>
-              )}
-
-              {/* ════════════════════════════════════════════════
-                  SECTION : INVITATIONS EN ATTENTE
-                  ════════════════════════════════════════════════ */}
-              {activeSection === 'invitations' && (
-                <View>
-                  <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>
-                      {pending.length} invitation{pending.length > 1 ? 's' : ''} en attente
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.inviteHeaderBtn}
-                      onPress={() => setShowInvite(true)}
-                    >
-                      <Ionicons name="add" size={16} color={C.white} />
-                      <Text style={styles.inviteHeaderBtnTxt}>Inviter</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {pending.length === 0 ? (
-                    <View style={styles.emptyCard}>
-                      <Ionicons name="mail-outline" size={40} color={C.textMut} />
-                      <Text style={styles.emptyTitle}>Aucune invitation en attente</Text>
-                      <Text style={styles.emptySub}>
-                        Invitez des personnes à rejoindre votre événement.
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.emptyBtn}
-                        onPress={() => setShowInvite(true)}
-                      >
-                        <Ionicons name="person-add-outline" size={16} color={C.white} />
-                        <Text style={styles.emptyBtnTxt}>Envoyer des invitations</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    pending.map(p => (
-                      <ParticipantRow
-                        key={p.id}
-                        participant={p}
-                        onRevoke={handleRevoke}
-                      />
-                    ))
-                  )}
-
-                  {/* Afficher aussi les déclinés */}
-                  {declined.length > 0 && (
-                    <View style={{ marginTop: 16 }}>
-                      <Text style={styles.declinedTitle}>
-                        {declined.length} refus
-                      </Text>
-                      {declined.map(p => (
-                        <ParticipantRow
-                          key={p.id}
-                          participant={p}
-                          onRevoke={handleRevoke}
-                        />
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
-
             </Animated.View>
           )}
 
           <View style={{ height: 40 }} />
         </ScrollView>
-
-        {/* ── Modal d'invitation ───────────────────────────────── */}
-        <InviteModal
-          visible={showInvite}
-          onClose={() => setShowInvite(false)}
-          onInvite={handleInvite}
-          loading={inviting}
-        />
 
       </SafeAreaView>
     </View>
@@ -827,6 +515,16 @@ const handlePublish = async () => {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  // M11 — lignes d'action
+  rowsCard: { backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, marginBottom: 14 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, borderBottomWidth: 1, borderBottomColor: C.border },
+  actionRowIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  actionRowTitle: { fontSize: 14, fontWeight: '700', color: C.text },
+  actionRowSub: { fontSize: 12, color: C.textSub, marginTop: 2 },
+  actionRowBadge: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: C.orange, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  actionRowBadgeTxt: { fontSize: 11, fontWeight: '800', color: C.white },
+  minisiteCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.white, borderRadius: 18, borderWidth: 1.5, borderColor: C.green, borderStyle: 'dashed', padding: 14, marginBottom: 14 },
+
 
   root: { flex: 1, backgroundColor: C.bg },
   safe: { flex: 1, backgroundColor: C.white },
@@ -946,114 +644,4 @@ const styles = StyleSheet.create({
   infoValue:   { fontSize: 13, color: C.text, fontWeight: '600', flex: 1, textAlign: 'right' },
   descText:    { fontSize: 14, color: C.textSub, lineHeight: 21 },
 
-  // Section header
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: C.text },
-
-  // Bouton inviter dans le header de section
-  inviteHeaderBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: C.green, borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 6,
-  },
-  inviteHeaderBtnTxt: { fontSize: 13, color: C.white, fontWeight: '700' },
-
-  // Participants
-  participantRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: C.white, borderRadius: 14, padding: 12,
-    marginBottom: 8, borderWidth: 1, borderColor: C.border,
-  },
-  participantAvatar: { width: 44, height: 44, borderRadius: 22 },
-  participantAvatarPlaceholder: {
-    backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center',
-  },
-  participantInitial: { fontSize: 18, fontWeight: '800', color: C.green },
-  participantInfo:    { flex: 1 },
-  participantName:    { fontSize: 14, fontWeight: '700', color: C.text },
-  participantEmail:   { fontSize: 12, color: C.textMut, marginTop: 2 },
-  participantBadge:   { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  participantBadgeTxt:{ fontSize: 10, fontWeight: '700' },
-  revokeBtn:          { padding: 4 },
-
-  // Déclinés
-  declinedTitle: { fontSize: 14, fontWeight: '700', color: C.textMut, marginBottom: 10 },
-
-  // État vide
-  emptyCard: {
-    backgroundColor: C.white, borderRadius: 16, padding: 32,
-    alignItems: 'center', borderWidth: 1, borderColor: C.border,
-    borderStyle: 'dashed', gap: 8,
-  },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginTop: 8 },
-  emptySub:   { fontSize: 13, color: C.textMut, textAlign: 'center', lineHeight: 19 },
-  emptyBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: C.green, borderRadius: 10,
-    paddingHorizontal: 16, paddingVertical: 10, marginTop: 8,
-  },
-  emptyBtnTxt: { fontSize: 13, color: C.white, fontWeight: '700' },
-
-  // Modal invitation
-  modalRoot:   { flex: 1, backgroundColor: C.white },
-  modalHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: C.border,
-  },
-  modalTitle:  { fontSize: 18, fontWeight: '800', color: C.text },
-  modalScroll: { flex: 1, padding: 20 },
-
-  // Sélecteur de mode email/téléphone
-  modeSelector: {
-    flexDirection: 'row', gap: 10, marginBottom: 16,
-  },
-  modeBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 12, borderRadius: 12,
-    borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white,
-  },
-  modeBtnActive:  { backgroundColor: C.green, borderColor: C.green },
-  modeBtnTxt:     { fontSize: 14, fontWeight: '600', color: C.textMut },
-
-  // Info box
-  infoBox: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    backgroundColor: C.greenLight, borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: '#C5E8D3', marginBottom: 20,
-  },
-  infoBoxTxt: { fontSize: 13, color: C.green, flex: 1, lineHeight: 18 },
-
-  // Champs du modal
-  modalField:      { marginBottom: 16 },
-  modalFieldLabel: {
-    fontSize: 13, fontWeight: '700', color: C.textSub,
-    marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-  modalInputBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    borderWidth: 1.5, borderColor: C.border, borderRadius: 14,
-    paddingHorizontal: 14, backgroundColor: '#F9F9F9', minHeight: 52,
-  },
-  modalInput: { flex: 1, fontSize: 15, color: C.text, paddingVertical: 14 },
-
-  // Erreur
-  errorBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: C.errorBg, borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: '#FECACA', marginBottom: 16,
-  },
-  errorBannerTxt: { fontSize: 13, color: C.error, flex: 1 },
-
-  // Bouton invitation
-  inviteBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    backgroundColor: C.green, borderRadius: 16, paddingVertical: 16,
-    shadowColor: C.green, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 4,
-  },
-  inviteBtnTxt: { fontSize: 16, fontWeight: '800', color: C.white },
 });

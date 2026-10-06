@@ -33,6 +33,8 @@ export const KEYS = {
   ACCESS_TOKEN:  'easevent_access_token',
   REFRESH_TOKEN: 'easevent_refresh_token',
   USER:          'easevent_user',
+  // Jeton d'un lien d'invitation (M31) à rattacher après connexion
+  PENDING_INVITE: 'easevent_pending_invite',
 };
 
 export const getItem    = (key)        => storage.getItemAsync(key);

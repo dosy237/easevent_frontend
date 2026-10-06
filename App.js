@@ -9,7 +9,7 @@
  * ├── Home (E01) · EventDetail (E02) · Login (E03–E06, M01)
  * ├── ForgotPassword (M04) · ResetPassword (lien email)
  * ├── VerifyEmail (M03) · PrivacyPolicy (M02)
- * └── InvitationLanding (M31, lien easevent.app/i/:token)
+ * └── InvitationLanding (M31, lien easevent://i/:token)
  *
  * UTILISATEUR CONNECTÉ — AppTabNavigator
  * ├── Accueil   → DashboardStack (E07, création, mini-site, gestion, invités, messagerie, notifications)
@@ -25,7 +25,7 @@
 
 import React from 'react';
 import { View, ActivityIndicator, Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, getStateFromPath as defaultGetStateFromPath } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -52,6 +52,9 @@ import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import ComingSoonScreen from './screens/ComingSoonScreen';
 import TicketCheckoutScreen from './screens/TicketCheckoutScreen';
 import PayoutsScreen from './screens/PayoutsScreen';
+import InviteGuestsScreen from './screens/InviteGuestsScreen';
+import GuestListScreen from './screens/GuestListScreen';
+import InvitationLandingScreen from './screens/InvitationLandingScreen';
 import { TicketBadgeProvider, useTicketBadge } from './context/TicketBadgeContext';
 
 // ─────────────────────────────────────────────────────────────────
@@ -76,8 +79,24 @@ const soon = (screenId, title, description) => ({
 // ════════════════════════════════════════════════════════════════
 // LIENS PROFONDS (web + mobile)
 // ════════════════════════════════════════════════════════════════
+// Connecté, le lien d'invitation s'ouvre dans l'onglet Tickets (même écran M31)
+let linkingAuthenticated = false;
+const INVITE_PATH = /^\/?i\/([^/?#]+)/;
+
 const linking = {
   prefixes: [Linking.createURL('/'), 'https://easevent.app', 'easevent://'],
+  getStateFromPath(path, options) {
+    const match = path.match(INVITE_PATH);
+    if (match && linkingAuthenticated) {
+      return {
+        routes: [{
+          name: 'TabTickets',
+          state: { routes: [{ name: 'Tickets' }, { name: 'InvitationLanding', params: { token: decodeURIComponent(match[1]) } }] },
+        }],
+      };
+    }
+    return defaultGetStateFromPath(path, options);
+  },
   config: {
     screens: {
       // Visiteur
@@ -122,7 +141,7 @@ function PublicNavigator() {
       <PublicStack.Screen name="PrivacyPolicy"  component={PrivacyPolicyScreen}  options={{ title: 'Confidentialité' }} />
       <PublicStack.Screen name="Terms"             {...soon('CGU', "Conditions d'utilisation", 'Les conditions d’utilisation seront publiées ici dès leur validation par le juridique.')} />
       <PublicStack.Screen name="Help"              {...soon('Aide', 'Aide', 'Le centre d’aide arrive bientôt.')} />
-      <PublicStack.Screen name="InvitationLanding" {...soon('M31', 'Invitation')} />
+      <PublicStack.Screen name="InvitationLanding" component={InvitationLandingScreen} options={{ title: 'Invitation' }} />
     </PublicStack.Navigator>
   );
 }
@@ -143,8 +162,8 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="EventPublished"     {...soon('M10', 'Événement publié')} />
       <DashStack.Screen name="EventDashboard"     component={EventDashboardScreen} options={{ title: 'Gérer un événement' }} />
       <DashStack.Screen name="EditEvent"          {...soon('M11', "Modifier l'événement")} />
-      <DashStack.Screen name="InviteGuests"       {...soon('M12', 'Inviter')} />
-      <DashStack.Screen name="GuestList"          {...soon('M13', 'Invités & réponses')} />
+      <DashStack.Screen name="InviteGuests"       component={InviteGuestsScreen}   options={{ title: 'Inviter des participants' }} />
+      <DashStack.Screen name="GuestList"          component={GuestListScreen}      options={{ title: 'Invités & réponses' }} />
       <DashStack.Screen name="RsvpQuestions"      {...soon('M14', 'Questions RSVP')} />
       <DashStack.Screen name="Conversations"      {...soon('M15', 'Messagerie')} />
       <DashStack.Screen name="Chat"               {...soon('M16', 'Conversation')} />
@@ -176,6 +195,7 @@ function TicketsStackNavigator() {
     <TicketsStack.Navigator screenOptions={stackOptions}>
       <TicketsStack.Screen name="Tickets"        component={TicketsScreen} options={{ title: 'Mes tickets' }} />
       <TicketsStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
+      <TicketsStack.Screen name="InvitationLanding" component={InvitationLandingScreen} options={{ title: 'Invitation' }} />
     </TicketsStack.Navigator>
   );
 }
@@ -210,8 +230,11 @@ const TAB_ICONS = {
 
 function AppTabNavigator() {
   const { badge, refresh } = useTicketBadge();
+  const { landingRoute } = useAuth();
   return (
     <Tabs.Navigator
+      // Après une invitation rattachée à la connexion : ouvrir Mes tickets
+      initialRouteName={landingRoute || 'TabDashboard'}
       // Badge « Tickets » rafraîchi à la navigation (au plus toutes les 30 s)
       screenListeners={{ state: () => refresh() }}
       screenOptions={({ route }) => ({
@@ -280,7 +303,20 @@ function AppTabNavigator() {
 // NAVIGATEUR RACINE
 // ════════════════════════════════════════════════════════════════
 function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated } = useAuth();
+  linkingAuthenticated = isAuthenticated;
+
+  // `key` → évite le scintillement de la barre d'onglets au changement d'état
+  return isAuthenticated
+    ? <AppTabNavigator key="authenticated" />
+    : <PublicNavigator key="public" />;
+}
+
+// La navigation démarre une fois la session lue : un lien profond
+// (ex. invitation) est ainsi interprété avec le bon état de connexion.
+function NavigationShell() {
+  const { isLoading, isAuthenticated } = useAuth();
+  linkingAuthenticated = isAuthenticated;
 
   if (isLoading) {
     return (
@@ -290,10 +326,15 @@ function RootNavigator() {
     );
   }
 
-  // `key` → évite le scintillement de la barre d'onglets au changement d'état
-  return isAuthenticated
-    ? <AppTabNavigator key="authenticated" />
-    : <PublicNavigator key="public" />;
+  return (
+    <NavigationContainer
+      linking={linking}
+      documentTitle={{ formatter: (options) => (options?.title ? `${options.title} · Easevent` : 'Easevent') }}
+    >
+      <StatusBar style="dark" />
+      <RootNavigator />
+    </NavigationContainer>
+  );
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -304,13 +345,7 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <TicketBadgeProvider>
-        <NavigationContainer
-          linking={linking}
-          documentTitle={{ formatter: (options) => (options?.title ? `${options.title} · Easevent` : 'Easevent') }}
-        >
-          <StatusBar style="dark" />
-          <RootNavigator />
-        </NavigationContainer>
+          <NavigationShell />
         </TicketBadgeProvider>
         <DialogHost />
       </AuthProvider>
