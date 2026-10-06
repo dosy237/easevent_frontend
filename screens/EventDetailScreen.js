@@ -311,7 +311,7 @@ export default function EventDetailScreen({ route, navigation }) {
 
         {/* Badge type d'événement */}
         <View style={styles.typeBadge}>
-          <Text style={styles.typeBadgeTxt}>{typeLabel(fullEvent.event_type)}</Text>
+          <Text style={styles.typeBadgeTxt}>{fullEvent.event_type_display || typeLabel(fullEvent.event_type)}</Text>
         </View>
       </View>
 

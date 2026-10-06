@@ -28,6 +28,7 @@ import DateTimePicker       from '@react-native-community/datetimepicker';
 import { useAuth }          from '../context/AuthContext';
 
 import eventService from '../services/eventService';
+import ColorPicker from '../components/ui/ColorPicker';
 import { showAlert } from '../utils/dialog';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -56,7 +57,12 @@ const EVENT_TYPES = [
   { value: 'anniversaire', label: 'Anniversaire', icon: 'gift' },
   { value: 'soiree',       label: 'Soirée',       icon: 'musical-notes' },
   { value: 'concert',      label: 'Concert',      icon: 'headset' },
-  { value: 'autre',        label: 'Autre',        icon: 'calendar' },
+  { value: 'seminaire',    label: 'Séminaire',    icon: 'school' },
+  { value: 'gala',         label: 'Gala',         icon: 'sparkles' },
+  { value: 'exposition',   label: 'Exposition',   icon: 'image' },
+  { value: 'festival',     label: 'Festival',     icon: 'flame' },
+  { value: 'atelier',      label: 'Atelier',      icon: 'color-palette' },
+  { value: 'autre',        label: 'Autre',        icon: 'create' },
 ];
 
 // ─────────────────────────────────────────────────────────────────
@@ -401,6 +407,8 @@ export default function CreateEventScreen({ navigation }) {
   // ── Étape 1 : Informations de base ───────────────────────────
   const [title,       setTitle]       = useState('');
   const [eventType,   setEventType]   = useState('');
+  // Nom libre quand le type « Autre » est choisi (ex. « Baptême »)
+  const [eventTypeLabel, setEventTypeLabel] = useState('');
   const [description, setDescription] = useState('');
 
   // ── Étape 2 : Date et lieu ────────────────────────────────────
@@ -427,6 +435,8 @@ export default function CreateEventScreen({ navigation }) {
   const [ambiance,       setAmbiance]       = useState('');
   const [primaryColor,   setPrimaryColor]   = useState('');
   const [secondaryColor, setSecondaryColor] = useState('');
+  // Couleur en cours d'édition dans le sélecteur : 'primary' | 'secondary'
+  const [editingColor,   setEditingColor]   = useState('primary');
 
   // ── Étape 5 : Paramètres ─────────────────────────────────────
   const [visibility, setVisibility] = useState('public');
@@ -520,12 +530,12 @@ export default function CreateEventScreen({ navigation }) {
   // Formulaire remis à zéro après la création (l'onglet Créer reste monté)
   const resetForm = () => {
     setStep(1);
-    setTitle(''); setEventType(''); setDescription('');
+    setTitle(''); setEventType(''); setEventTypeLabel(''); setDescription('');
     setStartDate(null); setEndDate(null); setLocationAddress('');
     setIsOnline(false); setOnlineLink('');
     setCoverImageUri(null); setCoverImageUrl(null);
     setGallery1Uri(null); setGallery1Url(null); setGallery2Uri(null); setGallery2Url(null);
-    setAmbiance(''); setPrimaryColor(''); setSecondaryColor('');
+    setAmbiance(''); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
     setVisibility('public'); setMaxGuests(''); setIsPaid(false); setPrice('');
     setHasDressCode(false); setDressChoice(''); setDressCode('');
     setErrors({});
@@ -537,6 +547,7 @@ export default function CreateEventScreen({ navigation }) {
     if (step === 1) {
       if (!title.trim())       e.title       = 'Le titre est obligatoire';
       if (!eventType)          e.eventType   = 'Choisissez un type d\'événement';
+      if (eventType === 'autre' && !eventTypeLabel.trim()) e.eventTypeLabel = 'Indiquez le type de votre événement';
       if (!description.trim()) e.description = 'Ajoutez une description';
     }
     if (step === 2) {
@@ -601,6 +612,7 @@ export default function CreateEventScreen({ navigation }) {
       await eventService.createEvent({
         title,
         event_type:       eventType,
+        event_type_label: eventType === 'autre' ? eventTypeLabel.trim() : '',
         description,
         start_date:       formatDateISO(startDate),
         end_date:         formatDateISO(endDate),
@@ -665,8 +677,11 @@ export default function CreateEventScreen({ navigation }) {
           <TouchableOpacity
             key={t.value}
             style={[styles.typeCard, eventType === t.value && styles.typeCardActive]}
-            onPress={() => setEventType(t.value)}
+            onPress={() => { setEventType(t.value); setErrors((p) => ({ ...p, eventType: undefined })); }}
             activeOpacity={0.8}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: eventType === t.value }}
+            accessibilityLabel={t.label}
           >
             <Ionicons name={t.icon} size={22} color={eventType === t.value ? C.white : C.green} />
             <Text style={[styles.typeCardLabel, eventType === t.value && { color: C.white }]}>
@@ -675,6 +690,18 @@ export default function CreateEventScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </View>
+
+      {eventType === 'autre' && (
+        <InputField
+          label="Type de votre événement *"
+          icon="pricetag-outline"
+          value={eventTypeLabel}
+          onChangeText={(t) => { setEventTypeLabel(t); setErrors((p) => ({ ...p, eventTypeLabel: undefined })); }}
+          placeholder="Ex : Baptême, Remise de diplômes, Pique-nique…"
+          maxLength={40}
+          error={errors.eventTypeLabel}
+        />
+      )}
 
       <InputField
         label="Description *"
@@ -840,39 +867,52 @@ export default function CreateEventScreen({ navigation }) {
         ))}
       </View>
 
-      {ambiance && COLOR_PALETTES[ambiance] && (
-        <View style={styles.paletteSection}>
-          <Text style={styles.fieldLabel}>Couleur principale</Text>
-          <View style={styles.colorRow}>
-            {COLOR_PALETTES[ambiance].map(color => (
+      {/* Palette libre : n'importe quelle couleur (carré, teinte, code hexadécimal) */}
+      <View style={styles.paletteSection}>
+        <Text style={styles.fieldLabel}>Vos couleurs</Text>
+        <Text style={styles.paletteHint}>
+          {ambiance ? 'L’ambiance propose des couleurs : modifiez-les librement.' : 'Choisissez librement vos couleurs, ou partez d’une ambiance.'}
+        </Text>
+        <View style={styles.colorSlots}>
+          {[
+            { key: 'primary',   label: 'Principale', value: primaryColor },
+            { key: 'secondary', label: 'Secondaire', value: secondaryColor },
+          ].map((slot) => {
+            const active = editingColor === slot.key;
+            return (
               <TouchableOpacity
-                key={color}
-                style={[styles.colorDot, { backgroundColor: color }, primaryColor === color && styles.colorDotSelected]}
-                onPress={() => setPrimaryColor(color)}
-              />
-            ))}
-          </View>
-
-          <Text style={styles.fieldLabel}>Couleur secondaire</Text>
-          <View style={styles.colorRow}>
-            {COLOR_PALETTES[ambiance].map(color => (
-              <TouchableOpacity
-                key={color}
-                style={[styles.colorDot, { backgroundColor: color }, secondaryColor === color && styles.colorDotSelected]}
-                onPress={() => setSecondaryColor(color)}
-              />
-            ))}
-          </View>
-
-          {primaryColor && secondaryColor && (
-            <View style={styles.colorPreview}>
-              <View style={[styles.colorPreviewBar, { backgroundColor: primaryColor }]} />
-              <View style={[styles.colorPreviewBar, { backgroundColor: secondaryColor }]} />
-              <Text style={styles.colorPreviewTxt}>Aperçu de votre palette</Text>
-            </View>
-          )}
+                key={slot.key}
+                style={[styles.colorSlot, active && styles.colorSlotActive]}
+                onPress={() => setEditingColor(slot.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Couleur ${slot.label.toLowerCase()} ${slot.value || 'non choisie'}`}
+              >
+                <View style={[styles.colorSlotDot, { backgroundColor: slot.value || C.bg }]} />
+                <View>
+                  <Text style={styles.colorSlotLabel}>{slot.label}</Text>
+                  <Text style={styles.colorSlotHex}>{slot.value || 'À choisir'}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
-      )}
+
+        <ColorPicker
+          label={editingColor === 'primary' ? 'Couleur principale' : 'Couleur secondaire'}
+          value={(editingColor === 'primary' ? primaryColor : secondaryColor) || (editingColor === 'primary' ? '#1B6B4A' : '#E76F51')}
+          onChange={editingColor === 'primary' ? setPrimaryColor : setSecondaryColor}
+          suggestions={COLOR_PALETTES[ambiance] || Object.values(COLOR_PALETTES).map((p) => p[0])}
+        />
+
+        {primaryColor && secondaryColor ? (
+          <View style={styles.colorPreview}>
+            <View style={[styles.colorPreviewBar, { backgroundColor: primaryColor }]} />
+            <View style={[styles.colorPreviewBar, { backgroundColor: secondaryColor }]} />
+            <Text style={styles.colorPreviewTxt}>Aperçu de votre palette</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 
@@ -1317,6 +1357,16 @@ const styles = StyleSheet.create({
   dressChipActive: { backgroundColor: C.green, borderColor: C.green },
   dressChipTxt: { fontSize: 13, fontWeight: '600', color: C.textSub },
   dressChipTxtActive: { color: C.white },
+  paletteHint: { fontSize: 13, color: C.textSub, marginBottom: 12, lineHeight: 18 },
+  colorSlots: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  colorSlot: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56,
+    padding: 10, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white,
+  },
+  colorSlotActive: { borderColor: C.green, borderWidth: 2 },
+  colorSlotDot: { width: 32, height: 32, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' },
+  colorSlotLabel: { fontSize: 12, color: C.textSub, fontWeight: '600' },
+  colorSlotHex: { fontSize: 14, color: C.text, fontWeight: '800', letterSpacing: 0.5 },
   summaryCard: {
     backgroundColor: C.greenLight, borderRadius: 16, padding: 16,
     borderWidth: 1, borderColor: '#C5E8D3', marginTop: 8,

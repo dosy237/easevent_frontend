@@ -171,7 +171,7 @@ const CardFeatured = React.memo(({ event, onPress }) => (
   <TouchableOpacity style={styles.cardFeatured} onPress={() => onPress(event)} activeOpacity={0.92}>
     <Image source={{ uri: event.cover_image }} style={styles.cardFeaturedImg} resizeMode="cover" />
     <View style={styles.cardFeaturedBadge}>
-      <Text style={styles.cardFeaturedBadgeTxt}>{event.event_type?.toUpperCase()}</Text>
+      <Text style={styles.cardFeaturedBadgeTxt}>{(event.event_type_display || event.event_type)?.toUpperCase()}</Text>
     </View>
     <View style={styles.cardFeaturedFooter}>
       <Text style={styles.cardFeaturedDate}>{event.date_formatted}</Text>
