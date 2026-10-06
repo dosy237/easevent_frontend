@@ -596,7 +596,7 @@ export default function ProfileScreen({ navigation }) {
                   </View>
                   <View>
                     <Text style={styles.menuItemTitle}>Notifications</Text>
-                    <Text style={styles.menuItemSub}>Gérer vos préférences</Text>
+                    <Text style={styles.menuItemSub}>Activité et préférences</Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />

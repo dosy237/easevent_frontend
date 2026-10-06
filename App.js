@@ -55,6 +55,7 @@ import PayoutsScreen from './screens/PayoutsScreen';
 import InviteGuestsScreen from './screens/InviteGuestsScreen';
 import GuestListScreen from './screens/GuestListScreen';
 import InvitationLandingScreen from './screens/InvitationLandingScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
 import { TicketBadgeProvider, useTicketBadge } from './context/TicketBadgeContext';
 
 // ─────────────────────────────────────────────────────────────────
@@ -167,7 +168,7 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="RsvpQuestions"      {...soon('M14', 'Questions RSVP')} />
       <DashStack.Screen name="Conversations"      {...soon('M15', 'Messagerie')} />
       <DashStack.Screen name="Chat"               {...soon('M16', 'Conversation')} />
-      <DashStack.Screen name="Notifications"      {...soon('M17', 'Notifications')} />
+      <DashStack.Screen name="Notifications"      component={NotificationsScreen} options={{ title: 'Notifications' }} />
     </DashStack.Navigator>
   );
 }
@@ -180,7 +181,7 @@ function DiscoverStackNavigator() {
     <DiscoverStack.Navigator screenOptions={stackOptions}>
       <DiscoverStack.Screen name="DiscoverHome"  component={HomeScreen}        options={{ title: 'Découvrir' }} />
       <DiscoverStack.Screen name="EventDetail"   component={EventDetailScreen} options={{ title: 'Événement' }} />
-      <DiscoverStack.Screen name="Notifications" {...soon('M17', 'Notifications')} />
+      <DiscoverStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <DiscoverStack.Screen name="Chat"          {...soon('M16', 'Conversation')} />
       <DiscoverStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
     </DiscoverStack.Navigator>
@@ -208,7 +209,7 @@ function ProfileStackNavigator() {
     <ProfileStack.Navigator screenOptions={stackOptions}>
       <ProfileStack.Screen name="Profile"              component={ProfileScreen}       options={{ title: 'Mon profil' }} />
       <ProfileStack.Screen name="PrivacyPolicy"        component={PrivacyPolicyScreen} options={{ title: 'Confidentialité' }} />
-      <ProfileStack.Screen name="Notifications"        {...soon('M17', 'Notifications')} />
+      <ProfileStack.Screen name="Notifications"        component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <ProfileStack.Screen name="Payouts"              component={PayoutsScreen} options={{ title: 'Paiements & virements' }} />
       <ProfileStack.Screen name="Plans"                {...soon('M20', 'Choisir un plan')} />
       <ProfileStack.Screen name="SubscriptionCheckout" {...soon('M21', 'Paiement')} />
