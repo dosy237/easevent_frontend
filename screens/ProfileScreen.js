@@ -628,6 +628,26 @@ export default function ProfileScreen({ navigation }) {
 
               <View style={styles.menuDivider} />
 
+              {/* Paiements & virements (Stripe Connect, organisateur) */}
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation?.navigate('Payouts')}
+                accessibilityRole="button"
+              >
+                <View style={styles.menuItemLeft}>
+                  <View style={[styles.menuIconBox, { backgroundColor: '#EFF6FF' }]}>
+                    <Ionicons name="wallet-outline" size={18} color="#2563EB" />
+                  </View>
+                  <View>
+                    <Text style={styles.menuItemTitle}>Paiements & virements</Text>
+                    <Text style={styles.menuItemSub}>Recevoir l'argent de vos tickets</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
               {/* Politique de confidentialité (M02) */}
               <TouchableOpacity
                 style={styles.menuItem}

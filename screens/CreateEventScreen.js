@@ -29,6 +29,7 @@ import { useAuth }          from '../context/AuthContext';
 
 import eventService from '../services/eventService';
 import ColorPicker from '../components/ui/ColorPicker';
+import ticketService from '../services/ticketService';
 import { showAlert } from '../utils/dialog';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -449,6 +450,12 @@ export default function CreateEventScreen({ navigation }) {
   const [price,      setPrice]      = useState('');
   // Dress code (M23) : puce rapide + précisions libres (80 caractères)
   const [hasDressCode, setHasDressCode] = useState(false);
+  // Stripe Connect : l'organisateur peut-il encaisser ? (null = inconnu)
+  const [canCharge,    setCanCharge]    = useState(null);
+  React.useEffect(() => {
+    if (!isPaid) return;
+    ticketService.connectStatus().then((st) => setCanCharge(!!st.charges_enabled)).catch(() => setCanCharge(null));
+  }, [isPaid]);
   const [dressChoice,  setDressChoice]  = useState('');
   const [dressCode,    setDressCode]    = useState('');
 
@@ -1023,6 +1030,19 @@ export default function CreateEventScreen({ navigation }) {
           <Ionicons name="information-circle-outline" size={14} color={C.green} />
           <Text style={styles.optionNoteTxt}>Désactivé, chaque participant reçoit quand même un ticket à 0,00 €.</Text>
         </View>
+        {isPaid && canCharge === false && (
+          <TouchableOpacity
+            style={styles.payoutHint}
+            onPress={() => navigation?.navigate('TabProfile', { screen: 'Payouts' })}
+            accessibilityRole="button"
+          >
+            <Ionicons name="wallet-outline" size={16} color="#2563EB" />
+            <Text style={styles.payoutHintTxt}>
+              Pour encaisser vos ventes, activez les paiements (IBAN). Vous pouvez le faire après la création.
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color="#2563EB" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ── Dress code (M23) ───────────────────────────────── */}
@@ -1369,6 +1389,11 @@ const styles = StyleSheet.create({
   infoCardTxt: { fontSize: 13, color: C.green, flex: 1, lineHeight: 18 },
 
   // Récapitulatif
+  payoutHint: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, minHeight: 44,
+    backgroundColor: '#EFF6FF', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
+  },
+  payoutHintTxt: { flex: 1, fontSize: 12, color: '#1E40AF', lineHeight: 17, fontWeight: '600' },
   fieldSuffix: { fontSize: 16, fontWeight: '700', color: C.text, marginLeft: 8 },
   optionCard: {
     backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border,

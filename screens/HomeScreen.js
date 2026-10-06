@@ -18,7 +18,7 @@
  */
 
 import { StatusBar as RNStatusBar } from 'react-native';
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -261,6 +261,10 @@ export default function HomeScreen({ navigation }) {
   const [searchText, setSearchText] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
+  // Minuteur de la recherche (debounce 400 ms) — n'était pas déclaré :
+  // chaque frappe dans la recherche levait une erreur
+  const debounceTimer = useRef(null);
+  useEffect(() => () => clearTimeout(debounceTimer.current), []);
 
   const fetchEvents = useCallback(async (search = '', filter = activeFilter) => {
     try {

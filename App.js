@@ -50,6 +50,9 @@ import VerifyEmailScreen from './screens/VerifyEmailScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import ComingSoonScreen from './screens/ComingSoonScreen';
+import TicketCheckoutScreen from './screens/TicketCheckoutScreen';
+import PayoutsScreen from './screens/PayoutsScreen';
+import { TicketBadgeProvider, useTicketBadge } from './context/TicketBadgeContext';
 
 // ─────────────────────────────────────────────────────────────────
 // NAVIGATEURS
@@ -99,7 +102,7 @@ const linking = {
       TabDiscover: { screens: { DiscoverHome: 'decouvrir' } },
       TabCreate:   'creer',
       TabTickets:  { screens: { Tickets: 'tickets' } },
-      TabProfile:  { screens: { Profile: 'profil', Plans: 'profil/plans' } },
+      TabProfile:  { screens: { Profile: 'profil', Plans: 'profil/plans', Payouts: 'profil/paiements' } },
     },
   },
 };
@@ -160,7 +163,7 @@ function DiscoverStackNavigator() {
       <DiscoverStack.Screen name="EventDetail"   component={EventDetailScreen} options={{ title: 'Événement' }} />
       <DiscoverStack.Screen name="Notifications" {...soon('M17', 'Notifications')} />
       <DiscoverStack.Screen name="Chat"          {...soon('M16', 'Conversation')} />
-      <DiscoverStack.Screen name="TicketCheckout" {...soon('M26', 'Payer et générer mon ticket')} />
+      <DiscoverStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
     </DiscoverStack.Navigator>
   );
 }
@@ -172,8 +175,7 @@ function TicketsStackNavigator() {
   return (
     <TicketsStack.Navigator screenOptions={stackOptions}>
       <TicketsStack.Screen name="Tickets"        component={TicketsScreen} options={{ title: 'Mes tickets' }} />
-      <TicketsStack.Screen name="TicketCheckout" {...soon('M26', 'Payer et générer mon ticket')} />
-      <TicketsStack.Screen name="TicketView"     {...soon('M27', 'Mon ticket')} />
+      <TicketsStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
     </TicketsStack.Navigator>
   );
 }
@@ -187,6 +189,7 @@ function ProfileStackNavigator() {
       <ProfileStack.Screen name="Profile"              component={ProfileScreen}       options={{ title: 'Mon profil' }} />
       <ProfileStack.Screen name="PrivacyPolicy"        component={PrivacyPolicyScreen} options={{ title: 'Confidentialité' }} />
       <ProfileStack.Screen name="Notifications"        {...soon('M17', 'Notifications')} />
+      <ProfileStack.Screen name="Payouts"              component={PayoutsScreen} options={{ title: 'Paiements & virements' }} />
       <ProfileStack.Screen name="Plans"                {...soon('M20', 'Choisir un plan')} />
       <ProfileStack.Screen name="SubscriptionCheckout" {...soon('M21', 'Paiement')} />
       <ProfileStack.Screen name="SubscriptionSuccess"  {...soon('M22', 'Paiement confirmé')} />
@@ -206,8 +209,11 @@ const TAB_ICONS = {
 };
 
 function AppTabNavigator() {
+  const { badge, refresh } = useTicketBadge();
   return (
     <Tabs.Navigator
+      // Badge « Tickets » rafraîchi à la navigation (au plus toutes les 30 s)
+      screenListeners={{ state: () => refresh() }}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ focused, color, size }) => {
@@ -254,7 +260,17 @@ function AppTabNavigator() {
           tabBarInactiveTintColor: C.orange,
         }}
       />
-      <Tabs.Screen name="TabTickets" component={TicketsStackNavigator} options={{ tabBarLabel: 'Tickets', title: 'Mes tickets' }} />
+      <Tabs.Screen
+        name="TabTickets"
+        component={TicketsStackNavigator}
+        options={{
+          tabBarLabel: 'Tickets',
+          title: 'Mes tickets',
+          tabBarBadge: badge > 0 ? badge : undefined,
+          tabBarBadgeStyle: { backgroundColor: C.orange, color: C.white, fontSize: 10, fontWeight: '800' },
+          tabBarAccessibilityLabel: badge > 0 ? `Tickets, ${badge} en attente` : 'Tickets',
+        }}
+      />
       <Tabs.Screen name="TabProfile" component={ProfileStackNavigator} options={{ tabBarLabel: 'Profil', title: 'Mon profil' }} />
     </Tabs.Navigator>
   );
@@ -287,6 +303,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
+        <TicketBadgeProvider>
         <NavigationContainer
           linking={linking}
           documentTitle={{ formatter: (options) => (options?.title ? `${options.title} · Easevent` : 'Easevent') }}
@@ -294,6 +311,7 @@ export default function App() {
           <StatusBar style="dark" />
           <RootNavigator />
         </NavigationContainer>
+        </TicketBadgeProvider>
         <DialogHost />
       </AuthProvider>
     </SafeAreaProvider>
