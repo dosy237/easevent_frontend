@@ -24,6 +24,8 @@ const TABS = [['friends', 'Mes amis'], ['requests', 'Demandes'], ['add', 'Ajoute
 export default function FriendsScreen({ navigation, route }) {
   const { refresh: refreshBadges } = useTicketBadge();
   const [tab, setTab] = useState(route.params?.tab || 'friends');
+  // Ouvert à nouveau depuis une notification (demandes / amis) : bon onglet
+  useEffect(() => { if (route.params?.tab) setTab(route.params.tab); }, [route.params?.tab]);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -74,7 +76,7 @@ export default function FriendsScreen({ navigation, route }) {
 
   const incoming = data?.incoming || [];
   const outgoing = data?.outgoing || [];
-  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Profile'));
+  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('TabProfile', { screen: 'Profile' }));
 
   const Person = ({ user, sub, children }) => (
     <View style={styles.row}>

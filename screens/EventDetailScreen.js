@@ -31,6 +31,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Pressable,
   StatusBar,
   Animated,
   Platform,
@@ -53,6 +54,9 @@ import EventMap, { openInMaps } from '../components/maps/EventMap';
 import { formatPrice } from '../utils/format';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { isRsvpCancel } from '../utils/rsvp';
+import SafeImage from '../components/ui/SafeImage';
+import ImageViewer from '../components/ui/ImageViewer';
+import { Bone, SkeletonGroup } from '../components/ui/Skeleton';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -78,9 +82,7 @@ const C = {
 // LIEN APP STORE / PLAY STORE
 // À remplacer par les vrais liens quand l'app sera publiée
 // ─────────────────────────────────────────────────────────────────
-const STORE_URL = Platform.OS === 'ios'
-  ? 'https://apps.apple.com/app/easevent'
-  : 'https://play.google.com/store/apps/details?id=com.easevent';
+const STORE_URL = 'https://play.google.com/store/apps/details?id=com.eranis.easevent';
 
 // ─────────────────────────────────────────────────────────────────
 // FONCTION : ouvrir Google Maps
@@ -194,8 +196,9 @@ const InfoRow = ({ icon, label, value, onPress }) => {
 // ════════════════════════════════════════════════════════════════
 export default function EventDetailScreen({ route, navigation }) {
 
-  // On récupère l'événement passé depuis HomeScreen
-  const { event } = route?.params || {};
+  // Événement passé depuis une liste, ou seulement son identifiant (lien partagé, notification)
+  const params = route?.params || {};
+  const event = params.event || (params.id ? { id: params.id } : null);
 
   // insets : zones non sûres de l'écran (encoche, barre de statut)
   // useSafeAreaInsets() nous donne les valeurs exactes pour chaque bord
@@ -207,6 +210,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [fullEvent, setFullEvent] = useState(event);
   const [loading, setLoading]   = useState(!event?.description);
   const [error, setError]       = useState(null);
+  const [viewer, setViewer]     = useState(null);     // photo affichée en plein écran
 
   // Animations d'entrée du contenu
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -239,11 +243,16 @@ export default function EventDetailScreen({ route, navigation }) {
       setFullEvent(response.data);
       setError(null);
     } catch (err) {
-      console.error("Erreur chargement détail événement:", err);
-      // If we already have some data, don't show a hard error
-      if (!fullEvent) {
-          setError("Impossible de charger l'événement.");
+      const code = err.response?.status;
+      // L'organisateur qui ouvre son brouillon : écran de gestion
+      if (code === 404 && isAuthenticated) {
+        try {
+          const own = await apiClient.get(`/api/events/${id}/detail/`);
+          navigation.replace('EventDashboard', { event: own.data.event });
+          return;
+        } catch { /* pas son événement */ }
       }
+      setError(code === 403 ? 'private' : code === 404 ? 'missing' : 'network');
     } finally {
       setLoading(false);
     }
@@ -266,18 +275,47 @@ export default function EventDetailScreen({ route, navigation }) {
     extrapolate: 'clamp',
   });
 
-  // Fallback si pas d'événement passé
-  if (!event) {
+  const goBack = () => (navigation.canGoBack() ? navigation.goBack()
+    : navigation.navigate(isAuthenticated ? 'TabDiscover' : 'Home'));
+
+  // Pas d'événement, ou chargement impossible sans données à afficher
+  if (!event || (error && !fullEvent?.title)) {
+    const texts = {
+      private: ['Événement privé', "Seules les personnes invitées peuvent voir cet événement. Si vous avez reçu une invitation, connectez-vous avec le compte invité."],
+      missing: ['Événement introuvable', "Cet événement n'existe plus ou a été annulé par son organisateur."],
+      network: ['Connexion impossible', 'Vérifiez votre connexion internet puis réessayez.'],
+    };
+    const [title, sub] = texts[error] || texts.missing;
     return (
       <View style={styles.errorFull}>
-        <Ionicons name="alert-circle-outline" size={48} color={C.textMut} />
-        <Text style={styles.errorFullTitle}>Événement introuvable</Text>
-        <TouchableOpacity
-          style={styles.errorBackBtn}
-          onPress={() => navigation?.goBack()}
-        >
+        <Ionicons name={error === 'private' ? 'lock-closed-outline' : error === 'network' ? 'wifi-outline' : 'alert-circle-outline'} size={48} color={C.textMut} />
+        <Text style={styles.errorFullTitle} accessibilityRole="header">{title}</Text>
+        <Text style={{ fontSize: 14, color: C.textSub, textAlign: 'center', lineHeight: 20, maxWidth: 360 }}>{sub}</Text>
+        {error === 'network' && event?.id ? (
+          <TouchableOpacity style={styles.errorBackBtn} onPress={() => { setError(null); loadEventDetail(event.id); }} accessibilityRole="button">
+            <Text style={styles.errorBackTxt}>Réessayer</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity style={styles.errorBackBtn} onPress={goBack} accessibilityRole="button">
           <Text style={styles.errorBackTxt}>Retour</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Ouvert depuis un lien ou une notification : squelette le temps du chargement
+  if (!fullEvent?.title) {
+    return (
+      <View style={[styles.root, { backgroundColor: C.white }]}>
+        <SkeletonGroup label="Chargement de l'événement">
+          <Bone height={320} radius={0} />
+          <View style={{ padding: 20, gap: 12 }}>
+            <Bone width="70%" height={24} />
+            <Bone width="45%" height={16} />
+            <Bone height={140} radius={18} />
+            <Bone height={90} radius={18} />
+          </View>
+        </SkeletonGroup>
       </View>
     );
   }
@@ -295,7 +333,7 @@ export default function EventDetailScreen({ route, navigation }) {
 
   const ticketAction = async () => {
     if (isOrganizer) {
-      navigation.navigate('TabDashboard', { screen: 'EventDashboard', params: { event: fullEvent } });
+      navigation.navigate('TabDashboard', { screen: 'EventDashboard', initial: false, params: { event: fullEvent } });
       return;
     }
     if (myTicket?.status === 'generated') { openTicket(myTicket.id); return; }
@@ -334,17 +372,18 @@ export default function EventDetailScreen({ route, navigation }) {
     // Ouvre le store pour télécharger l'app
     // En production : si l'utilisateur est connecté, on l'amène
     // directement à la page de confirmation RSVP
-    try {
-      await Linking.openURL(STORE_URL);
-    } catch {
-      // Fallback si le store n'est pas accessible
-      await Linking.openURL('https://easevent.app');
+    // Dans l'application : se connecter pour participer ; sur le site : télécharger l'application
+    if (Platform.OS !== 'web') {
+      navigation.navigate('Login', { mode: 'register' });
+      return;
     }
+    Linking.openURL(STORE_URL).catch(() => {});
   };
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <ImageViewer uri={viewer} onClose={() => setViewer(null)} />
 
       {/* ══ HEADER FLOTTANT ═══════════════════════════════════
           Position absolute — flotte au-dessus du scroll.
@@ -389,14 +428,13 @@ export default function EventDetailScreen({ route, navigation }) {
       >
         {/* ── IMAGE HERO ──────────────────────────────────── */}
         <View style={styles.heroBox}>
-          <Image
-            source={{ uri: fullEvent.cover_image }}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
+          <Pressable onPress={() => fullEvent.cover_image && setViewer(fullEvent.cover_image)} style={StyleSheet.absoluteFill}
+            accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de l'événement">
+            <SafeImage uri={fullEvent.cover_image} style={styles.heroImage} icon="calendar-outline" iconSize={56} />
+          </Pressable>
 
           {/* Overlay sombre pour lisibilité du texte */}
-          <View style={styles.heroOverlay} />
+          <View style={styles.heroOverlay} pointerEvents="none" />
 
           {/* Texte sur l'image */}
           <View style={[styles.heroContent, { paddingBottom: insets.bottom + 24 }]}>
@@ -479,8 +517,10 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon={fullEvent.is_online ? 'videocam-outline' : 'location-outline'}
               label="Lieu"
-              value={fullEvent.is_online ? 'En ligne' : fullEvent.location_address}
-              onPress={fullEvent.is_online ? undefined : () => openInMaps(fullEvent.map, fullEvent.location_address)}
+              value={fullEvent.is_online ? (fullEvent.online_link ? 'En ligne · rejoindre' : 'En ligne (lien donné avec le ticket)') : fullEvent.location_address}
+              onPress={fullEvent.is_online
+                ? (fullEvent.online_link ? () => Linking.openURL(fullEvent.online_link).catch(() => {}) : undefined)
+                : () => openInMaps(fullEvent.map, fullEvent.location_address)}
             />
 
             {/* Prix du ticket + places restantes (M24) */}
@@ -520,6 +560,21 @@ export default function EventDetailScreen({ route, navigation }) {
             </View>
           ) : null}
 
+          {/* ── Galerie : photos en plein écran au toucher ─────── */}
+          {fullEvent.gallery?.length ? (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.cardSectionTitle}>Photos</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                {fullEvent.gallery.map((uri, i) => (
+                  <Pressable key={uri} onPress={() => setViewer(uri)} accessibilityRole="imagebutton"
+                    accessibilityLabel={`Photo ${i + 1} sur ${fullEvent.gallery.length}, agrandir`}>
+                    <SafeImage uri={uri} style={styles.galleryImg} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
           {/* ── Description ────────────────────────────────── */}
           {fullEvent.description ? (
             <View style={styles.descCard}>
@@ -533,7 +588,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <View style={styles.orgCard}>
               <View style={styles.orgAvatar}>
                 <Text style={styles.orgAvatarTxt}>
-                  {fullEvent.organizer.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+                  {(fullEvent.organizer.name || '?').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
                 </Text>
               </View>
               <View style={{ flex: 1 }}>
@@ -645,6 +700,7 @@ export default function EventDetailScreen({ route, navigation }) {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  galleryImg: { width: 150, height: 110, borderRadius: 14, backgroundColor: '#EEE' },
   // ── M24 : badges, organisateur, barre fixe
   heroBadges: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   heroPriceBadge: {

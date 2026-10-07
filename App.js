@@ -141,7 +141,7 @@ const linking = {
     screens: {
       // Visiteur
       Home:              '',
-      EventDetail:       'evenement',
+      EventDetail:       'evenement/:id?',
       Login:             'connexion',
       ForgotPassword:    'mot-de-passe-oublie',
       ResetPassword:     'reset-password/:uid/:token',
@@ -158,7 +158,7 @@ const linking = {
           Conversations: 'messages',
         },
       },
-      TabDiscover: { screens: { DiscoverHome: 'decouvrir' } },
+      TabDiscover: { screens: { DiscoverHome: 'decouvrir', EventDetail: 'decouvrir/evenement/:id?' } },
       TabCreate:   'creer',
       TabTickets:  { screens: { Tickets: 'tickets' } },
       TabProfile:  {

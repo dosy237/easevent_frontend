@@ -28,11 +28,14 @@ import { askRsvp } from '../utils/rsvp';
 // Lien « Ajouter à Google Agenda » : fonctionne sur tous les appareils, sans permission
 const calendarUrl = (ticket) => {
   const e = ticket.event || {};
-  const fmt = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const fmt = (iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  };
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     text: e.title || 'Événement Easevent',
-    dates: `${fmt(e.start_date)}/${fmt(e.end_date || e.start_date)}`,
+    ...(e.start_date ? { dates: `${fmt(e.start_date)}/${fmt(e.end_date || e.start_date)}` } : {}),
     details: `Ticket ${ticket.number} — Easevent`,
     location: e.is_online ? 'En ligne' : (e.location_address || ''),
   });
@@ -89,6 +92,7 @@ export default function TicketView({ ticket, justPaid = false }) {
     { label: 'Lieu', value: e.is_online ? 'En ligne' : (e.location_address || '—') },
     { label: 'Participant', value: ticket.participant },
     { label: 'Prix', value: formatPrice(ticket.price, ticket.currency), strong: true },
+    ...(ticket.checked_in_at ? [{ label: 'Entrée', value: `Contrôlé le ${formatDateLong(ticket.checked_in_at)}` }] : []),
   ];
 
   return (

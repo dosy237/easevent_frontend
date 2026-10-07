@@ -349,9 +349,17 @@ const DatePickerField = ({ label, date, onChange, minDate, error }) => {
 // Card pour uploader une image vers Cloudinary.
 // Affiche un aperçu de l'image après sélection + statut d'upload.
 // ════════════════════════════════════════════════════════════════
-const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
+const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading, onRemove }) => (
   <View style={styles.imageCard}>
-    <Text style={styles.imageCardLabel}>{label}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text style={styles.imageCardLabel}>{label}</Text>
+      {onRemove && imageUri && !uploading ? (
+        <TouchableOpacity onPress={onRemove} accessibilityRole="button" accessibilityLabel={`${label} : retirer la photo`}
+          style={{ minHeight: 44, paddingHorizontal: 8, justifyContent: 'center' }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: C.error }}>Retirer</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
     {imageUri ? (
       <TouchableOpacity
         onPress={onPick}
@@ -365,14 +373,14 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
           {uploading ? (
             <>
               <ActivityIndicator size="small" color={C.white} />
-              <Text style={styles.imageOverlayTxt}>Upload en cours...</Text>
+              <Text style={styles.imageOverlayTxt}>Envoi en cours…</Text>
             </>
           ) : (
             <>
               <Ionicons name={imageUrl ? 'checkmark-circle' : 'cloud-upload-outline'} size={20}
                 color={imageUrl ? '#2ECC71' : C.white} />
               <Text style={styles.imageOverlayTxt}>
-                {imageUrl ? 'Photo ajoutée — appuyer pour changer' : 'Upload en attente...'}
+                {imageUrl ? 'Photo ajoutée — appuyer pour changer' : 'Envoi en attente…'}
               </Text>
             </>
           )}
@@ -895,7 +903,7 @@ export default function CreateEventScreen({ navigation, route }) {
     <View>
       <Text style={styles.stepTitle}>Photos de l'événement</Text>
       <Text style={styles.stepSub}>
-        Ajoutez jusqu'à 3 photos. Elles seront utilisées pour votre mini-site et vos invitations digitales.
+        Ajoutez jusqu'à 3 photos. Elles illustrent la page de votre événement et vos invitations.
       </Text>
 
       {errors.coverImage && (
@@ -918,6 +926,7 @@ export default function CreateEventScreen({ navigation, route }) {
         imageUrl={gallery1Url}
         uploading={uploadingGallery1}
         onPick={() => pickAndUploadImage('gallery_1', setGallery1Uri, setGallery1Url, setUploadingGallery1)}
+        onRemove={() => { setGallery1Uri(null); setGallery1Url(null); }}
       />
       <ImageUploadCard
         label="Photo galerie 2 (optionnelle)"
@@ -925,6 +934,7 @@ export default function CreateEventScreen({ navigation, route }) {
         imageUrl={gallery2Url}
         uploading={uploadingGallery2}
         onPick={() => pickAndUploadImage('gallery_2', setGallery2Uri, setGallery2Url, setUploadingGallery2)}
+        onRemove={() => { setGallery2Uri(null); setGallery2Url(null); }}
       />
     </View>
   );
@@ -936,7 +946,7 @@ export default function CreateEventScreen({ navigation, route }) {
     <View>
       <Text style={styles.stepTitle}>Style de votre événement</Text>
       <Text style={styles.stepSub}>
-        Ces choix définissent l'identité visuelle de votre mini-site et de vos invitations.
+        Ces choix définissent l'identité visuelle de votre événement et de vos invitations.
       </Text>
 
       <Text style={styles.fieldLabel}>Ambiance *</Text>
@@ -1128,7 +1138,7 @@ export default function CreateEventScreen({ navigation, route }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Dress code</Text>
-            <Text style={styles.optionSub}>Affiché sur le ticket et le mini-site</Text>
+            <Text style={styles.optionSub}>Affiché sur la page de l'événement et sur le ticket</Text>
           </View>
           <TouchableOpacity
             style={[styles.toggle, hasDressCode && styles.toggleActive]}

@@ -79,7 +79,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
       showAlert('Limite du plan atteinte',
         `Votre ${PLAN_LABEL[usage.plan] || 'plan'} permet ${usage.limit} invités par événement. Il vous reste ${remaining} place(s).`,
         [{ text: 'Fermer', style: 'cancel' },
-          { text: 'Voir les plans', onPress: () => navigation.navigate('TabProfile', { screen: 'Plans' }) }]);
+          { text: 'Voir les plans', onPress: () => navigation.navigate('TabProfile', { screen: 'Plans', initial: false, params: { reason: "Passez au plan supérieur pour inviter plus de personnes à vos événements." } }) }]);
       return;
     }
     setSending(true);
@@ -124,7 +124,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
       if (data?.code === 'plan_limit') {
         showAlert('Limite du plan atteinte', data.detail, [
           { text: 'Fermer', style: 'cancel' },
-          { text: 'Voir les plans', onPress: () => navigation.navigate('TabProfile', { screen: 'Plans' }) },
+          { text: 'Voir les plans', onPress: () => navigation.navigate('TabProfile', { screen: 'Plans', initial: false, params: { reason: "Passez au plan supérieur pour inviter plus de personnes à vos événements." } }) },
         ]);
       } else {
         showAlert('Envoi impossible', apiErrorMessage(err, "Les invitations n'ont pas pu être envoyées."));

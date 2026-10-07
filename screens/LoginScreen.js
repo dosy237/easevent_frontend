@@ -173,6 +173,9 @@ const ProgressBar = ({ step, total }) => (
   </View>
 );
 
+// Connexion Google / Apple : masquée tant qu'elle n'est pas branchée (aucun bouton « bientôt »)
+const OAUTH_ENABLED = process.env.EXPO_PUBLIC_OAUTH_ENABLED === 'true';
+
 export default function LoginScreen({ navigation, route }) {
   const { login } = useAuth();
   const params = route?.params || {};
@@ -374,34 +377,39 @@ export default function LoginScreen({ navigation, route }) {
           <Text style={styles.btnSecondaryTxt}>Se connecter</Text>
         </TouchableOpacity>
 
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerTxt}>OU CONTINUER AVEC</Text>
-          <View style={styles.dividerLine} />
-        </View>
+        {/* Google / Apple : affichés quand les clés sont configurées (EXPO_PUBLIC_OAUTH_ENABLED=true) */}
+        {OAUTH_ENABLED && (
+          <>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerTxt}>OU CONTINUER AVEC</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
-        <View style={styles.oauthRow}>
-          <TouchableOpacity
-          accessibilityRole="button"
-            style={styles.oauthBtn}
-            activeOpacity={0.8}
-            onPress={() => showOAuthSoon('Google')}
+          <View style={styles.oauthRow}>
+            <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Continuer avec Google"
-          >
-            <Ionicons name="logo-google" size={22} color="#4285F4" />
-          </TouchableOpacity>
-          <TouchableOpacity
-          accessibilityRole="button"
-            style={styles.oauthBtn}
-            activeOpacity={0.8}
-            onPress={() => showOAuthSoon('Apple')}
+              style={styles.oauthBtn}
+              activeOpacity={0.8}
+              onPress={() => showOAuthSoon('Google')}
+              accessibilityRole="button"
+              accessibilityLabel="Continuer avec Google"
+            >
+              <Ionicons name="logo-google" size={22} color="#4285F4" />
+            </TouchableOpacity>
+            <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Continuer avec Apple"
-          >
-            <Ionicons name="logo-apple" size={22} color={C.text} />
-          </TouchableOpacity>
-        </View>
+              style={styles.oauthBtn}
+              activeOpacity={0.8}
+              onPress={() => showOAuthSoon('Apple')}
+              accessibilityRole="button"
+              accessibilityLabel="Continuer avec Apple"
+            >
+              <Ionicons name="logo-apple" size={22} color={C.text} />
+            </TouchableOpacity>
+          </View>
+          </>
+        )}
 
         {/* L'inscription n'est pas obligatoire : on peut découvrir les événements publics sans compte */}
         <TouchableOpacity style={styles.laterBtn} accessibilityRole="button"

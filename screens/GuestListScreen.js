@@ -55,6 +55,11 @@ function subtitle(g) {
   }
   if (g.delivery_status === 'pending') return `${KIND[g.kind]} · envoi en cours…`;
   const parts = [KIND[g.kind]];
+  if (g.checked_in_at) {
+    const d = new Date(g.checked_in_at);
+    parts.push(`entré à ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+    return parts.join(' · ');
+  }
   if (g.responded_at && ['confirmed', 'to_validate', 'declined'].includes(g.display_status)) {
     parts.push(`répondu le ${shortDate(g.responded_at)}`);
   } else if (g.opened_at) {
@@ -103,7 +108,7 @@ export default function GuestListScreen({ navigation, route }) {
   }, [guests, filter, q]);
 
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard'));
-  const goPlans = () => navigation.navigate('TabProfile', { screen: 'Plans' });
+  const goPlans = () => navigation.navigate('TabProfile', { screen: 'Plans', initial: false, params: { reason: "L'export de la liste des invités est inclus dans les plans Standard et Pro." } });
 
   const run = async (key, fn, success) => {
     setBusy(key);

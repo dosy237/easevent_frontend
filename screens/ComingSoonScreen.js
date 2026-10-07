@@ -16,10 +16,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { C } from '../constants/theme';
 import { BackButton, PrimaryButton } from '../components/ui/Buttons';
 import { WorkInProgressIllustration } from '../components/illustrations';
+import { useAuth } from '../context/AuthContext';
 
 export default function ComingSoonScreen({ navigation, route }) {
   const { title = 'Bientôt disponible', screenId, description } = route.params || {};
-  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home'));
+  const { isAuthenticated } = useAuth();
+  const goBack = () => (navigation.canGoBack() ? navigation.goBack()
+    : navigation.navigate(isAuthenticated ? 'TabDashboard' : 'Home'));
 
   return (
     <View style={styles.root}>
@@ -35,7 +38,6 @@ export default function ComingSoonScreen({ navigation, route }) {
           <Text style={styles.text}>
             {description || 'Nous finalisons cette fonctionnalité. Elle sera disponible dans une prochaine mise à jour.'}
           </Text>
-          {screenId ? <Text style={styles.ref}>Réf. maquette {screenId}</Text> : null}
           <PrimaryButton label="Retour" icon="arrow-back-outline" onPress={goBack} style={styles.btn} />
         </View>
       </SafeAreaView>

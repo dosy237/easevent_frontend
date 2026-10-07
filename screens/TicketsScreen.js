@@ -18,7 +18,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, StatusBar, Animated, ActivityIndicator,
+  Image, StatusBar, Animated, ActivityIndicator, Pressable,
   RefreshControl, Modal, Platform,
 } from 'react-native';
 
@@ -36,6 +36,7 @@ import LoadingMessages from '../components/ui/LoadingMessages';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { useAuth } from '../context/AuthContext';
 import { isRsvpCancel } from '../utils/rsvp';
+import SafeImage from '../components/ui/SafeImage';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -114,7 +115,7 @@ const Chip = ({ label, dark, warm }) => (
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : InvitationCard — « Invitation à répondre »
 // ════════════════════════════════════════════════════════════════
-const InvitationCard = ({ invitation, onRespond }) => {
+const InvitationCard = ({ invitation, onRespond, onOpenEvent }) => {
   const event = invitation.event || {};
   const [busy, setBusy] = useState(null);
   const respond = async (status) => { setBusy(status); await onRespond(invitation, status); setBusy(null); };
@@ -122,9 +123,9 @@ const InvitationCard = ({ invitation, onRespond }) => {
 
   return (
     <View style={styles.invCard}>
-      {event.cover_image
-        ? <Image source={{ uri: event.cover_image }} style={styles.invImg} resizeMode="cover" />
-        : <View style={[styles.invImg, styles.imgPlaceholder]}><Ionicons name="calendar-outline" size={24} color={C.textMut} /></View>}
+      <Pressable onPress={() => onOpenEvent?.(event)} accessibilityRole="button" accessibilityLabel={`Voir l'événement ${event.title || ''}`}>
+        <SafeImage uri={event.cover_image} style={styles.invImg} icon="calendar-outline" iconSize={24} />
+      </Pressable>
       <View style={styles.invBody}>
         <View style={styles.invFrom}>
           <Text style={styles.invFromTxt} numberOfLines={1}>
@@ -161,7 +162,7 @@ const InvitationCard = ({ invitation, onRespond }) => {
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : PendingTicketCard — « Tickets à valider »
 // ════════════════════════════════════════════════════════════════
-const PendingTicketCard = ({ ticket, onValidate, onPay, onCancel }) => {
+const PendingTicketCard = ({ ticket, onValidate, onPay, onCancel, onOpenEvent }) => {
   const e = ticket.event || {};
   const free = Number(ticket.price) <= 0;
   const unfinished = ['failed', 'processing'].includes(ticket.payment_status) || !!ticket.payment_started;
@@ -172,9 +173,9 @@ const PendingTicketCard = ({ ticket, onValidate, onPay, onCancel }) => {
   return (
     <View style={[styles.tCard, !free && unfinished && styles.tCardWarn]}>
       <View style={styles.tTop}>
-        {e.cover_image
-          ? <Image source={{ uri: e.cover_image }} style={styles.tThumb} resizeMode="cover" />
-          : <View style={[styles.tThumb, styles.imgPlaceholder]}><Ionicons name="ticket-outline" size={22} color={C.textMut} /></View>}
+        <Pressable onPress={() => onOpenEvent?.(e)} accessibilityRole="button" accessibilityLabel={`Voir l'événement ${e.title || ''}`}>
+          <SafeImage uri={e.cover_image} style={styles.tThumb} icon="ticket-outline" iconSize={22} />
+        </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.tTitle} numberOfLines={2}>{e.title}</Text>
           <Text style={styles.tMeta} numberOfLines={1}>
@@ -236,9 +237,7 @@ const GeneratedTicketCard = ({ ticket, onOpen }) => {
   return (
     <View style={styles.gCard}>
       <View style={styles.gImgBox}>
-        {e.cover_image
-          ? <Image source={{ uri: e.cover_image }} style={styles.gImg} resizeMode="cover" />
-          : <View style={[styles.gImg, styles.imgPlaceholder]}><Ionicons name="ticket-outline" size={30} color={C.textMut} /></View>}
+        <SafeImage uri={e.cover_image} style={styles.gImg} icon="ticket-outline" iconSize={30} />
         <View style={styles.gPrice}>
           <Text style={[styles.gPriceTxt, free && { color: C.green }]}>
             {formatPrice(ticket.price, ticket.currency)} · {free ? 'Gratuit' : 'Payé'}
@@ -332,6 +331,8 @@ export default function TicketsScreen({ navigation, route }) {
   const onRefresh = () => { setRefreshing(true); load(); };
 
   // ── Actions ──────────────────────────────────────────────────
+  const openEvent = (ev) => ev?.id && navigation.navigate('TabDiscover', { screen: 'EventDetail', initial: false, params: { event: ev } });
+
   const handleRespond = async (invitation, status) => {
     try {
       await eventService.respondToInvitation(invitation.id, status);
@@ -450,14 +451,14 @@ export default function TicketsScreen({ navigation, route }) {
           {toAnswer.length > 0 && (
             <>
               <Text style={styles.sectionLabel} accessibilityRole="header">Invitation à répondre</Text>
-              {toAnswer.map((inv) => <InvitationCard key={inv.id} invitation={inv} onRespond={handleRespond} />)}
+              {toAnswer.map((inv) => <InvitationCard key={inv.id} invitation={inv} onRespond={handleRespond} onOpenEvent={openEvent} />)}
             </>
           )}
           {pendingTix.length > 0 && (
             <>
               <Text style={styles.sectionLabel} accessibilityRole="header">Tickets à valider</Text>
               {pendingTix.map((t) => (
-                <PendingTicketCard key={t.id} ticket={t} onValidate={handleValidate} onPay={handlePay} onCancel={handleCancel} />
+                <PendingTicketCard key={t.id} ticket={t} onValidate={handleValidate} onPay={handlePay} onCancel={handleCancel} onOpenEvent={openEvent} />
               ))}
             </>
           )}
@@ -472,7 +473,7 @@ export default function TicketsScreen({ navigation, route }) {
       <>
         {archivedTix.map((t) => (
           <ArchivedRow key={t.id} title={t.event?.title} date={formatDayMonth(t.event?.start_date)}
-            label={t.status === 'expired' ? 'Expiré' : 'Annulé'} />
+            label={t.status === 'expired' ? 'Expiré' : t.payment_status === 'refunded' ? 'Annulé · remboursé' : 'Annulé'} />
         ))}
         {archivedInv.map((i) => (
           <ArchivedRow key={i.id} title={i.event?.title} date={formatDayMonth(i.event?.start_date)}

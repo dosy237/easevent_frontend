@@ -3,7 +3,9 @@
  * Remise d'un fichier JSON à l'utilisateur (export RGPD).
  * Web : téléchargement direct. Mobile : feuille de partage native.
  */
-import { Platform, Share } from 'react-native';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 export async function downloadJson(filename, data) {
   const content = JSON.stringify(data, null, 2);
@@ -19,5 +21,10 @@ export async function downloadJson(filename, data) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     return;
   }
-  await Share.share({ title: filename, message: content });
+  // Mobile : vrai fichier .json (un export volumineux ne tient pas dans un message de partage)
+  const path = `${FileSystem.cacheDirectory}${filename}`;
+  await FileSystem.writeAsStringAsync(path, content, { encoding: FileSystem.EncodingType.UTF8 });
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(path, { mimeType: 'application/json', dialogTitle: 'Mes données Easevent', UTI: 'public.json' });
+  }
 }

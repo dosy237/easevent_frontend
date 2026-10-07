@@ -227,7 +227,7 @@ const InvitationCard = ({ invitation, onRespond, onPress }) => {
         </View>
 
         {/* Boutons répondre — affichés seulement si l'invitation est en attente */}
-        {invitation.status === 'sent' && (
+        {['sent', 'opened'].includes(invitation.status) && (
           <View style={styles.invitActions}>
             {/* Bouton Décliner */}
             <TouchableOpacity
@@ -508,6 +508,8 @@ export default function DashboardScreen({ navigation }) {
 
   // ── Navigations ──────────────────────────────────────────────
 const goToEventDetail = (event) => navigation?.navigate('EventDashboard', { event });
+// Invitation reçue : la page de l'événement (vue invité), pas l'écran de gestion
+const goToInvitedEvent = (event) => event?.id && navigation?.navigate('TabDiscover', { screen: 'EventDetail', initial: false, params: { event } });
 const goToDiscover    = ()      => navigation?.getParent()?.navigate('TabDiscover');
 const goToProfile     = ()      => navigation?.getParent()?.navigate('TabProfile');
 const goToMessages    = ()      => navigation?.navigate('Conversations');
@@ -515,7 +517,7 @@ const goToNotifications = ()    => navigation?.navigate('Notifications');
   const { notifications: notifCount, messages: msgCount } = useTicketBadge();
 
   // Invitations en attente de réponse
-  const pendingInvitations = invitations.filter(i => i.status === 'sent');
+  const pendingInvitations = invitations.filter(i => ['sent', 'opened'].includes(i.status));
 
   // Si pas d'utilisateur connecté, ne rien afficher
   if (!user) return null;
@@ -692,7 +694,7 @@ const goToNotifications = ()    => navigation?.navigate('Notifications');
                       key={inv.id}
                       invitation={inv}
                       onRespond={handleRespond}
-                      onPress={goToEventDetail}
+                      onPress={goToInvitedEvent}
                     />
                   ))
                 )}
@@ -722,7 +724,7 @@ const goToNotifications = ()    => navigation?.navigate('Notifications');
                       Créez votre premier événement
                     </Text>
                     <Text style={styles.createFirstSub}>
-                      Mini-site personnalisé, invitations, analytics — tout en un.
+                      Invitations, billetterie, messagerie et contrôle des entrées — tout en un.
                     </Text>
                     <View style={styles.createFirstBtn}>
                       <Text style={styles.createFirstBtnTxt}>Commencer</Text>

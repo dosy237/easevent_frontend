@@ -43,6 +43,9 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import eventService from '../services/eventService';
 import { LogoMark } from '../components/illustrations';
+import SafeImage from '../components/ui/SafeImage';
+
+const STORE_URL = 'https://play.google.com/store/apps/details?id=com.eranis.easevent';
 import { SkeletonGroup, Bone, EventCardSkeleton } from '../components/ui/Skeleton';
 import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
 
@@ -149,12 +152,13 @@ const InvitationCard = React.memo(({ event, onPress, isLoggedIn, onLoginPress })
   if (!event) return null;
 
   return (
-    <TouchableOpacity style={styles.invitCard} onPress={() => onPress(event)} activeOpacity={0.92}>
-      <Image source={{ uri: event.cover_image }} style={styles.invitImage} resizeMode="cover" />
+    <TouchableOpacity style={styles.invitCard} onPress={() => onPress(event)} activeOpacity={0.92}
+      accessibilityRole="button" accessibilityLabel={`Invitation : ${event.title}, ${event.date_formatted || ''}`}>
+      <SafeImage uri={event.cover_image} style={styles.invitImage} />
       <View style={styles.invitBody}>
         <View style={styles.invitHeaderRow}>
           <View style={styles.invitBadge}>
-            <Text style={styles.invitBadgeText}>EXCLUSIF</Text>
+            <Text style={styles.invitBadgeText}>INVITATION</Text>
           </View>
           <Text style={styles.invitDateText}>{event.date_formatted}</Text>
         </View>
@@ -171,7 +175,7 @@ const InvitationCard = React.memo(({ event, onPress, isLoggedIn, onLoginPress })
 
 const CardFeatured = React.memo(({ event, onPress }) => (
   <TouchableOpacity style={styles.cardFeatured} onPress={() => onPress(event)} activeOpacity={0.92}>
-    <Image source={{ uri: event.cover_image }} style={styles.cardFeaturedImg} resizeMode="cover" />
+    <SafeImage uri={event.cover_image} style={styles.cardFeaturedImg} />
     <View style={styles.cardFeaturedBadge}>
       <Text style={styles.cardFeaturedBadgeTxt}>{(event.event_type_display || event.event_type)?.toUpperCase()}</Text>
     </View>
@@ -190,7 +194,7 @@ const CardFeatured = React.memo(({ event, onPress }) => (
 
 const CardSmall = React.memo(({ event, onPress }) => (
   <TouchableOpacity style={styles.cardSmall} onPress={() => onPress(event)} activeOpacity={0.88}>
-    <Image source={{ uri: event.cover_image }} style={styles.cardSmallImg} resizeMode="cover" />
+    <SafeImage uri={event.cover_image} style={styles.cardSmallImg} />
     <View style={styles.cardSmallBody}>
       <Text style={styles.cardSmallDate}>{event.date_formatted}</Text>
       <Text style={styles.cardSmallTitle} numberOfLines={2}>{event.title}</Text>
@@ -202,35 +206,13 @@ const CardSmall = React.memo(({ event, onPress }) => (
 ));
 
 const CardStandard = React.memo(({ event, onPress }) => {
-  const [saved, setSaved] = useState(false);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handleBookmark = () => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.85, duration: 80, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
-    ]).start();
-    setSaved(!saved);
-  };
-
   return (
     <TouchableOpacity style={styles.cardStd} onPress={() => onPress(event)} activeOpacity={0.92}>
       <View style={styles.cardStdImgBox}>
-        <Image source={{ uri: event.cover_image }} style={styles.cardStdImg} resizeMode="cover" />
+        <SafeImage uri={event.cover_image} style={styles.cardStdImg} />
         <View style={styles.dateBadge}>
           <Text style={styles.dateBadgeTxt}>{event.date_formatted}</Text>
         </View>
-        <Animated.View style={[styles.bookmarkBtn, { transform: [{ scale: scaleAnim }] }]}>
-          <TouchableOpacity onPress={handleBookmark} activeOpacity={0.8}>
-            <View style={styles.bookmarkInner}>
-              <Ionicons
-                name={saved ? 'bookmark' : 'bookmark-outline'}
-                size={15}
-                color={saved ? C.orange : C.textMut}
-              />
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
       </View>
       <View style={styles.cardStdBody}>
         <Text style={styles.cardStdTitle} numberOfLines={1}>{event.title}</Text>
@@ -287,10 +269,21 @@ export default function HomeScreen({ navigation }) {
     }
   }, [activeFilter]);
 
+  // Invitations en attente de réponse (connecté) : affichées en tête du fil
+  const [myInvitations, setMyInvitations] = useState([]);
+  const loadInvitations = useCallback(async () => {
+    if (!isLoggedIn) { setMyInvitations([]); return; }
+    try {
+      const data = await eventService.fetchMyInvitations();
+      setMyInvitations((data.invitations || []).filter((i) => ['sent', 'opened'].includes(i.status) && i.event));
+    } catch { /* le fil reste utilisable */ }
+  }, [isLoggedIn]);
+
   useFocusEffect(
     useCallback(() => {
       fetchEvents(searchText, activeFilter);
-    }, [activeFilter])
+      loadInvitations();
+    }, [activeFilter, loadInvitations])
   );
 
   // ── Recherche avec debounce ──────────────────────────────────
@@ -337,6 +330,7 @@ export default function HomeScreen({ navigation }) {
   const onRefresh = () => {
     setRefreshing(true);
     fetchEvents(searchText, activeFilter);
+    loadInvitations();
   };
 
   const goToDetail = (event) => navigation?.navigate('EventDetail', { event });
@@ -512,18 +506,20 @@ export default function HomeScreen({ navigation }) {
           {/* Contenu principal */}
           {!loading && !error && (
             <>
-              {/* Invitations */}
-              {!searchActive && !searchText && (
+              {/* Invitations : vraies invitations en attente (connecté), sinon carte de connexion */}
+              {!searchActive && !searchText && (!isLoggedIn || myInvitations.length > 0) && (
                 <View style={styles.sec}>
                   <View style={styles.secRow}>
                     <Text style={styles.secTitle}>Vos Invitations</Text>
+                    {myInvitations.length > 1 ? (
+                      <View style={styles.countBadge}><Text style={styles.countText}>{myInvitations.length}</Text></View>
+                    ) : null}
                   </View>
-                  <InvitationCard
-                    event={featuredEvent}
-                    onPress={goToDetail}
-                    isLoggedIn={isLoggedIn}
-                    onLoginPress={goToLogin}
-                  />
+                  {isLoggedIn
+                    ? myInvitations.slice(0, 3).map((inv) => (
+                      <InvitationCard key={inv.id} event={inv.event} onPress={goToDetail} isLoggedIn />
+                    ))
+                    : <InvitationCard isLoggedIn={false} onLoginPress={goToLogin} />}
                 </View>
               )}
 
@@ -577,8 +573,8 @@ export default function HomeScreen({ navigation }) {
                 )}
               </View>
 
-              {/* Bannière */}
-              {!searchText && (
+              {/* Bannière : sur le site web, pour les visiteurs (dans l'application, elle n'a pas de sens) */}
+              {!searchText && Platform.OS === 'web' && !isLoggedIn && (
                 <View style={styles.dlBanner}>
                   <View style={styles.dlLeft}>
                     <View style={styles.dlIconBox}>
@@ -589,7 +585,8 @@ export default function HomeScreen({ navigation }) {
                       <Text style={styles.dlSub}>Télécharger l'application</Text>
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.dlBtn} activeOpacity={0.85}>
+                  <TouchableOpacity style={styles.dlBtn} activeOpacity={0.85} accessibilityRole="link"
+                    onPress={() => Linking.openURL(STORE_URL).catch(() => {})}>
                     <Text style={styles.dlBtnTxt}>Installer</Text>
                   </TouchableOpacity>
                 </View>
@@ -612,7 +609,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: C.white,
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
   header: {
     flexDirection: 'row',
