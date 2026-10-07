@@ -80,6 +80,7 @@ import EventStatsScreen from './screens/EventStatsScreen';
 import EventFinanceScreen from './screens/EventFinanceScreen';
 import MemoriesScreen from './screens/MemoriesScreen';
 import BroadcastScreen from './screens/BroadcastScreen';
+import BasketScreen from './screens/BasketScreen';
 import ScanTicketsScreen from './screens/ScanTicketsScreen';
 import * as Application from 'expo-application';
 import { KEYS, getItem, setItem } from './services/storage';
@@ -234,6 +235,7 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="EventStats"         component={EventStatsScreen}     options={{ title: 'Statistiques' }} />
       <DashStack.Screen name="EventFinance"       component={EventFinanceScreen}   options={{ title: 'Finances' }} />
       <DashStack.Screen name="Memories"           component={MemoriesScreen}       options={{ title: 'Souvenirs' }} />
+      <DashStack.Screen name="Basket"             component={BasketScreen}         options={{ title: 'Le panier' }} />
       <DashStack.Screen name="Broadcast"          component={BroadcastScreen}      options={{ title: 'Message à tous' }} />
       <DashStack.Screen name="ScanTickets"        component={ScanTicketsScreen}    options={{ title: 'Contrôle des entrées' }} />
       <DashStack.Screen name="EditEvent"          component={CreateEventScreen}    options={{ title: "Modifier l'événement" }} />
@@ -257,6 +259,7 @@ function DiscoverStackNavigator() {
     <DiscoverStack.Navigator screenOptions={stackOptions}>
       <DiscoverStack.Screen name="DiscoverHome"  component={HomeScreen}        options={{ title: 'Découvrir' }} />
       <DiscoverStack.Screen name="EventDetail"   component={EventDetailScreen} options={{ title: 'Événement' }} />
+      <DiscoverStack.Screen name="Basket"        component={BasketScreen}      options={{ title: 'Le panier' }} />
       <DiscoverStack.Screen name="Memories"      component={MemoriesScreen}    options={{ title: 'Souvenirs' }} />
       <DiscoverStack.Screen name="Gift"          component={GiftScreen}        options={{ title: 'Offrir' }} />
       <DiscoverStack.Screen name="MiniSiteView"  component={MiniSiteViewScreen} options={{ title: 'Mini-site' }} />
@@ -276,6 +279,7 @@ function TicketsStackNavigator() {
       <TicketsStack.Screen name="Tickets"        component={TicketsScreen} options={{ title: 'Mes invitations' }} />
       <TicketsStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Paiement' }} />
       <TicketsStack.Screen name="InvitationLanding" component={InvitationLandingScreen} options={{ title: 'Invitation' }} />
+      <TicketsStack.Screen name="Basket"         component={BasketScreen} options={{ title: 'Le panier' }} />
       <TicketsStack.Screen name="Memories"       component={MemoriesScreen} options={{ title: 'Souvenirs' }} />
       <TicketsStack.Screen name="Chat"           component={ChatScreen} options={{ title: 'Conversation' }} />
       <TicketsStack.Screen name="VerifyPhone"    component={VerifyPhoneScreen} options={{ title: 'Mon numéro' }} />
@@ -294,6 +298,7 @@ function ProfileStackNavigator() {
       <ProfileStack.Screen name="Notifications"        component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <ProfileStack.Screen name="Friends"              component={FriendsScreen} options={{ title: 'Mes amis' }} />
       <ProfileStack.Screen name="VerifyPhone"          component={VerifyPhoneScreen} options={{ title: 'Mon numéro' }} />
+      <ProfileStack.Screen name="Basket"               component={BasketScreen} options={{ title: 'Le panier' }} />
       <ProfileStack.Screen name="Chat"                 component={ChatScreen} options={{ title: 'Conversation' }} />
       <ProfileStack.Screen name="Payouts"              component={PayoutsScreen} options={{ title: 'Paiements & virements' }} />
       <ProfileStack.Screen name="Plans"                component={PlansScreen}                options={{ title: 'Choisir un plan' }} />

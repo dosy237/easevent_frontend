@@ -71,6 +71,14 @@ export function openNotification(navigation, n) {
       return eventId && navigation.navigate('TabTickets', {
         screen: 'Memories', initial: false, params: { event: n.event || { id: eventId }, tab: 'photos' },
       });
+    case 'basket_open':                           // invité : un panier est ouvert
+      return eventId && navigation.navigate('TabTickets', {
+        screen: 'Basket', initial: false, params: { event: n.event || { id: eventId } },
+      });
+    case 'basket_contribution':                   // organisateur : quelqu'un a ajouté au panier
+      return eventId && navigation.navigate('TabDashboard', {
+        screen: 'Basket', initial: false, params: { event: n.event || { id: eventId } },
+      });
     case 'payouts_ready':
       return navigation.navigate('TabProfile', { screen: 'Payouts', initial: false });
     case 'subscription':

@@ -408,6 +408,13 @@ export default function ChatScreen({ navigation, route }) {
           </View>
         ) : null}
         <Text style={[styles.body, mine && { color: C.white }]} selectable>{m.body}</Text>
+        {m.basket_id && ev ? (
+          <Pressable style={[styles.basketBtn, mine && { backgroundColor: C.white }]} accessibilityRole="button"
+            accessibilityLabel="Ouvrir le panier" onPress={() => navigation.navigate('Basket', { event: { id: ev.id, title: ev.title } })}>
+            <Ionicons name="basket-outline" size={16} color={C.green} />
+            <Text style={styles.basketBtnTxt}>Ouvrir le panier</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.meta}>
           <Text style={[styles.metaTxt, mine && { color: 'rgba(255,255,255,0.75)' }]}>{m.pending ? 'Envoi…' : hhmm(d)}</Text>
           {mine && !m.pending && !m.failed && (
@@ -542,6 +549,8 @@ export default function ChatScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
+  basketBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8, minHeight: 40, borderRadius: 10, backgroundColor: C.greenLight },
+  basketBtnTxt: { fontWeight: '800', color: C.green },
   assistantBubble: { backgroundColor: C.greenLight, borderWidth: 1, borderColor: C.greenSoft },
   assistantTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   assistantTagTxt: { fontSize: 11, fontWeight: '800', color: C.green, letterSpacing: 0.3 },

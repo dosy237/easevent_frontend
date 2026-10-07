@@ -502,6 +502,8 @@ const handlePublish = async () => {
                       subtitle="Posez jusqu'à 5 questions à vos invités" onPress={() => navigation.navigate('RsvpQuestions', { event })} />
                     <ActionRow icon="megaphone-outline" title="Message à tous les invités"
                       subtitle="Une information importante, en une fois" onPress={() => navigation.navigate('Broadcast', { event })} />
+                    <ActionRow icon="basket-outline" title="Le panier"
+                      subtitle="Cagnotte : objets et participations, avec le bilan" onPress={() => navigation.navigate('Basket', { event })} />
                     {/* Réponses automatiques aux questions (lieu, horaires, prix…) dans « Messages des invités » */}
                     <View style={styles.assistantRow}>
                       <View style={styles.assistantIcon}><Ionicons name="sparkles-outline" size={20} color={C.green} /></View>

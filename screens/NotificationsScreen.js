@@ -59,6 +59,8 @@ const LOOK = {
   event_broadcast:     { icon: 'megaphone-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Lire' },
   event_comment:       { icon: 'chatbox-ellipses-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
   memories_added:      { icon: 'images-outline', bg: C.greenLight, fg: C.green, cta: 'Voir les photos' },
+  basket_open:         { icon: 'basket-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Voir le panier' },
+  basket_contribution: { icon: 'basket-outline', bg: C.greenLight, fg: C.green, cta: 'Voir le panier' },
   daily_summary:       { icon: 'people-outline', bg: C.greenLight, fg: C.green },
   reminder:            { icon: 'time-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: 'Voir' },
   message_received:    { icon: 'chatbubble-outline', bg: C.orangeL, fg: C.orangeDark },

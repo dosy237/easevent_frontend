@@ -7,7 +7,8 @@
  * ════════════════════════════════════════════════════════════════
  */
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -78,6 +79,17 @@ export default function BroadcastScreen({ route, navigation }) {
               <PrimaryButton label="Envoyer à tous" icon="megaphone-outline" onPress={send} loading={sending}
                 disabled={!message.trim() || !info.recipients} />
 
+              {/* Le panier : chacun y ajoute un objet ou une participation */}
+              <Pressable style={s.basket} onPress={() => navigation.navigate('Basket', { event })} accessibilityRole="button"
+                accessibilityLabel="Lancer un panier : chacun ajoute un objet ou une participation">
+                <Text style={s.basketEmoji}>🧺</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.basketTitle}>Lancer un panier</Text>
+                  <Text style={s.basketSub}>Une cagnotte réinventée : chacun ajoute ce qu'il apporte ou une participation, avec un bilan pour tous.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={C.textMut} />
+              </Pressable>
+
               {info.history.length ? (
                 <>
                   <Text style={s.section}>Déjà envoyés</Text>
@@ -109,6 +121,10 @@ const s = StyleSheet.create({
   hint: { fontSize: 13, color: C.textSub, lineHeight: 19, marginBottom: 12 },
   input: { minHeight: 130, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 12, backgroundColor: C.white, color: C.text, textAlignVertical: 'top', fontSize: 15 },
   count: { alignSelf: 'flex-end', fontSize: 11, color: C.textMut, marginVertical: 6 },
+  basket: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.white, borderRadius: 16, borderWidth: 1.5, borderColor: C.green, borderStyle: 'dashed', padding: 14, marginTop: 18 },
+  basketEmoji: { fontSize: 28 },
+  basketTitle: { fontSize: 15, fontWeight: '800', color: C.text },
+  basketSub: { fontSize: 12, color: C.textSub, marginTop: 2, lineHeight: 17 },
   section: { fontSize: 12, fontWeight: '800', color: C.textMut, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 24, marginBottom: 8 },
   card: { backgroundColor: C.white, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 10 },
   body: { fontSize: 14, color: C.text, lineHeight: 20 },

@@ -49,6 +49,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../services/apiClient';
 import { useAuth } from '../context/AuthContext';
 import ticketService from '../services/ticketService';
+import basketService from '../services/basketService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
 import { seedLikes } from '../utils/likes';
@@ -216,6 +217,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [viewer, setViewer]     = useState(null);     // photo affichée en plein écran
   const [sharing, setSharing]   = useState(false);    // feuille de partage
   const [chooser, setChooser]   = useState(false);    // « Pour moi » ou « Pour un proche »
+  const [basket, setBasket]     = useState(null);     // panier en cours (invités et équipe)
 
   // « Je participe » touché dans le mini-site : même parcours que le bouton de cette page
   const participateRef = useRef(null);
@@ -225,6 +227,14 @@ export default function EventDetailScreen({ route, navigation }) {
     navigation.setParams({ participate: undefined });
     participateRef.current();
   }, [participateToken, fullEvent?.title, loading]);
+
+  // Panier en cours : visible des invités et de l'équipe (sinon 404, ignoré)
+  useEffect(() => {
+    if (!isAuthenticated || !fullEvent?.id) return undefined;
+    let on = true;
+    basketService.ofEvent(fullEvent.id).then((d) => { if (on) setBasket(d.basket); }).catch(() => {});
+    return () => { on = false; };
+  }, [isAuthenticated, fullEvent?.id]);
 
   // Animations d'entrée du contenu
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -585,6 +595,14 @@ export default function EventDetailScreen({ route, navigation }) {
               <>
                 <View style={styles.divider} />
                 <InfoRow icon="gift-outline" label="Faire plaisir" value={`Offrir ${pw.a} à un proche`} onPress={openGift} />
+              </>
+            ) : null}
+            {basket && basket.status === 'open' ? (
+              <>
+                <View style={styles.divider} />
+                <InfoRow icon="basket-outline" label="Le panier"
+                  value={`${basket.title} · ${basket.contributions.length} contribution${basket.contributions.length > 1 ? 's' : ''}`}
+                  onPress={() => navigation.navigate('Basket', { event: fullEvent })} />
               </>
             ) : null}
             {/* Espace souvenirs : photos de l'équipe et commentaires, dès le début de l'événement */}
