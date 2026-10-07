@@ -1260,6 +1260,7 @@ export default function CreateEventScreen({ navigation, route }) {
             quota={quota}
             onPlans={() => openPlans(navigation, 'Le plan Gratuit permet 1 événement par mois. Les plans Standard et Pro sont illimités.')}
             onMyEvents={() => navigation?.navigate('TabDashboard', { screen: 'Dashboard' })}
+            onDiscover={() => navigation?.navigate('TabDiscover')}
           />
         ) : (<>
         {/* Barre de progression */}

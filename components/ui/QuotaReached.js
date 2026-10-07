@@ -11,7 +11,7 @@ import { C } from '../../constants/theme';
 import { PrimaryButton, SecondaryButton } from './Buttons';
 import { frenchDay } from '../../utils/plans';
 
-export default function QuotaReached({ quota, onPlans, onMyEvents }) {
+export default function QuotaReached({ quota, onPlans, onMyEvents, onDiscover }) {
   const n = quota?.limit ?? 1;
   return (
     <View style={styles.wrap}>
@@ -23,12 +23,14 @@ export default function QuotaReached({ quota, onPlans, onMyEvents }) {
       </Text>
       <Text style={styles.body}>
         Le plan Gratuit permet {n} événement{n > 1 ? 's' : ''} par mois. Avec les plans Standard et Pro, créez
-        autant d'événements que vous voulez, avec plus d'invités.
+        autant d'événements que vous voulez, avec plus d'invités. En attendant, vous pouvez participer
+        librement à tous les événements publics.
       </Text>
       {quota?.resets_on ? (
         <Text style={styles.reset}>Une nouvelle place se libère le {frenchDay(quota.resets_on)}.</Text>
       ) : null}
       <PrimaryButton label="Passer au plan Standard" icon="sparkles-outline" onPress={onPlans} style={styles.btn} />
+      <SecondaryButton label="Découvrir les événements publics" onPress={onDiscover} style={styles.btn} />
       <SecondaryButton label="Voir mes événements" onPress={onMyEvents} style={styles.btn} />
     </View>
   );
