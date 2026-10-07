@@ -91,6 +91,9 @@ const eventService = {
   share: async (eventId, userIds, message = '') =>
     (await apiClient.post(`/api/events/${eventId}/share/`, { user_ids: userIds, message })).data,
 
+  // Signature d'envoi direct d'une vidéo à Cloudinary (45 s au plus)
+  videoSignature: async () => (await apiClient.post('/api/events/video/signature/')).data,
+
   // Événements restants ce mois-ci selon le plan : { limit, used, remaining, resets_on }
   fetchQuota: async () => (await apiClient.get('/api/events/quota/')).data,
 

@@ -16,9 +16,9 @@ import { showAlert } from '../utils/dialog';
 const FAQ = [
   { icon: 'calendar-outline', title: 'Créer et publier un événement', items: [
     ['Comment créer un événement ?', "Touchez « Créer » dans la barre du bas et suivez les 5 étapes (informations, date et lieu, photos, style, paramètres). L'événement est créé en brouillon : publiez-le pour pouvoir inviter."],
-    ['Public ou privé : quelle différence ?', "Un événement public apparaît dans Découvrir : tout le monde peut le voir et prendre un ticket. Un événement privé n'est visible que par vos invités. Vous pouvez changer à tout moment depuis la page de l'événement."],
+    ['Public ou privé : quelle différence ?', "Un événement public apparaît dans Découvrir : tout le monde peut le voir et prendre un billet. Un événement privé n'est visible que par vos invités. Vous pouvez changer à tout moment depuis la page de l'événement."],
     ['Puis-je modifier mon événement après l\'avoir publié ?', "Oui, avec le crayon en haut de la page de l'événement. Si la date, l'heure ou le lieu changent, vos participants sont prévenus automatiquement."],
-    ['Comment annuler un événement ?', "Page de l'événement › Supprimer l'événement. Les participants sont prévenus et les tickets payés sont remboursés automatiquement."],
+    ['Comment annuler un événement ?', "Page de l'événement › Supprimer l'événement. Les participants sont prévenus et les paiements sont remboursés automatiquement."],
   ] },
   { icon: 'person-add-outline', title: 'Inviter', items: [
     ['Comment inviter mes contacts ?', "Page de l'événement › Inviter des participants : choisissez parmi vos amis Easevent, vos contacts du téléphone, par email ou par SMS. Les personnes sans l'application reçoivent un lien vers leur invitation."],
@@ -26,10 +26,10 @@ const FAQ = [
     ['Comment savoir qui vient ?', "« Invités & réponses » sur la page de l'événement : confirmés, en attente, déclinés, et les réponses à vos questions RSVP. Vous recevez aussi une notification à chaque réponse."],
   ] },
   { icon: 'ticket-outline', title: 'Tickets et paiements', items: [
-    ['Où trouver mon ticket ?', "Onglet Tickets › Générés. Présentez le QR code à l'entrée. Vous pouvez aussi le télécharger en PDF ou l'ajouter à votre calendrier."],
+    ['Où trouver mon invitation ou mon billet ?', "Onglet Invitations › Générés. Présentez le QR code à l'entrée. Vous pouvez aussi le télécharger en PDF ou l'ajouter à votre calendrier."],
     ['Mon paiement est-il sécurisé ?', "Oui : le paiement se fait sur la page sécurisée de Stripe (carte, Apple Pay, Google Pay). Easevent ne voit jamais vos données bancaires."],
-    ['Comment vendre des tickets ?', "Profil › Paiements & virements : activez les paiements avec Stripe (identité et IBAN). L'argent des tickets est ensuite versé sur votre compte bancaire."],
-    ['Comment contrôler les tickets à l\'entrée ?', "Page de l'événement › Scanner les tickets : visez le QR code du participant. Un ticket ne peut entrer qu'une fois."],
+    ['Comment vendre des billets ?', "Profil › Paiements & virements : activez les paiements avec Stripe (identité et IBAN). L'argent des billets est ensuite versé sur votre compte bancaire."],
+    ['Comment contrôler les entrées ?', "Page de l'événement › Contrôler les entrées : visez le QR code du participant. Un même QR code ne peut entrer qu'une fois."],
     ['Je veux être remboursé', "Si l'organisateur annule l'événement, le remboursement est automatique. Sinon, contactez l'organisateur depuis la page de l'événement (bouton « Contacter »)."],
   ] },
   { icon: 'chatbubbles-outline', title: 'Messages et notifications', items: [

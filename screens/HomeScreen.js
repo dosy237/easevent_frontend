@@ -226,6 +226,12 @@ const CardStandard = React.memo(({ event, onPress, engage }) => {
         <View style={styles.dateBadge}>
           <Text style={styles.dateBadgeTxt}>{event.date_formatted}</Text>
         </View>
+        {event.video ? (
+          <View style={styles.videoBadge} accessible accessibilityLabel="Avec une vidéo de présentation">
+            <Ionicons name="play" size={11} color={C.white} />
+            <Text style={styles.videoBadgeTxt}>Vidéo</Text>
+          </View>
+        ) : null}
       </View>
       <View style={styles.cardStdBody}>
         <Text style={styles.cardStdTitle} numberOfLines={1}>{event.title}</Text>
@@ -875,6 +881,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardFeaturedTitle: { fontSize: 17, fontWeight: '800', color: C.text, flex: 1, letterSpacing: -0.2 },
+  videoBadge: { position: 'absolute', right: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  videoBadgeTxt: { color: C.white, fontSize: 11, fontWeight: '800' },
   engageRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 6 },
   shareBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   shareBtnLight: { backgroundColor: 'rgba(0,0,0,0.32)' },

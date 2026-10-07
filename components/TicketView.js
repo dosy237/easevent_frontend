@@ -24,6 +24,7 @@ import { showAlert } from '../utils/dialog';
 import { openDirections } from './maps/EventMap';
 import rsvpService from '../services/rsvpService';
 import { askRsvp } from '../utils/rsvp';
+import { passWord } from '../utils/wording';
 
 // Lien « Ajouter à Google Agenda » : fonctionne sur tous les appareils, sans permission
 const calendarUrl = (ticket) => {
@@ -36,7 +37,7 @@ const calendarUrl = (ticket) => {
     action: 'TEMPLATE',
     text: e.title || 'Événement Easevent',
     ...(e.start_date ? { dates: `${fmt(e.start_date)}/${fmt(e.end_date || e.start_date)}` } : {}),
-    details: `Ticket ${ticket.number} — Easevent`,
+    details: `${passWord(e).One} ${ticket.number} — Easevent`,
     location: e.is_online ? 'En ligne' : (e.location_address || ''),
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
@@ -83,7 +84,7 @@ export default function TicketView({ ticket, justPaid = false }) {
   };
 
   const shareTicket = () => Share.share({
-    message: `Mon ticket ${ticket.number} pour « ${e.title} » — ${formatDateLong(e.start_date)}`
+    message: `${passWord(e).My} ${ticket.number} pour « ${e.title} » — ${formatDateLong(e.start_date)}`
       + `${e.location_address ? ` · ${e.location_address}` : ''}. Présentez le QR code dans l'application Easevent.`,
   }).catch(() => {});
 
@@ -100,7 +101,7 @@ export default function TicketView({ ticket, justPaid = false }) {
       {justPaid && (
         <View style={styles.paidBanner} accessibilityRole="alert">
           <Ionicons name="checkmark-circle" size={16} color={C.green} />
-          <Text style={styles.paidBannerTxt}>Paiement reçu — votre ticket est généré.</Text>
+          <Text style={styles.paidBannerTxt}>{`Paiement reçu — ${passWord(e).your} est prêt${passWord(e).e}.`}</Text>
         </View>
       )}
 
@@ -146,7 +147,7 @@ export default function TicketView({ ticket, justPaid = false }) {
 
           <View style={styles.qrSection}>
             <Text style={styles.qrLabel}>Présentez ce QR code à l'entrée</Text>
-            <View style={styles.qrBox} accessible accessibilityRole="image" accessibilityLabel={`QR code du ticket ${ticket.number}`}>
+            <View style={styles.qrBox} accessible accessibilityRole="image" accessibilityLabel={`QR code ${passWord(e).of} ${ticket.number}`}>
               {ticket.qr_payload ? (
                 <QRCode value={ticket.qr_payload} size={168} color={C.text} backgroundColor={C.white} ecl="M" />
               ) : (
@@ -159,7 +160,7 @@ export default function TicketView({ ticket, justPaid = false }) {
           <View style={styles.warning}>
             <Ionicons name="information-circle-outline" size={14} color={C.textMut} />
             <Text style={styles.warningTxt}>
-              Ce ticket est personnel et non transférable. Valable uniquement pour {ticket.participant}.
+              {`${passWord(e).One} personnel${passWord(e).e}, non transférable. Valable uniquement pour ${ticket.participant}.`}
             </Text>
           </View>
         </View>
@@ -180,7 +181,7 @@ export default function TicketView({ ticket, justPaid = false }) {
           onPress={downloadPdf}
           disabled={downloading}
           accessibilityRole="button"
-          accessibilityLabel="Télécharger mon ticket en PDF"
+          accessibilityLabel={`Télécharger ${passWord(e).my} en PDF`}
           accessibilityState={{ busy: downloading }} aria-busy={downloading}
         >
           {downloading
@@ -189,6 +190,13 @@ export default function TicketView({ ticket, justPaid = false }) {
           <Text style={styles.actionTxt}>Télécharger</Text>
         </Pressable>
       </View>
+      {e.online_link ? (
+        <Pressable onPress={() => Linking.openURL(e.online_link).catch(() => {})} style={styles.routeBtn} accessibilityRole="button"
+          accessibilityHint="Ouvre le lien de connexion de l'événement en ligne">
+          <Ionicons name="videocam" size={16} color={C.white} />
+          <Text style={styles.routeTxt}>Rejoindre l'événement en ligne</Text>
+        </Pressable>
+      ) : null}
       {!e.is_online && e.location_address ? (
         <Pressable onPress={() => openDirections(e.map, e.location_address)} style={styles.routeBtn} accessibilityRole="button"
           accessibilityHint="Ouvre Google Maps avec le trajet depuis votre position">
@@ -205,7 +213,7 @@ export default function TicketView({ ticket, justPaid = false }) {
       ) : null}
       <Pressable onPress={shareTicket} accessibilityRole="button" style={styles.shareLink}>
         <Ionicons name="share-social-outline" size={14} color={C.green} />
-        <Text style={styles.shareLinkTxt}>Partager mon ticket</Text>
+        <Text style={styles.shareLinkTxt}>{`Partager ${passWord(e).my}`}</Text>
       </Pressable>
     </View>
   );

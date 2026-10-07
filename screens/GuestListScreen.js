@@ -39,7 +39,7 @@ const FILTERS = [
 
 const STATUS = {
   confirmed:   { label: 'Confirmé',         color: '#155C3C', bg: '#E8F5EE' },
-  to_validate: { label: 'Ticket à valider', color: '#155C3C', bg: '#F1F8F4' },
+  to_validate: { label: 'À valider', color: '#155C3C', bg: '#F1F8F4' },
   opened:      { label: 'Vu',               color: '#3B4BA8', bg: '#EEF1FD' },
   sent:        { label: 'En attente',       color: '#B4492E', bg: '#FFF0EB' },
   declined:    { label: 'Décliné',          color: '#C53030', bg: '#FFF5F5' },
@@ -51,7 +51,7 @@ const shortDate = (iso) => { const d = new Date(iso); return `${d.getDate()} ${M
 
 function subtitle(g) {
   if (g.source === 'ticket' && !g.checked_in_at) {
-    return g.display_status === 'confirmed' ? 'Ticket pris dans Découvrir' : 'Ticket en attente de validation';
+    return g.display_status === 'confirmed' ? 'Inscrit depuis Découvrir' : 'Inscription en attente de validation';
   }
   // L'état de l'envoi n'a d'intérêt que tant que l'invité n'a pas répondu
   const waiting = ['sent', 'opened'].includes(g.status);
@@ -332,7 +332,7 @@ export default function GuestListScreen({ navigation, route }) {
               disabled={!selected.user_id} onPress={() => message(selected)} />
             {selected.source !== 'ticket' && (
             <SheetAction icon="close-circle-outline" label="Révoquer l'invitation" color="#C0392B"
-              note="Son ticket est annulé (et remboursé s'il a payé). Il est prévenu." onPress={() => revoke(selected)} />
+              note="Son invitation ou son billet est annulé (et remboursé s'il a payé). Il est prévenu." onPress={() => revoke(selected)} />
             )}
             <Pressable onPress={() => setSelected(null)} style={styles.sheetClose} accessibilityRole="button">
               <Text style={styles.sheetCloseTxt}>Fermer</Text>

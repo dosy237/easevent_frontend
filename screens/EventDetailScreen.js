@@ -54,12 +54,14 @@ import { seedLikes } from '../utils/likes';
 import EventMap, { openInMaps } from '../components/maps/EventMap';
 import LikeButton from '../components/events/LikeButton';
 import ShareSheet from '../components/events/ShareSheet';
+import EventVideo from '../components/events/EventVideo';
 import { formatPrice } from '../utils/format';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { isRsvpCancel } from '../utils/rsvp';
 import SafeImage from '../components/ui/SafeImage';
 import ImageViewer from '../components/ui/ImageViewer';
 import { Bone, SkeletonGroup } from '../components/ui/Skeleton';
+import { passWord } from '../utils/wording';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -334,6 +336,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const myTicket  = fullEvent.my_ticket;
   const isOrganizer = !!user && fullEvent.organizer?.id === user.id;
   const soldOut   = fullEvent.spots_left === 0 && !myTicket;
+  const pw        = passWord(fullEvent);
 
   const openTicket = (ticketId) => navigation.navigate('TabTickets', {
     screen: 'Tickets', params: { tab: 'generated', openTicketId: ticketId },
@@ -366,11 +369,11 @@ export default function EventDetailScreen({ route, navigation }) {
   };
 
   const ticketLabel = isOrganizer ? 'Gérer mon événement'
-    : myTicket?.status === 'generated' ? 'Voir mon ticket'
-    : myTicket?.status === 'pending' ? 'Finaliser mon ticket'
+    : myTicket?.status === 'generated' ? `Voir ${pw.my}`
+    : myTicket?.status === 'pending' ? `Finaliser ${pw.my}`
     : soldOut ? 'Complet'
-    : isPaid ? 'Payer et générer mon ticket'
-    : 'Participer — ticket gratuit';
+    : isPaid ? `Payer et recevoir ${pw.my}`
+    : pw.kind === 'invitation' ? 'Je participe' : 'Participer — billet gratuit';
 
   participateRef.current = () => (isAuthenticated ? ticketAction() : handleParticipate());
 
@@ -545,7 +548,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon={fullEvent.is_online ? 'videocam-outline' : 'location-outline'}
               label="Lieu"
-              value={fullEvent.is_online ? (fullEvent.online_link ? 'En ligne · rejoindre' : 'En ligne (lien donné avec le ticket)') : fullEvent.location_address}
+              value={fullEvent.is_online ? (fullEvent.online_link ? 'En ligne · rejoindre' : `En ligne (lien donné avec ${pw.the})`) : fullEvent.location_address}
               onPress={fullEvent.is_online
                 ? (fullEvent.online_link ? () => Linking.openURL(fullEvent.online_link).catch(() => {}) : undefined)
                 : () => openInMaps(fullEvent.map, fullEvent.location_address)}
@@ -555,7 +558,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <View style={styles.divider} />
             <InfoRow
               icon="ticket-outline"
-              label="Prix du ticket"
+              label={`Prix ${pw.kind === 'invitation' ? "de l'invitation" : 'du billet'}`}
               value={`${isPaid ? priceTxt : '0,00 € · gratuit'}${fullEvent.spots_left != null ? ` · ${fullEvent.spots_left} place${fullEvent.spots_left > 1 ? 's' : ''} restante${fullEvent.spots_left > 1 ? 's' : ''}` : ''}`}
             />
             {fullEvent.dress_code ? (
@@ -591,6 +594,14 @@ export default function EventDetailScreen({ route, navigation }) {
               </View>
               <Ionicons name="chevron-forward" size={18} color={C.green} />
             </Pressable>
+          ) : null}
+
+          {/* ── Vidéo de présentation (entière, légende dessous) ── */}
+          {fullEvent.video ? (
+            <View style={styles.descCard}>
+              <Text style={styles.cardSectionTitle}>En vidéo</Text>
+              <EventVideo video={fullEvent.video} />
+            </View>
           ) : null}
 
           {/* ── Lieu sur la carte + itinéraire ─────────────── */}
@@ -713,7 +724,7 @@ export default function EventDetailScreen({ route, navigation }) {
       {isAuthenticated && (
         <View style={[styles.ticketBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View>
-            <Text style={styles.ticketBarLabel}>Ticket</Text>
+            <Text style={styles.ticketBarLabel}>{pw.One}</Text>
             <Text style={styles.ticketBarPrice}>{isPaid ? priceTxt : '0,00 €'}</Text>
           </View>
           <TouchableOpacity

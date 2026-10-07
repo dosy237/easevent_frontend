@@ -120,6 +120,13 @@
           "cameraPermission": "Easevent utilise l'appareil photo pour prendre une photo à envoyer.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": false
+        }
       ]
     ],
     "scheme": "easevent",

@@ -27,9 +27,9 @@ import { apiErrorMessage } from '../services/authService';
 const RESULT = {
   ok:          { color: C.green,   bg: C.greenLight, icon: 'checkmark-circle', title: 'Bienvenue !' },
   already:     { color: '#B45309', bg: '#FFFBEB',    icon: 'alert-circle',     title: 'Déjà entré' },
-  invalid:     { color: C.error,   bg: C.errorBg,    icon: 'close-circle',     title: 'Ticket invalide' },
+  invalid:     { color: C.error,   bg: C.errorBg,    icon: 'close-circle',     title: 'Code invalide' },
   wrong_event: { color: C.error,   bg: C.errorBg,    icon: 'close-circle',     title: 'Autre événement' },
-  not_valid:   { color: C.error,   bg: C.errorBg,    icon: 'close-circle',     title: 'Ticket non valable' },
+  not_valid:   { color: C.error,   bg: C.errorBg,    icon: 'close-circle',     title: 'Non valable' },
 };
 const SAME_CODE_PAUSE = 3000;
 
@@ -101,10 +101,10 @@ export default function ScanTicketsScreen({ navigation, route }) {
         <View style={styles.header}>
           <BackButton variant="square" onPress={() => navigation.goBack()} />
           <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={styles.headerTitle} accessibilityRole="header">Scanner les tickets</Text>
+            <Text style={styles.headerTitle} accessibilityRole="header">Contrôle des entrées</Text>
             <Text style={styles.headerSub} numberOfLines={1}>{event.title}</Text>
           </View>
-          <View style={styles.counter} accessibilityLabel={counts ? `${counts.checked_in} entrées sur ${counts.total} tickets` : 'Chargement'}>
+          <View style={styles.counter} accessibilityLabel={counts ? `${counts.checked_in} entrées sur ${counts.total} attendues` : 'Chargement'}>
             <Text style={styles.counterTxt}>{counts ? `${counts.checked_in}/${counts.total}` : '…'}</Text>
           </View>
         </View>
@@ -119,12 +119,12 @@ export default function ScanTicketsScreen({ navigation, route }) {
                 <View style={styles.cameraOff}>
                   <Ionicons name="qr-code-outline" size={46} color={C.green} />
                   {Platform.OS === 'web' ? (
-                    <Text style={styles.cameraTxt}>Le scanner fonctionne dans l'application mobile. Ici, saisissez le numéro du ticket.</Text>
+                    <Text style={styles.cameraTxt}>Le scanner fonctionne dans l'application mobile. Ici, saisissez le numéro inscrit sous le QR code.</Text>
                   ) : permission && !permission.granted && !permission.canAskAgain ? (
                     <Text style={styles.cameraTxt}>Autorisez l'appareil photo pour Easevent dans les réglages du téléphone.</Text>
                   ) : (
                     <>
-                      <Text style={styles.cameraTxt}>L'appareil photo sert à lire les QR codes des tickets.</Text>
+                      <Text style={styles.cameraTxt}>L'appareil photo sert à lire les QR codes des invitations et billets.</Text>
                       <PrimaryButton label="Activer l'appareil photo" icon="camera-outline" onPress={requestPermission} />
                     </>
                   )}
@@ -149,13 +149,13 @@ export default function ScanTicketsScreen({ navigation, route }) {
             ) : null}
             {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
 
-            <Text style={styles.label} nativeID="manualLabel">Saisir le numéro du ticket</Text>
+            <Text style={styles.label} nativeID="manualLabel">Saisir le numéro (sous le QR code)</Text>
             <View style={styles.manual}>
               <TextInput style={styles.input} value={code} onChangeText={setCode} placeholder="EV-XXXXXXXX"
                 placeholderTextColor={C.textFaint} autoCapitalize="characters" autoCorrect={false}
-                accessibilityLabel="Numéro du ticket" onSubmitEditing={() => check(code)} returnKeyType="done" />
+                accessibilityLabel="Numéro de l'invitation ou du billet" onSubmitEditing={() => check(code)} returnKeyType="done" />
               <Pressable onPress={() => check(code)} disabled={!code.trim() || busy} style={[styles.checkBtn, (!code.trim() || busy) && { opacity: 0.5 }]}
-                accessibilityRole="button" accessibilityLabel="Vérifier le ticket">
+                accessibilityRole="button" accessibilityLabel="Vérifier le code">
                 <Ionicons name="checkmark" size={22} color={C.white} />
               </Pressable>
             </View>

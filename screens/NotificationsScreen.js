@@ -51,12 +51,12 @@ const LOADING = ['Nous relevons votre courrier…', 'On trie vos nouvelles…', 
 const LOOK = {
   invitation_received: { icon: 'mail-open-outline', bg: C.greenLight, fg: C.green },
   ticket_to_validate:  { icon: 'ticket-outline', bg: C.green, fg: C.white, cta: 'Valider mon ticket' },
-  ticket_generated:    { icon: 'qr-code-outline', bg: C.greenLight, fg: C.green, cta: 'Voir mon ticket' },
+  ticket_generated:    { icon: 'qr-code-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
   daily_summary:       { icon: 'people-outline', bg: C.greenLight, fg: C.green },
-  reminder:            { icon: 'time-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: 'Voir mon ticket' },
+  reminder:            { icon: 'time-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: 'Voir' },
   message_received:    { icon: 'chatbubble-outline', bg: C.orangeL, fg: C.orangeDark },
   payment_failed:      { icon: 'card-outline', bg: C.errorBg, fg: C.errorText, cta: 'Réessayer le paiement' },
-  payment_succeeded:   { icon: 'card-outline', bg: C.greenLight, fg: C.green, cta: 'Voir mon ticket' },
+  payment_succeeded:   { icon: 'card-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
   payment_refunded:    { icon: 'arrow-undo-outline', bg: '#F4F4F4', fg: C.text },
   guest_response:      { icon: 'people-circle-outline', bg: C.greenLight, fg: C.green, cta: 'Voir les réponses' },
   event_full:          { icon: 'trophy-outline', bg: '#FFF6E0', fg: '#7A4F00' },
@@ -172,7 +172,7 @@ export default function NotificationsScreen({ navigation }) {
       await markRead(n);
       refreshBadges({ force: true });
       if (status === 'confirmed') {
-        showAlert('Invitation acceptée', 'Votre ticket vous attend dans Mes tickets : validez-le pour le générer.', [
+        showAlert('Invitation acceptée', 'Elle vous attend dans Mes invitations : validez-la pour recevoir votre QR code.', [
           { text: 'Plus tard', style: 'cancel' },
           { text: 'Voir mon ticket', onPress: () => navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } }) },
         ]);
@@ -321,7 +321,7 @@ export default function NotificationsScreen({ navigation }) {
               <View style={styles.empty}>
                 <View style={styles.emptyIcon}><Ionicons name="notifications-off-outline" size={30} color={C.green} /></View>
                 <Text style={styles.emptyTitle}>Rien de neuf pour le moment</Text>
-                <Text style={styles.emptyTxt}>Invitations, tickets et rappels de vos événements apparaîtront ici.</Text>
+                <Text style={styles.emptyTxt}>Invitations, billets et rappels de vos événements apparaîtront ici.</Text>
               </View>
             ) : null}
             ListFooterComponent={hasMore ? (
@@ -362,8 +362,8 @@ function PreferencesSheet({ visible, onClose }) {
   const rows = [
     ['push', 'Notifications sur le téléphone', 'Recevoir les alertes même quand l\'application est fermée.'],
     ['messages', 'Nouveaux messages', 'Une alerte à chaque message reçu.'],
-    ['guest_responses', 'Réponses de mes invités (organisateur)', 'Quand un invité accepte, décline ou prend un ticket.'],
-    ['reminders', 'Rappels avant mes événements', 'J-7, la veille et le jour J pour vos tickets.'],
+    ['guest_responses', 'Réponses de mes invités (organisateur)', 'Quand un invité accepte, décline ou prend son billet.'],
+    ['reminders', 'Rappels avant mes événements', 'J-7, la veille et le jour J pour vos invitations et billets.'],
     ['daily_summary', 'Bilan du jour (organisateur)', 'Le nombre de nouvelles confirmations de vos événements.'],
   ];
 
@@ -383,7 +383,7 @@ function PreferencesSheet({ visible, onClose }) {
               trackColor={{ true: C.green, false: C.border }} thumbColor={C.white} />
           </View>
         ))}
-        <Text style={styles.prefNote}>Les invitations, tickets et paiements vous sont toujours signalés.</Text>
+        <Text style={styles.prefNote}>Les invitations, billets et paiements vous sont toujours signalés.</Text>
         {error ? <Text style={styles.errorTxt} accessibilityRole="alert">{error}</Text> : null}
         <Pressable onPress={onClose} style={styles.sheetClose} accessibilityRole="button">
           <Text style={styles.sheetCloseTxt}>Fermer</Text>

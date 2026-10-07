@@ -240,9 +240,9 @@ const handlePublish = async () => {
     showAlert(
       toPrivate ? 'Passer en privé ?' : 'Passer en public ?',
       toPrivate
-        ? "L'événement n'apparaîtra plus dans Découvrir. Seuls vos invités et les personnes qui ont déjà un ticket pourront le voir."
+        ? "L'événement n'apparaîtra plus dans Découvrir. Seuls vos invités et les personnes déjà inscrites pourront le voir."
         : (event.status === 'published'
-          ? "L'événement apparaîtra dans Découvrir : tout le monde pourra le voir et prendre un ticket."
+          ? "L'événement apparaîtra dans Découvrir : tout le monde pourra le voir et s'inscrire."
           : "Une fois publié, l'événement apparaîtra dans Découvrir et tout le monde pourra le voir."),
       [
         { text: 'Annuler', style: 'cancel' },
@@ -270,7 +270,7 @@ const handlePublish = async () => {
     showAlert(
       'Supprimer cet événement',
       n
-        ? `« ${event.title} » sera annulé. ${n} participant${n > 1 ? 's' : ''} ${n > 1 ? 'seront prévenus' : 'sera prévenu'} et les tickets payés seront remboursés automatiquement. Cette action est irréversible.`
+        ? `« ${event.title} » sera annulé. ${n} participant${n > 1 ? 's' : ''} ${n > 1 ? 'seront prévenus' : 'sera prévenu'} et les paiements seront remboursés automatiquement. Cette action est irréversible.`
         : `Voulez-vous vraiment supprimer « ${event.title} » ? Cette action est irréversible.`,
       [
         { text: 'Annuler', style: 'cancel' },
@@ -490,7 +490,7 @@ const handlePublish = async () => {
                       onPress={() => goGuests('all')} />
                     <ActionRow icon="chatbubbles-outline" title="Messages des invités"
                       subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id, eventTitle: event.title })} />
-                    <ActionRow icon="qr-code-outline" title="Scanner les tickets"
+                    <ActionRow icon="qr-code-outline" title="Contrôler les entrées"
                       subtitle="Contrôle à l'entrée avec l'appareil photo" onPress={() => navigation.navigate('ScanTickets', { event })} />
                     <ActionRow icon="help-circle-outline" title="Questions RSVP" last
                       subtitle="Posez jusqu'à 5 questions à vos invités" onPress={() => navigation.navigate('RsvpQuestions', { event })} />
@@ -581,7 +581,7 @@ const handlePublish = async () => {
                       { icon: 'calendar-outline',  label: 'Début',       value: formatDate(event.start_date) },
                       { icon: 'calendar-outline',  label: 'Fin',         value: formatDate(event.end_date) },
                       { icon: 'location-outline',  label: 'Lieu',        value: event.is_online ? 'En ligne' : (event.location_address || '—') },
-                      { icon: 'pricetag-outline',  label: 'Prix du ticket', value: formatPriceLabel(event) },
+                      { icon: 'pricetag-outline',  label: 'Prix', value: formatPriceLabel(event) },
                       { icon: 'shirt-outline',     label: 'Dress code',  value: event.dress_code || '—' },
                       { icon: 'eye-outline',       label: 'Visibilité',  value: event.visibility === 'public' ? 'Public' : 'Privé' },
                       { icon: 'color-palette-outline', label: 'Ambiance', value: event.ambiance || '—' },

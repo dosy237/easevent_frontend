@@ -23,7 +23,7 @@ export function calendarUrl(event) {
 }
 
 export function buildActions({ event, onParticipate, onContact, onViewImage, ctaLabel, preview }) {
-  const previewNotice = () => showAlert('Aperçu', 'Vos invités verront ici le bouton pour participer et obtenir leur ticket.');
+  const previewNotice = () => showAlert('Aperçu', 'Vos invités verront ici le bouton pour participer et recevoir leur invitation ou leur billet.');
   return {
     participate: preview ? previewNotice : onParticipate,
     map: () => openInMaps(event.map, event.location_address),

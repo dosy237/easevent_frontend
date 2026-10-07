@@ -37,6 +37,7 @@ import { useTicketBadge } from '../context/TicketBadgeContext';
 import { useAuth } from '../context/AuthContext';
 import { isRsvpCancel } from '../utils/rsvp';
 import SafeImage from '../components/ui/SafeImage';
+import { passWord } from '../utils/wording';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -59,7 +60,7 @@ const C = {
 };
 
 const LOADING_MESSAGES = [
-  'Nous rassemblons vos tickets…',
+  'Nous rassemblons vos invitations et billets…',
   'On vérifie vos invitations…',
   'Encore un instant…',
 ];
@@ -71,7 +72,7 @@ const TicketModal = ({ ticket, justPaid, onClose }) => (
   <Modal visible={!!ticket} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
     <View style={ticketStyles.root}>
       <View style={ticketStyles.header}>
-        <Text style={ticketStyles.headerTitle} accessibilityRole="header">Mon Ticket</Text>
+        <Text style={ticketStyles.headerTitle} accessibilityRole="header">{ticket ? passWord(ticket.event).My : ''}</Text>
         <TouchableOpacity onPress={onClose} style={ticketStyles.closeBtn} accessibilityRole="button" accessibilityLabel="Fermer">
           <Ionicons name="close" size={22} color={C.text} />
         </TouchableOpacity>
@@ -196,7 +197,7 @@ const PendingTicketCard = ({ ticket, onValidate, onPay, onCancel, onOpenEvent })
           onPress={() => onCancel(ticket)}
           disabled={busy || processing}
           accessibilityRole="button"
-          accessibilityLabel={`Annuler le ticket pour ${e.title}`}
+          accessibilityLabel={`Annuler ${passWord(e).my} pour ${e.title}`}
         >
           <Text style={[styles.tCancelTxt, processing && { color: C.textMut }]}>Annuler</Text>
         </TouchableOpacity>
@@ -205,7 +206,7 @@ const PendingTicketCard = ({ ticket, onValidate, onPay, onCancel, onOpenEvent })
             {busy ? <ActivityIndicator size="small" color={C.white} /> : (
               <>
                 <Ionicons name="checkmark" size={16} color={C.white} />
-                <Text style={styles.tMainTxt}>Valider mon ticket</Text>
+                <Text style={styles.tMainTxt}>{`Valider ${passWord(e).my}`}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -254,9 +255,9 @@ const GeneratedTicketCard = ({ ticket, onOpen }) => {
           </View>
         ) : null}
         <TouchableOpacity style={styles.gBtn} onPress={() => onOpen(ticket)} accessibilityRole="button"
-          accessibilityLabel={`Voir mon ticket pour ${e.title}`}>
+          accessibilityLabel={`Voir ${passWord(e).my} pour ${e.title}`}>
           <Ionicons name="qr-code-outline" size={14} color={C.white} />
-          <Text style={styles.gBtnTxt}>Voir mon ticket</Text>
+          <Text style={styles.gBtnTxt}>{`Voir ${passWord(e).my}`}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -304,7 +305,7 @@ export default function TicketsScreen({ navigation, route }) {
       setInvitations(inv.invitations || []);
       setLoadError('');
     } catch (err) {
-      setLoadError(apiErrorMessage(err, 'Impossible de charger vos tickets.'));
+      setLoadError(apiErrorMessage(err, 'Impossible de charger vos invitations et billets.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -359,12 +360,12 @@ export default function TicketsScreen({ navigation, route }) {
 
   const handleCancel = (ticket) => {
     showAlert(
-      'Annuler ce ticket ?',
-      `Votre ticket pour « ${ticket.event?.title} » sera archivé${ticket.invitation_id ? ' et l\'invitation déclinée' : ''}.`,
+      `Annuler ${passWord(ticket.event).my} ?`,
+      `${passWord(ticket.event).your.charAt(0).toUpperCase()}${passWord(ticket.event).your.slice(1)} pour « ${ticket.event?.title} » sera archivé${passWord(ticket.event).e}${ticket.invitation_id ? ' et l\'invitation déclinée' : ''}.`,
       [
         { text: 'Garder', style: 'cancel' },
         {
-          text: 'Annuler le ticket', style: 'destructive',
+          text: `Annuler ${passWord(ticket.event).the}`, style: 'destructive',
           onPress: async () => {
             try { await ticketService.cancel(ticket.id); await load(); }
             catch (err) { showAlert('Action impossible', apiErrorMessage(err)); }
@@ -393,8 +394,8 @@ export default function TicketsScreen({ navigation, route }) {
     { id: 'archived',  label: `Archivés (${counts.archived})` },
   ];
   const subtitle = activeSection === 'generated'
-    ? `${counts.generated} ticket${counts.generated > 1 ? 's' : ''} généré${counts.generated > 1 ? 's' : ''}`
-    : `${pendingTix.length} ticket${pendingTix.length > 1 ? 's' : ''} à valider`;
+    ? `${counts.generated} prêt${counts.generated > 1 ? 's' : ''} pour l'entrée`
+    : `${pendingTix.length} à valider`;
 
   const Empty = ({ icon, title, text, cta }) => (
     <View style={styles.emptyBox}>
@@ -456,7 +457,7 @@ export default function TicketsScreen({ navigation, route }) {
           )}
           {pendingTix.length > 0 && (
             <>
-              <Text style={styles.sectionLabel} accessibilityRole="header">Tickets à valider</Text>
+              <Text style={styles.sectionLabel} accessibilityRole="header">À valider</Text>
               {pendingTix.map((t) => (
                 <PendingTicketCard key={t.id} ticket={t} onValidate={handleValidate} onPay={handlePay} onCancel={handleCancel} onOpenEvent={openEvent} />
               ))}
@@ -491,7 +492,7 @@ export default function TicketsScreen({ navigation, route }) {
         {/* ── HEADER ──────────────────────────────────────────── */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerTitle} accessibilityRole="header">Mes Tickets</Text>
+            <Text style={styles.headerTitle} accessibilityRole="header">Mes invitations</Text>
             <Text style={styles.headerSub}>{subtitle}</Text>
           </View>
           <View style={styles.headerBadge}>

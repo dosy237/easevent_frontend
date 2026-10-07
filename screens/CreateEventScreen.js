@@ -36,6 +36,8 @@ import { showAlert } from '../utils/dialog';
 import AddressInput from '../components/maps/AddressInput';
 import { logDev } from '../utils/log';
 import QuotaReached from '../components/ui/QuotaReached';
+import EventVideo from '../components/events/EventVideo';
+import { uploadVideo, VIDEO_MAX_SECONDS } from '../utils/videoUpload';
 import { isPlanLimit, openPlans, planLimitAlert } from '../utils/plans';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -462,6 +464,8 @@ export default function CreateEventScreen({ navigation, route }) {
   const [locationCoords, setLocationCoords] = useState({ lat: null, lng: null });
   const [isOnline,        setIsOnline]        = useState(false);
   const [onlineLink,      setOnlineLink]      = useState('');
+  // Lien visible par tous, ou seulement dans le billet / l'invitation des participants
+  const [onlineLinkPublic, setOnlineLinkPublic] = useState(false);
 
   // ── Étape 3 : Images ─────────────────────────────────────────
   const [coverImageUri,  setCoverImageUri]  = useState(null);
@@ -487,6 +491,13 @@ export default function CreateEventScreen({ navigation, route }) {
 
   // ── Étape 5 : Paramètres ─────────────────────────────────────
   const [visibility, setVisibility] = useState('public');
+  // ── Vidéo de présentation (événements publics, 45 s au plus) ──
+  const [videoUri, setVideoUri] = useState(null);           // aperçu local ou URL déjà en ligne
+  const [videoMeta, setVideoMeta] = useState(null);         // { width, height, duration, poster }
+  const [videoPublicId, setVideoPublicId] = useState('');
+  const [videoCaption, setVideoCaption] = useState('');
+  const [videoProgress, setVideoProgress] = useState(null); // 0..1 pendant l'envoi
+  const initialVideo = useRef('');
   const [maxGuests,  setMaxGuests]  = useState('');
   const [isPaid,     setIsPaid]     = useState(false);
   const [price,      setPrice]      = useState('');
@@ -597,7 +608,8 @@ export default function CreateEventScreen({ navigation, route }) {
     setIsOnline(false); setOnlineLink('');
     setCoverImageUri(null); setCoverImageUrl(null);
     setGallery1Uri(null); setGallery1Url(null); setGallery2Uri(null); setGallery2Url(null);
-    setAmbiance(''); setAmbianceLabel(''); setTheme(''); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
+    setAmbiance(''); setAmbianceLabel(''); setTheme('');
+    setVideoUri(null); setVideoMeta(null); setVideoPublicId(''); setVideoCaption(''); setVideoProgress(null); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
     setVisibility('public'); setMaxGuests(''); setIsPaid(false); setPrice('');
     setHasDressCode(false); setDressChoice(''); setDressCode('');
     setErrors({});
@@ -616,13 +628,17 @@ export default function CreateEventScreen({ navigation, route }) {
       setDescription(e.description || '');
       setStartDate(e.start_date ? new Date(e.start_date) : null);
       setEndDate(e.end_date ? new Date(e.end_date) : null);
-      setIsOnline(!!e.is_online); setOnlineLink(e.online_link || '');
+      setIsOnline(!!e.is_online); setOnlineLink(e.online_link || ''); setOnlineLinkPublic(!!e.online_link_public);
       setLocationAddress(e.location_address || '');
       setLocationCoords({ lat: e.latitude ?? null, lng: e.longitude ?? null });
       setCoverImageUri(e.cover_image || null); setCoverImageUrl(e.cover_image || null);
       const [g1, g2] = Array.isArray(tc.gallery) ? tc.gallery : [];
       setGallery1Uri(g1 || null); setGallery1Url(g1 || null); setGallery2Uri(g2 || null); setGallery2Url(g2 || null);
       setAmbiance(e.ambiance || ''); setAmbianceLabel(e.ambiance_label || ''); setTheme(e.theme || '');
+      if (e.video) {
+        setVideoUri(e.video.url); setVideoMeta(e.video); setVideoCaption(e.video.caption || '');
+      }
+      if (e.video_public_id !== undefined) { setVideoPublicId(e.video_public_id || ''); initialVideo.current = e.video_public_id || ''; }
       setPrimaryColor(e.palette?.primary || ''); setSecondaryColor(e.palette?.secondary || '');
       setVisibility(e.visibility || 'public');
       setMaxGuests(e.max_guests ? String(e.max_guests) : '');
@@ -693,6 +709,10 @@ export default function CreateEventScreen({ navigation, route }) {
 
   // ── Soumission finale → création de l'événement ───────────────
   const handleSubmit = async () => {
+    if (videoProgress !== null) {
+      showAlert('Vidéo en cours d’envoi', 'Patientez quelques secondes : l’envoi de la vidéo se termine.');
+      return;
+    }
     setSubmitting(true);
     try {
       const palette = primaryColor ? {
@@ -718,10 +738,14 @@ export default function CreateEventScreen({ navigation, route }) {
         longitude:        isOnline ? null : locationCoords.lng,
         is_online:        isOnline,
         online_link:      onlineLink || null,
+        online_link_public: isOnline && onlineLinkPublic,
         cover_image:      coverImageUrl,
         ambiance, palette, visibility, template_config,
         ambiance_label:   ambiance === 'autre' ? ambianceLabel.trim() : '',
         theme:            theme.trim(),
+        // Vidéo : seulement pour un événement public ; null la retire (modification)
+        ...(visibility === 'public' && videoPublicId ? { video: { public_id: videoPublicId, caption: videoCaption.trim() } }
+          : editing && initialVideo.current && (!videoPublicId || visibility !== 'public') ? { video: null } : {}),
         // Billetterie & dress code (M23) — champs de premier niveau du modèle Event
         is_paid:          isPaid,
         price:            isPaid ? parsePrice(price).toFixed(2) : '0.00',
@@ -744,7 +768,7 @@ export default function CreateEventScreen({ navigation, route }) {
           'Modifications enregistrées',
           changed
             ? (visibility === 'private'
-              ? "L'événement est maintenant privé : il n'apparaît plus dans Découvrir. Vos invités et les personnes qui ont déjà un ticket y gardent accès."
+              ? "L'événement est maintenant privé : il n'apparaît plus dans Découvrir. Vos invités et les personnes déjà inscrites y gardent accès."
               : initial.current?.status === 'published'
                 ? "L'événement est maintenant public : il apparaît dans Découvrir et tout le monde peut le voir."
                 : "L'événement est maintenant public : une fois publié, il apparaîtra dans Découvrir.")
@@ -933,8 +957,55 @@ export default function CreateEventScreen({ navigation, route }) {
           keyboardType="url"
         />
       )}
+      {isOnline ? (
+        <View style={{ marginTop: 6 }} accessibilityRole="radiogroup" accessibilityLabel="Qui voit le lien">
+          <Text style={styles.fieldLabel}>Qui voit le lien ?</Text>
+          {[[false, 'Réservé aux participants', "Il apparaît dans leur billet ou leur invitation, une fois générés."],
+            [true, 'Ouvert à tous', "Toute personne qui voit l'événement peut rejoindre directement."]].map(([value, label, sub]) => {
+            const on = onlineLinkPublic === value;
+            return (
+              <TouchableOpacity key={label} onPress={() => setOnlineLinkPublic(value)} activeOpacity={0.85}
+                style={[styles.linkChoice, on && styles.linkChoiceOn]}
+                accessibilityRole="radio" accessibilityState={{ checked: on }} aria-checked={on} accessibilityLabel={`${label}. ${sub}`}>
+                <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? C.green : C.textMut} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linkChoiceTitle}>{label}</Text>
+                  <Text style={styles.linkChoiceSub}>{sub}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
+
+  // ── Vidéo : choisir, vérifier la durée, envoyer (avec progression) ──
+  const pickVideo = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'], videoMaxDuration: VIDEO_MAX_SECONDS, allowsEditing: true, quality: 1,
+    });
+    if (res.canceled || !res.assets?.length) return;
+    const asset = res.assets[0];
+    const seconds = asset.duration ? asset.duration / 1000 : null;
+    if (seconds && seconds > VIDEO_MAX_SECONDS + 0.5) {
+      showAlert('Vidéo trop longue', `Elle dure ${Math.round(seconds)} s : choisissez ou coupez une vidéo de ${VIDEO_MAX_SECONDS} secondes au plus.`);
+      return;
+    }
+    setVideoUri(asset.uri);
+    setVideoMeta({ width: asset.width, height: asset.height, duration: seconds });
+    setVideoProgress(0);
+    try {
+      const { publicId } = await uploadVideo(asset, setVideoProgress);
+      setVideoPublicId(publicId);
+    } catch (err) {
+      setVideoUri(null); setVideoMeta(null); setVideoPublicId('');
+      showAlert('Envoi impossible', err.response?.data?.detail || err.message || 'Réessayez avec une connexion stable.');
+    } finally {
+      setVideoProgress(null);
+    }
+  };
+  const removeVideo = () => { setVideoUri(null); setVideoMeta(null); setVideoPublicId(''); setVideoCaption(''); };
 
   // ════════════════════════════════════════════════════════════
   // ÉTAPE 3 — Photos
@@ -976,6 +1047,41 @@ export default function CreateEventScreen({ navigation, route }) {
         onPick={() => pickAndUploadImage('gallery_2', setGallery2Uri, setGallery2Url, setUploadingGallery2)}
         onRemove={() => { setGallery2Uri(null); setGallery2Url(null); }}
       />
+
+      {/* Vidéo de présentation */}
+      <View style={styles.videoSection}>
+        <Text style={styles.fieldLabel}>Vidéo de présentation (facultative)</Text>
+        <Text style={styles.paletteHint}>
+          {visibility === 'public'
+            ? `${VIDEO_MAX_SECONDS} secondes au plus. Elle s'affiche en entier sur la page de l'événement, avec votre texte dessous.`
+            : 'Réservée aux événements publics : passez l’événement en public (dernière étape) pour l’ajouter.'}
+        </Text>
+        {videoUri ? (
+          <>
+            <EventVideo video={{ url: videoUri, poster: videoMeta?.poster, width: videoMeta?.width, height: videoMeta?.height,
+              duration: videoMeta?.duration }} maxWidth={240} />
+            {videoProgress !== null ? (
+              <View style={styles.progressTrack} accessibilityRole="progressbar"
+                accessibilityValue={{ min: 0, max: 100, now: Math.round(videoProgress * 100) }}>
+                <View style={[styles.progressFill, { width: `${Math.round(videoProgress * 100)}%` }]} />
+                <Text style={styles.progressTxt}>{`Envoi… ${Math.round(videoProgress * 100)} %`}</Text>
+              </View>
+            ) : null}
+            <InputField label="Texte sous la vidéo" icon="text-outline" value={videoCaption} onChangeText={setVideoCaption}
+              placeholder="Ex : Les coulisses de l'édition 2025" maxLength={220} />
+            <TouchableOpacity onPress={removeVideo} style={styles.videoRemove} accessibilityRole="button" disabled={videoProgress !== null}>
+              <Ionicons name="trash-outline" size={16} color={C.error} />
+              <Text style={styles.videoRemoveTxt}>Retirer la vidéo</Text>
+            </TouchableOpacity>
+          </>
+        ) : visibility === 'public' ? (
+          <TouchableOpacity onPress={pickVideo} style={styles.videoAdd} accessibilityRole="button"
+            accessibilityLabel={`Ajouter une vidéo de ${VIDEO_MAX_SECONDS} secondes au plus`}>
+            <Ionicons name="videocam-outline" size={22} color={C.green} />
+            <Text style={styles.videoAddTxt}>Ajouter une vidéo</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
   );
 
@@ -1134,7 +1240,7 @@ export default function CreateEventScreen({ navigation, route }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Événement payant</Text>
-            <Text style={styles.optionSub}>Le prix s'affiche sur chaque ticket</Text>
+            <Text style={styles.optionSub}>Le prix s'affiche sur chaque billet</Text>
           </View>
           <TouchableOpacity
             style={[styles.toggle, isPaid && styles.toggleActive]}
@@ -1150,7 +1256,7 @@ export default function CreateEventScreen({ navigation, route }) {
         {isPaid && (
           <View style={{ marginTop: 14 }}>
             <InputField
-              label="Prix du ticket"
+              label="Prix du billet"
               icon="card-outline"
               value={price}
               onChangeText={(t) => { setPrice(t.replace(/[^\d.,]/g, '')); setErrors((p) => ({ ...p, price: undefined })); }}
@@ -1163,7 +1269,7 @@ export default function CreateEventScreen({ navigation, route }) {
         )}
         <View style={styles.optionNote}>
           <Ionicons name="information-circle-outline" size={14} color={C.green} />
-          <Text style={styles.optionNoteTxt}>Désactivé, chaque participant reçoit quand même un ticket à 0,00 €.</Text>
+          <Text style={styles.optionNoteTxt}>Désactivé, chaque participant reçoit quand même son invitation ou son billet, gratuitement.</Text>
         </View>
         {isPaid && canCharge === false && (
           <TouchableOpacity
@@ -1188,7 +1294,7 @@ export default function CreateEventScreen({ navigation, route }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Dress code</Text>
-            <Text style={styles.optionSub}>Affiché sur la page de l'événement et sur le ticket</Text>
+            <Text style={styles.optionSub}>Affiché sur la page de l'événement et sur l'invitation ou le billet</Text>
           </View>
           <TouchableOpacity
             style={[styles.toggle, hasDressCode && styles.toggleActive]}
@@ -1245,7 +1351,7 @@ export default function CreateEventScreen({ navigation, route }) {
           { icon: 'ticket-outline',
             value: isPaid
               ? (parsePrice(price) ? `${formatEuro(parsePrice(price))} / personne` : 'Prix à indiquer')
-              : 'Gratuit — ticket à 0,00 €' },
+              : 'Gratuit' },
           ...(hasDressCode && finalDressCode() ? [{ icon: 'shirt-outline', value: `Dress code : ${finalDressCode()}` }] : []),
         ].map((row, i) => (
           <View key={i} style={styles.summaryRow}>
@@ -1500,6 +1606,18 @@ const styles = StyleSheet.create({
     borderRadius: 20, borderWidth: 2, backgroundColor: C.white,
   },
   ambianceLabel: { fontSize: 14, fontWeight: '600', color: C.text },
+  videoSection: { marginTop: 22, gap: 10 },
+  videoAdd: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.green, borderRadius: 16, paddingVertical: 18 },
+  videoAddTxt: { color: C.green, fontWeight: '700', fontSize: 15 },
+  videoRemove: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 8 },
+  videoRemoveTxt: { color: C.error, fontWeight: '700', fontSize: 14 },
+  progressTrack: { height: 28, borderRadius: 14, backgroundColor: C.bg, overflow: 'hidden', justifyContent: 'center' },
+  progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: C.greenLight },
+  progressTxt: { textAlign: 'center', fontSize: 13, fontWeight: '700', color: C.green },
+  linkChoice: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', padding: 14, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white, marginTop: 8 },
+  linkChoiceOn: { borderColor: C.green, backgroundColor: C.greenLight },
+  linkChoiceTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+  linkChoiceSub: { fontSize: 13, color: C.textSub, marginTop: 2, lineHeight: 18 },
 
   // Couleurs
   paletteSection: { marginBottom: 16 },

@@ -724,7 +724,7 @@ export default function ProfileScreen({ navigation }) {
                   </View>
                   <View>
                     <Text style={styles.menuItemTitle}>Paiements & virements</Text>
-                    <Text style={styles.menuItemSub}>Recevoir l'argent de vos tickets</Text>
+                    <Text style={styles.menuItemSub}>Recevoir l'argent de vos billets</Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />

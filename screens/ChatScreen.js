@@ -31,6 +31,7 @@ import { apiErrorMessage } from '../services/authService';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import realtime from '../services/realtime';
 import { setActiveConversation } from '../services/push';
+import { passWord } from '../utils/wording';
 
 const POLL_MS = 4000;
 const TYPING_EVERY = 3000;
@@ -291,7 +292,7 @@ export default function ChatScreen({ navigation, route }) {
     ? [
       ...(ev?.location_address ? [["Envoyer l'itinéraire", sendItinerary]] : []),
       ['Merci pour votre réponse', 'Merci pour votre réponse, à très bientôt !'],
-      ['Où trouver son ticket', "Votre ticket est dans l'application Easevent, onglet « Tickets » : présentez le QR code à l'entrée."],
+      ['Où trouver son QR code', "Votre invitation (ou billet) est dans l'application Easevent, onglet « Invitations » : présentez le QR code à l'entrée."],
     ]
     : [
       ['Je serai là', 'Je serai là, merci pour l’invitation !'],
@@ -319,7 +320,7 @@ export default function ChatScreen({ navigation, route }) {
         invitation_sent: `Invitation envoyée · ${shortDay(d)}`,
         invitation_accepted: `${name} ${role === 'organizer' ? 'a' : 'avez'} accepté l'invitation · ${shortDay(d)}`,
         invitation_declined: `${name} ${role === 'organizer' ? 'a' : 'avez'} décliné l'invitation · ${shortDay(d)}`,
-        ticket_generated: `Ticket généré · ${shortDay(d)}`,
+        ticket_generated: `${ev ? passWord(ev).One : 'Billet'} généré${ev ? passWord(ev).e : ''} · ${shortDay(d)}`,
       };
       const positive = ['invitation_accepted', 'ticket_generated'].includes(m.system_type);
       return (

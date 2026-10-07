@@ -131,6 +131,8 @@ const linking = {
     }
   },
   getStateFromPath(path, options) {
+    // Ancien chemin « tickets » (liens déjà envoyés) : l'onglet s'appelle désormais « Invitations »
+    if (/^\/?tickets(?:[/?#]|$)/.test(path)) path = path.replace(/^\/?tickets/, 'invitations');
     // Lien de partage /e/<id> (ou /evenement/<id>) : la page de l'événement, connecté ou non
     const shared = path.match(EVENT_PATH);
     if (shared) {
@@ -173,7 +175,7 @@ const linking = {
       },
       TabDiscover: { screens: { DiscoverHome: 'decouvrir', EventDetail: 'decouvrir/evenement/:id?' } },
       TabCreate:   'creer',
-      TabTickets:  { screens: { Tickets: 'tickets' } },
+      TabTickets:  { screens: { Tickets: 'invitations' } },
       TabProfile:  {
         screens: {
           Profile: 'profil', Plans: 'profil/plans', Payouts: 'profil/paiements',
@@ -221,7 +223,7 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="MiniSiteView"       component={MiniSiteViewScreen}       options={{ title: 'Mini-site' }} />
       <DashStack.Screen name="EventPublished"     {...soon('M10', 'Événement publié')} />
       <DashStack.Screen name="EventDashboard"     component={EventDashboardScreen} options={{ title: 'Gérer un événement' }} />
-      <DashStack.Screen name="ScanTickets"        component={ScanTicketsScreen}    options={{ title: 'Scanner les tickets' }} />
+      <DashStack.Screen name="ScanTickets"        component={ScanTicketsScreen}    options={{ title: 'Contrôle des entrées' }} />
       <DashStack.Screen name="EditEvent"          component={CreateEventScreen}    options={{ title: "Modifier l'événement" }} />
       <DashStack.Screen name="InviteGuests"       component={InviteGuestsScreen}   options={{ title: 'Inviter des participants' }} />
       <DashStack.Screen name="Friends"            component={FriendsScreen}        options={{ title: 'Mes amis' }} />
@@ -358,11 +360,11 @@ function AppTabNavigator() {
         name="TabTickets"
         component={TicketsStackNavigator}
         options={{
-          tabBarLabel: 'Tickets',
-          title: 'Mes tickets',
+          tabBarLabel: 'Invitations',
+          title: 'Mes invitations',
           tabBarBadge: badge > 0 ? badge : undefined,
           tabBarBadgeStyle: { backgroundColor: C.orange, color: C.white, fontSize: 10, fontWeight: '800' },
-          tabBarAccessibilityLabel: badge > 0 ? `Tickets, ${badge} en attente` : 'Tickets',
+          tabBarAccessibilityLabel: badge > 0 ? `Invitations, ${badge} en attente` : 'Invitations',
         }}
       />
       <Tabs.Screen name="TabProfile" component={ProfileStackNavigator} options={{ tabBarLabel: 'Profil', title: 'Mon profil' }} />

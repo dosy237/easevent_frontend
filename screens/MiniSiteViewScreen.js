@@ -18,6 +18,7 @@ import { C } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import minisiteService from '../services/minisiteService';
 import { buildActions } from '../utils/minisiteActions';
+import { passWord } from '../utils/wording';
 
 export default function MiniSiteViewScreen({ route, navigation }) {
   const { eventId, spec: draftSpec, event: draftEvent } = route?.params || {};
@@ -56,8 +57,8 @@ export default function MiniSiteViewScreen({ route, navigation }) {
   const { spec, event, is_organizer: isOrganizer, preview } = data;
   const myTicket = event.my_ticket;
   const ctaLabel = isOrganizer ? (spec.copy?.cta?.label || 'Je participe')
-    : myTicket?.status === 'generated' ? 'Voir mon ticket'
-    : myTicket?.status === 'pending' ? 'Finaliser mon ticket'
+    : myTicket?.status === 'generated' ? `Voir ${passWord(event).my}`
+    : myTicket?.status === 'pending' ? `Finaliser ${passWord(event).my}`
     : event.spots_left === 0 ? 'Complet' : (spec.copy?.cta?.label || 'Je participe');
   // La participation se fait sur la page de l'événement (ticket, paiement, questions RSVP)
   const participate = () => navigation.navigate('EventDetail', { id: event.id, event, participate: Date.now() });

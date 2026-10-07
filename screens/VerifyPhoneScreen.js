@@ -78,7 +78,7 @@ export default function VerifyPhoneScreen({ navigation, route }) {
       const n = data.invitations_found;
       if (required) return;   // la porte s'ouvre d'elle-même (user.phone renseigné)
       showAlert('Numéro vérifié',
-        n ? `${n} invitation${n > 1 ? 's' : ''} reçue${n > 1 ? 's' : ''} par SMS ${n > 1 ? 'vous attendent' : 'vous attend'} dans Mes tickets.`
+        n ? `${n} invitation${n > 1 ? 's' : ''} reçue${n > 1 ? 's' : ''} par SMS ${n > 1 ? 'vous attendent' : 'vous attend'} dans Mes invitations.`
           : 'Les prochaines invitations envoyées à ce numéro arriveront directement dans votre application.',
         [{ text: n ? 'Voir mes invitations' : 'OK', onPress: () => (n ? navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } }) : navigation.goBack()) }]);
     } catch (err) {

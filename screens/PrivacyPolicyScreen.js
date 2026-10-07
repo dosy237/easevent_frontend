@@ -44,7 +44,7 @@ const SECTIONS = [
   },
   {
     title: '2. Pourquoi nous les utilisons',
-    body: "Pour faire fonctionner le service que vous utilisez (exécution du contrat) : créer vos événements, envoyer vos invitations, générer vos tickets et traiter vos paiements. Les emails de nouveautés ne vous sont envoyés que si vous l'avez accepté (consentement), et vous pouvez retirer ce consentement à tout moment depuis votre profil.",
+    body: "Pour faire fonctionner le service que vous utilisez (exécution du contrat) : créer vos événements, envoyer vos invitations, générer vos invitations et billets et traiter vos paiements. Les emails de nouveautés ne vous sont envoyés que si vous l'avez accepté (consentement), et vous pouvez retirer ce consentement à tout moment depuis votre profil.",
   },
   {
     title: '3. Durées de conservation',
