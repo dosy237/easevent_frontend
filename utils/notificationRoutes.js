@@ -39,6 +39,7 @@ export function openNotification(navigation, n) {
     case 'guest_response':
     case 'event_full':
       return manage();
+    case 'question_to_answer':                    // question transmise par l'assistant : la conversation
     case 'message_received': {
       const conversationId = data.conversation_id || n.conversation_id;
       if (!conversationId) return navigation.navigate('TabDashboard', { screen: 'Conversations', initial: false });

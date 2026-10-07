@@ -31,6 +31,7 @@ import { showAlert } from '../utils/dialog';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../utils/format';
 import { COUNTRIES, formatPhone, isEmail, parseContactsCsv, splitEmails, toE164 } from '../utils/contacts';
+import { deviceDialCode } from '../utils/region';
 
 const MODES = [
   { id: 'members', label: 'Membres', icon: 'people-outline' },
@@ -205,7 +206,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
               <MembersMode eventId={event.id} selected={members} onChange={setMembers} />
             )}
             {mode === 'email' && (
-              <EmailMode list={emails} onChange={setEmails} event={event} onPickContacts={() => pickContacts('email', '33')} />
+              <EmailMode list={emails} onChange={setEmails} event={event} onPickContacts={() => pickContacts('email', deviceDialCode())} />
             )}
             {mode === 'phone' && (
               <PhoneMode list={phones} onChange={setPhones} onPickContacts={(cc) => pickContacts('phone', cc)} />
@@ -509,7 +510,8 @@ function EmailMode({ list, onChange, onPickContacts }) {
 // Mode Téléphone (M12)
 // ─────────────────────────────────────────────────────────────
 function PhoneMode({ list, onChange, onPickContacts }) {
-  const [country, setCountry] = useState(COUNTRIES[0]);
+  // Indicatif du pays du téléphone par défaut (Cameroun : +237…)
+  const [country, setCountry] = useState(() => COUNTRIES.find((c) => c.code === deviceDialCode()) || COUNTRIES[0]);
   const [picker, setPicker] = useState(false);
   const [value, setValue] = useState('');
   const [error, setError] = useState('');

@@ -19,12 +19,13 @@ import { BackButton } from '../components/ui/Buttons';
 import LoadingMessages from '../components/ui/LoadingMessages';
 import { loadDeviceContacts } from '../utils/deviceContacts';
 import { formatPhone, isEmail, toE164 } from '../utils/contacts';
+import { deviceDialCode } from '../utils/region';
 
 const ROW_HEIGHT = 68;
 const initialsOf = (name) => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
 export default function ContactPickerScreen({ navigation, route }) {
-  const { mode = 'phone', countryCode = '33', already = [], event } = route.params || {};
+  const { mode = 'phone', countryCode = deviceDialCode(), already = [], event } = route.params || {};
   const [state, setState] = useState({ status: 'loading', rows: [] });
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(() => new Set());

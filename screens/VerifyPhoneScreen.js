@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { showAlert } from '../utils/dialog';
 import { toE164 } from '../utils/contacts';
+import { deviceDialCode } from '../utils/region';
 
 const RESEND_AFTER = 60;
 
@@ -44,8 +45,8 @@ export default function VerifyPhoneScreen({ navigation, route }) {
   };
 
   const sendCode = async () => {
-    const e164 = toE164(phone, '33');
-    if (!e164) { setError('Numéro invalide : indiquez-le avec son indicatif (ex. +33 6 12 34 56 78).'); return; }
+    const e164 = toE164(phone, deviceDialCode());
+    if (!e164) { setError(`Numéro invalide : indiquez-le avec son indicatif (ex. ${deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'}).`); return; }
     setBusy(true); setError('');
     try {
       await apiClient.post('/api/auth/phone/send-code/', { phone_number: e164 });
@@ -119,7 +120,7 @@ export default function VerifyPhoneScreen({ navigation, route }) {
                 </Text>
                 <Text style={styles.label} nativeID="phoneLabel">Numéro avec indicatif</Text>
                 <TextInput style={styles.input} value={phone} onChangeText={(t) => { setPhone(t); setError(''); }}
-                  placeholder="+33 6 12 34 56 78" placeholderTextColor={C.textFaint} keyboardType="phone-pad"
+                  placeholder={deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'} placeholderTextColor={C.textFaint} keyboardType="phone-pad"
                   autoComplete="tel" accessibilityLabel="Numéro de téléphone avec indicatif" onSubmitEditing={sendCode} />
                 {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
                 <PrimaryButton label="Recevoir le code par SMS" icon="send-outline" onPress={sendCode} loading={busy} disabled={!phone.trim()} />

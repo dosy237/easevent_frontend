@@ -51,6 +51,7 @@ import Checkbox from '../components/ui/Checkbox';
 import { LogoMark } from '../components/illustrations';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
+import { deviceDialCode } from '../utils/region';
 
 const { height: H } = Dimensions.get('window');
 
@@ -272,7 +273,7 @@ export default function LoginScreen({ navigation, route }) {
     if (!firstName.trim()) errors.firstName = 'Le prénom est requis';
     if (!lastName.trim())  errors.lastName  = 'Le nom est requis';
     if (!phone.trim()) errors.phone = 'Le numéro de téléphone est requis';
-    else if (!toE164(phone, '33')) errors.phone = 'Numéro invalide (ex. +33 6 12 34 56 78)';
+    else if (!toE164(phone, deviceDialCode())) errors.phone = `Numéro invalide (ex. ${deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'})`;
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -315,7 +316,7 @@ export default function LoginScreen({ navigation, route }) {
         password,
         first_name:       firstName.trim(),
         last_name:        lastName.trim(),
-        phone_number:     toE164(phone, '33'),
+        phone_number:     toE164(phone, deviceDialCode()),
         verification_channel: codeChannel,
         accepted_privacy: true,
         marketing_opt_in: marketingOptIn,
@@ -621,7 +622,7 @@ export default function LoginScreen({ navigation, route }) {
           />
           <InputField
             icon="call-outline"
-            placeholder="Téléphone · +33 6 12 34 56 78"
+            placeholder={`Téléphone · ${deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'}`}
             value={phone}
             onChangeText={(t) => { setPhone(t); setFieldErrors(p => ({ ...p, phone: '' })); }}
             keyboardType="phone-pad"

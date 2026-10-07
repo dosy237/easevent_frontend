@@ -248,6 +248,12 @@ const GeneratedTicketCard = ({ ticket, onOpen }) => {
       </View>
       <View style={styles.gBody}>
         <Text style={styles.gTitle} numberOfLines={2}>{e.title}</Text>
+        {ticket.offered_by ? (
+          <View style={styles.gDress}>
+            <Ionicons name="gift-outline" size={13} color={C.green} />
+            <Text style={[styles.gDressTxt, { color: C.green }]} numberOfLines={1}>{`Offert${passWord(e).e} par ${ticket.offered_by.name}`}</Text>
+          </View>
+        ) : null}
         {ticket.dress_code ? (
           <View style={styles.gDress}>
             <Ionicons name="shirt-outline" size={13} color={C.orangeText} />

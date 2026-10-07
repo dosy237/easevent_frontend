@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 
 import { apiClient } from '../services/apiClient';
 import { getItem, setItem } from '../services/storage';
-import { deviceTz } from './timezone';
+import { deviceRegion } from './region';
 
 const KEY = 'easevent_currency';
 const TTL = 6 * 3600 * 1000;
@@ -27,25 +27,8 @@ const BY_COUNTRY = {
   MX: 'MXN', TR: 'TRY', AU: 'AUD', SE: 'SEK', NO: 'NOK', DK: 'DKK', PL: 'PLN',
   FR: 'EUR', BE: 'EUR', DE: 'EUR', ES: 'EUR', IT: 'EUR', PT: 'EUR', NL: 'EUR', LU: 'EUR', IE: 'EUR', AT: 'EUR',
 };
-// Fuseau → pays, quand la langue du téléphone ne précise pas la région (« fr » seul)
-const BY_ZONE = {
-  'Africa/Douala': 'CM', 'Africa/Libreville': 'GA', 'Africa/Brazzaville': 'CG', 'Africa/Ndjamena': 'TD',
-  'Africa/Bangui': 'CF', 'Africa/Malabo': 'GQ', 'Africa/Dakar': 'SN', 'Africa/Abidjan': 'CI',
-  'Africa/Porto-Novo': 'BJ', 'Africa/Ouagadougou': 'BF', 'Africa/Bamako': 'ML', 'Africa/Niamey': 'NE',
-  'Africa/Lome': 'TG', 'Europe/London': 'GB', 'Europe/Zurich': 'CH', 'Africa/Johannesburg': 'ZA',
-  'Asia/Kolkata': 'IN', 'Asia/Shanghai': 'CN', 'Asia/Tokyo': 'JP', 'America/Sao_Paulo': 'BR',
-  'America/Mexico_City': 'MX', 'Europe/Istanbul': 'TR', 'Europe/Stockholm': 'SE', 'Europe/Oslo': 'NO',
-  'Europe/Copenhagen': 'DK', 'Europe/Warsaw': 'PL', 'Europe/Paris': 'FR', 'Europe/Brussels': 'BE',
-};
-
 export function deviceCurrency() {
-  let region = null;
-  try { region = new Intl.Locale(Intl.DateTimeFormat().resolvedOptions().locale).region; } catch { /* Intl.Locale absent */ }
-  if (!region) {
-    const tz = deviceTz();
-    region = BY_ZONE[tz] || (tz.startsWith('America/') && !tz.includes('Sao_Paulo') ? 'US' : null);
-  }
-  return BY_COUNTRY[region] || null;
+  return BY_COUNTRY[deviceRegion()] || null;
 }
 
 // ── État commun : taux et devise choisie ─────────────────────────
