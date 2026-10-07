@@ -158,7 +158,7 @@ export default function TicketView({ ticket, justPaid = false }) {
                 <View style={styles.qrMissing}><Ionicons name="qr-code-outline" size={64} color={C.textMut} /></View>
               )}
             </View>
-            <Text style={styles.number} selectable>TICKET N° {ticket.number}</Text>
+            <Text style={styles.number} selectable>{`${passWord(ticket.event || {}).One.toUpperCase()} N° ${ticket.number}`}</Text>
           </View>
 
           <View style={styles.warning}>

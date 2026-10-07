@@ -13,7 +13,7 @@
  * ════════════════════════════════════════════════════════════════
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -25,7 +25,9 @@ import ticketService from '../services/ticketService';
 import { apiErrorMessage } from '../services/authService';
 import { formatDateLong, formatPrice } from '../utils/format';
 import { passWord } from '../utils/wording';
+import { eventTime } from '../utils/timezone';
 import Price from '../components/ui/Price';
+import { deviceCurrency } from '../utils/currency';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 
 const POLL_EVERY = 2000;
@@ -35,6 +37,15 @@ export default function TicketCheckoutScreen({ navigation, route }) {
   const { ticketId } = route.params || {};
   const { refresh: refreshBadge } = useTicketBadge();
   const [ticket, setTicket] = useState(null);
+  // Moyens de paiement : carte (Stripe) et, si disponible, Orange Money / MTN MoMo (Notch Pay)
+  const [mobileOk, setMobileOk] = useState(false);
+  const [method, setMethod] = useState('card');
+  useEffect(() => {
+    ticketService.paymentMethods().then((m) => {
+      setMobileOk(!!m.mobile_money);
+      if (m.mobile_money && ['XAF', 'XOF'].includes(deviceCurrency())) setMethod('mobile');
+    }).catch(() => {});
+  }, []);
   const [error, setError] = useState('');
   const [phase, setPhase] = useState('idle'); // idle | opening | waiting | processing
   const alive = useRef(true);
@@ -77,8 +88,10 @@ export default function TicketCheckoutScreen({ navigation, route }) {
     setError('');
     setPhase('opening');
     try {
-      const { checkout_url: url } = await ticketService.checkout(ticketId);
-      await WebBrowser.openAuthSessionAsync(url, 'easevent://tickets');
+      const url = method === 'mobile'
+        ? (await ticketService.mobileMoney(ticketId)).url
+        : (await ticketService.checkout(ticketId)).checkout_url;
+      await WebBrowser.openAuthSessionAsync(url, 'easevent://invitations');
       await waitForConfirmation();
     } catch (err) {
       setError(apiErrorMessage(err, 'Le paiement est momentanément indisponible.'));
@@ -95,6 +108,13 @@ export default function TicketCheckoutScreen({ navigation, route }) {
   const e = ticket?.event || {};
   const price = ticket ? formatPrice(ticket.price, ticket.currency) : '';
   const pw = passWord(e);
+  const cur = ticket?.currency || 'EUR';
+  // Montant débité en Mobile Money : FCFA, parité fixe 1 € = 655,957 FCFA (même calcul que le serveur)
+  const fcfa = ticket && ['EUR', 'XAF', 'XOF'].includes(cur)
+    ? Math.ceil((Number(ticket.price) * (cur === 'EUR' ? 655.957 : 1)) / 5) * 5 : null;
+  const mobile = mobileOk && fcfa !== null;
+  const useMobile = mobile && method === 'mobile';
+  const fcfaTxt = fcfa !== null ? `${String(fcfa).replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f')} FCFA` : '';
   const busy = phase === 'opening' || phase === 'waiting';
 
   return (
@@ -119,7 +139,7 @@ export default function TicketCheckoutScreen({ navigation, route }) {
                   <View>
                     <Text style={styles.glassTitle} numberOfLines={1}>{e.title}</Text>
                     <Text style={styles.glassMeta} numberOfLines={1}>
-                      {formatDateLong(e.start_date)}{e.location_address ? ` · ${e.location_address}` : ''}
+                      {(() => { const t = eventTime(e.start_date, e.timezone); return t ? `${t.date.charAt(0).toUpperCase()}${t.date.slice(1)} · ${t.time}${t.local ? ` (${t.zone})` : ''}` : formatDateLong(e.start_date); })()}{e.location_address ? ` · ${e.location_address}` : ''}
                     </Text>
                   </View>
                   <View style={styles.glassBottom}>
@@ -143,21 +163,46 @@ export default function TicketCheckoutScreen({ navigation, route }) {
                 </View>
               </View>
 
-              <View style={styles.methods}>
-                {[
-                  ['card-outline', 'Carte bancaire'],
-                  ['logo-apple', 'Apple Pay'],
-                  ['logo-google', 'Google Pay'],
-                  ['business-outline', 'Prélèvement IBAN'],
-                ].map(([icon, label]) => (
-                  <View key={label} style={styles.method}>
-                    <Ionicons name={icon} size={16} color={C.text} />
-                    <Text style={styles.methodTxt}>{label}</Text>
-                  </View>
-                ))}
-              </View>
+              {mobile ? (
+                <View style={{ gap: 10, marginTop: 18 }} accessibilityRole="radiogroup">
+                  {[
+                    ['card', 'card-outline', 'Carte bancaire', 'Visa, Mastercard, Apple Pay, Google Pay', price],
+                    ['mobile', 'phone-portrait-outline', 'Orange Money · MTN MoMo', 'Validation sur votre téléphone', fcfaTxt],
+                  ].map(([id, icon, label, sub, amount]) => {
+                    const on = method === id;
+                    return (
+                      <Pressable key={id} onPress={() => setMethod(id)} style={[styles.pick, on && styles.pickOn]}
+                        accessibilityRole="radio" accessibilityState={{ checked: on }} aria-checked={on} accessibilityLabel={`${label}, ${amount}`}>
+                        <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? C.green : C.textMut} />
+                        <Ionicons name={icon} size={20} color={C.text} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.pickTxt}>{label}</Text>
+                          <Text style={styles.pickSub}>{sub}</Text>
+                        </View>
+                        <Text style={styles.pickAmount}>{amount}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.methods}>
+                  {[
+                    ['card-outline', 'Carte bancaire'],
+                    ['logo-apple', 'Apple Pay'],
+                    ['logo-google', 'Google Pay'],
+                    ['business-outline', 'Prélèvement IBAN'],
+                  ].map(([icon, label]) => (
+                    <View key={label} style={styles.method}>
+                      <Ionicons name={icon} size={16} color={C.text} />
+                      <Text style={styles.methodTxt}>{label}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
               <Text style={styles.methodsNote}>
-                Vous réglez sur la page sécurisée de Stripe, notre prestataire de paiement. Easevent ne voit jamais vos coordonnées bancaires.
+                {useMobile
+                  ? `Vous payez ${fcfaTxt} sur la page sécurisée de Notch Pay, puis vous validez avec votre code Orange Money ou MTN MoMo.${cur === 'EUR' ? ' Conversion à la parité fixe 1 € = 655,957 FCFA.' : ''}`
+                  : 'Vous réglez sur la page sécurisée de Stripe, notre prestataire de paiement. Easevent ne voit jamais vos coordonnées bancaires.'}
               </Text>
             </>
           )}
@@ -165,7 +210,7 @@ export default function TicketCheckoutScreen({ navigation, route }) {
           {phase === 'waiting' && (
             <View style={styles.notice} accessibilityLiveRegion="polite">
               <ActivityIndicator color={C.green} />
-              <LoadingMessages messages={['Nous attendons la confirmation de Stripe…', `${pw.One} en préparation…`, 'Encore un instant…']} />
+              <LoadingMessages messages={[useMobile ? 'Validez le paiement sur votre téléphone…' : 'Nous attendons la confirmation du paiement…', `${pw.One} en préparation…`, 'Encore un instant…']} />
             </View>
           )}
           {phase === 'processing' && (
@@ -189,7 +234,7 @@ export default function TicketCheckoutScreen({ navigation, route }) {
             <PrimaryButton label={`Voir mes ${pw.many}`} onPress={() => navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } })} />
           ) : (
             <PrimaryButton
-              label={busy ? 'Paiement en cours…' : `Payer ${price} et générer ${pw.my}`}
+              label={busy ? 'Paiement en cours…' : `Payer ${useMobile ? fcfaTxt : price} et générer ${pw.my}`}
               onPress={pay}
               loading={busy}
               disabled={!ticket || ticket.status !== 'pending'}
@@ -208,6 +253,11 @@ export default function TicketCheckoutScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
+  pick: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 16, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white, minHeight: 64 },
+  pickOn: { borderColor: C.green, backgroundColor: C.greenLight },
+  pickTxt: { fontSize: 15, fontWeight: '700', color: C.text },
+  pickSub: { fontSize: 12, color: C.textSub, marginTop: 2 },
+  pickAmount: { fontSize: 14, fontWeight: '800', color: C.text },
   root: { flex: 1, backgroundColor: C.bg },
   center: { alignItems: 'center', justifyContent: 'center' },
   header: {

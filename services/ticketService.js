@@ -19,6 +19,9 @@ const ticketService = {
   pdfLink: async (id) => (await apiClient.post(`/api/tickets/${id}/pdf-link/`)).data,
   // Paiement : URL de la page sécurisée Stripe Checkout
   checkout: async (id) => (await apiClient.post(`/api/tickets/${id}/checkout/`)).data,
+  // Orange Money / MTN MoMo (Notch Pay) : { url, reference, amount, currency: 'XAF' }
+  mobileMoney: async (id) => (await apiClient.post(`/api/tickets/${id}/mobile-money/`, {})).data,
+  paymentMethods: async () => (await apiClient.get('/api/payments/methods/')).data,
 
   // Organisateur : Stripe Connect (recevoir l'argent des tickets sur son IBAN)
   connectStatus: async () => (await apiClient.get('/api/payments/connect/status/')).data,
