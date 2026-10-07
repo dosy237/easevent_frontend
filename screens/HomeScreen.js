@@ -19,6 +19,7 @@
 
 import { StatusBar as RNStatusBar } from 'react-native';
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import Announcements from '../components/events/Announcements';
 import {
   View,
   Text,
@@ -536,6 +537,9 @@ export default function HomeScreen({ navigation }) {
           {/* Contenu principal */}
           {!loading && !error && (
             <>
+              {/* Annonces de l'équipe Easevent (priorité, mises à jour en direct) */}
+              {!searchActive && !searchText ? <Announcements style={{ marginBottom: 8 }} /> : null}
+
               {/* Invitations : vraies invitations en attente (connecté), sinon carte de connexion */}
               {!searchActive && !searchText && (!isLoggedIn || myInvitations.length > 0) && (
                 <View style={styles.sec}>

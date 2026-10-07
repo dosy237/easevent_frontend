@@ -25,14 +25,14 @@ function Player({ url, style }) {
   return <VideoView player={player} style={style} contentFit="contain" nativeControls allowsFullscreen />;
 }
 
-export default function EventVideo({ video, style, maxWidth }) {
+export default function EventVideo({ video, style, maxWidth, maxHeightRatio = 0.7 }) {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const [playing, setPlaying] = useState(false);
   if (!video?.url) return null;
   const ratio = video.width && video.height ? video.width / video.height : 9 / 16;
   const width = Math.min(maxWidth || screenW - 40, screenW - 40);
   // Hauteur limitée à 70 % de l'écran ; la largeur s'ajuste pour garder la vidéo entière
-  const height = Math.min(width / ratio, screenH * 0.7);
+  const height = Math.min(width / ratio, screenH * maxHeightRatio);
   const frame = { width: height * ratio, height, alignSelf: 'center' };
   const secs = video.duration ? `${Math.round(video.duration)} s` : '';
 

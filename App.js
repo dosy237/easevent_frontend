@@ -73,6 +73,7 @@ import SubscriptionCheckoutScreen from './screens/SubscriptionCheckoutScreen';
 import SubscriptionSuccessScreen from './screens/SubscriptionSuccessScreen';
 import TermsScreen from './screens/TermsScreen';
 import HelpScreen from './screens/HelpScreen';
+import AdminScreen from './screens/AdminScreen';
 import ScanTicketsScreen from './screens/ScanTicketsScreen';
 import * as Application from 'expo-application';
 import { KEYS, getItem, setItem } from './services/storage';
@@ -178,7 +179,7 @@ const linking = {
       TabTickets:  { screens: { Tickets: 'invitations' } },
       TabProfile:  {
         screens: {
-          Profile: 'profil', Plans: 'profil/plans', Payouts: 'profil/paiements',
+          Profile: 'profil', Plans: 'profil/plans', Payouts: 'profil/paiements', Admin: 'profil/admin',
           SubscriptionSuccess: 'profil/abonnement/succes',
         },
       },
@@ -286,6 +287,7 @@ function ProfileStackNavigator() {
       <ProfileStack.Screen name="SubscriptionSuccess"  component={SubscriptionSuccessScreen}  options={{ title: 'Paiement confirmé' }} />
       <ProfileStack.Screen name="Terms"                component={TermsScreen}                options={{ title: "Conditions d'utilisation" }} />
       <ProfileStack.Screen name="Help"                 component={HelpScreen}                 options={{ title: 'Aide' }} />
+      <ProfileStack.Screen name="Admin"                component={AdminScreen}                options={{ title: 'Administration' }} />
     </ProfileStack.Navigator>
   );
 }

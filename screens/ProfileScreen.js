@@ -712,6 +712,25 @@ export default function ProfileScreen({ navigation }) {
 
               <View style={styles.menuDivider} />
 
+              {/* Administration : équipe Easevent uniquement */}
+              {user?.is_staff ? (
+                <>
+                  <TouchableOpacity style={styles.menuItem} onPress={() => navigation?.navigate('Admin')} accessibilityRole="button">
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconBox, { backgroundColor: C.greenLight }]}>
+                        <Ionicons name="shield-checkmark-outline" size={18} color={C.green} />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Administration</Text>
+                        <Text style={styles.menuItemSub}>Comptes, événements, annonces</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
+                  </TouchableOpacity>
+                  <View style={styles.menuDivider} />
+                </>
+              ) : null}
+
               {/* Paiements & virements (Stripe Connect, organisateur) */}
               <TouchableOpacity
                 style={styles.menuItem}
