@@ -20,7 +20,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, StatusBar, Animated, Alert, ActivityIndicator,
-  RefreshControl,
+  RefreshControl, Switch,
 } from 'react-native';
 
 import { SafeAreaView }    from 'react-native-safe-area-context';
@@ -492,8 +492,27 @@ const handlePublish = async () => {
                       subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id, eventTitle: event.title })} />
                     <ActionRow icon="qr-code-outline" title="Contrôler les entrées"
                       subtitle="Contrôle à l'entrée avec l'appareil photo" onPress={() => navigation.navigate('ScanTickets', { event })} />
-                    <ActionRow icon="help-circle-outline" title="Questions RSVP" last
+                    <ActionRow icon="help-circle-outline" title="Questions RSVP"
                       subtitle="Posez jusqu'à 5 questions à vos invités" onPress={() => navigation.navigate('RsvpQuestions', { event })} />
+                    {/* Réponses automatiques aux questions (lieu, horaires, prix…) dans « Messages des invités » */}
+                    <View style={styles.assistantRow}>
+                      <View style={styles.assistantIcon}><Ionicons name="sparkles-outline" size={20} color={C.green} /></View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.assistantTitle}>Réponses automatiques</Text>
+                        <Text style={styles.assistantSub}>
+                          {event.assistant_enabled === false
+                            ? 'Désactivées : vous répondez vous-même à chaque question.'
+                            : 'Les questions courantes reçoivent une réponse tirée de votre événement ; les autres vous sont transmises.'}
+                        </Text>
+                      </View>
+                      <Switch value={event.assistant_enabled !== false} trackColor={{ true: C.green }}
+                        accessibilityLabel="Réponses automatiques aux questions des invités"
+                        onValueChange={async (v) => {
+                          setEvent((prev) => ({ ...prev, assistant_enabled: v }));
+                          try { await eventService.updateEvent(event.id, { assistant_enabled: v }); }
+                          catch { setEvent((prev) => ({ ...prev, assistant_enabled: !v })); showAlert('Réglage non enregistré', 'Vérifiez votre connexion puis réessayez.'); }
+                        }} />
+                    </View>
                   </View>
 
                   {/* Actions principales */}
@@ -622,6 +641,10 @@ const handlePublish = async () => {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  assistantRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16 },
+  assistantIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  assistantTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+  assistantSub: { fontSize: 12, color: C.textSub, marginTop: 2, lineHeight: 17 },
   visLabel:     { fontSize: 12, fontWeight: '700', color: C.textMut, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   visRow:       { flexDirection: 'row', gap: 10, marginBottom: 14 },
   visOpt:       { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 56, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white },

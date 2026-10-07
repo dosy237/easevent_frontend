@@ -392,8 +392,14 @@ export default function ChatScreen({ navigation, route }) {
       );
     }
     return (
-      <View style={[styles.bubble, mine ? styles.mine : styles.theirs, m.failed && styles.failed]}
-        accessible accessibilityLabel={`${mine ? 'Vous' : other?.first_name || ''} : ${m.body}, ${hhmm(d)}${m.failed ? ', non envoyé' : ''}`}>
+      <View style={[styles.bubble, mine ? styles.mine : styles.theirs, m.failed && styles.failed, m.assistant && styles.assistantBubble]}
+        accessible accessibilityLabel={`${m.assistant ? 'Réponse automatique' : mine ? 'Vous' : other?.first_name || ''} : ${m.body}, ${hhmm(d)}${m.failed ? ', non envoyé' : ''}`}>
+        {m.assistant ? (
+          <View style={styles.assistantTag}>
+            <Ionicons name="sparkles" size={12} color={C.green} />
+            <Text style={styles.assistantTagTxt}>Réponse automatique</Text>
+          </View>
+        ) : null}
         <Text style={[styles.body, mine && { color: C.white }]} selectable>{m.body}</Text>
         <View style={styles.meta}>
           <Text style={[styles.metaTxt, mine && { color: 'rgba(255,255,255,0.75)' }]}>{m.pending ? 'Envoi…' : hhmm(d)}</Text>
@@ -529,6 +535,9 @@ export default function ChatScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
+  assistantBubble: { backgroundColor: C.greenLight, borderWidth: 1, borderColor: C.greenSoft },
+  assistantTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
+  assistantTagTxt: { fontSize: 11, fontWeight: '800', color: C.green, letterSpacing: 0.3 },
   root: { flex: 1, backgroundColor: C.bg },
   sharedCover: { width: '100%', height: 130 },
   sharedType: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', color: C.green, marginBottom: 2 },
