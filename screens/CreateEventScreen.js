@@ -787,7 +787,7 @@ export default function CreateEventScreen({ navigation, route }) {
             onPress={() => { setEventType(t.value); setErrors((p) => ({ ...p, eventType: undefined })); }}
             activeOpacity={0.8}
             accessibilityRole="radio"
-            accessibilityState={{ selected: eventType === t.value }}
+            accessibilityState={{ checked: eventType === t.value }}
             accessibilityLabel={t.label}
           >
             <Ionicons name={t.icon} size={22} color={eventType === t.value ? C.white : C.green} />
@@ -971,7 +971,7 @@ export default function CreateEventScreen({ navigation, route }) {
             }}
             activeOpacity={0.8}
             accessibilityRole="radio"
-            accessibilityState={{ selected: ambiance === a.value }}
+            accessibilityState={{ checked: ambiance === a.value }}
             accessibilityLabel={`Ambiance ${a.label}`}
           >
             <Text style={[styles.ambianceLabel, ambiance === a.value && { color: C.white, fontWeight: '800' }]}>
@@ -1165,7 +1165,7 @@ export default function CreateEventScreen({ navigation, route }) {
                     style={[styles.dressChip, active && styles.dressChipActive]}
                     onPress={() => chooseDress(label)}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{ checked: active }}
                   >
                     <Text style={[styles.dressChipTxt, active && styles.dressChipTxtActive]}>{label}</Text>
                   </TouchableOpacity>

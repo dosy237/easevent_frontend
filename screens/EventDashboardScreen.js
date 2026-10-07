@@ -496,7 +496,7 @@ const handlePublish = async () => {
                         return (
                           <TouchableOpacity key={v.value} style={[styles.visOpt, active && styles.visOptActive]}
                             onPress={() => changeVisibility(v.value)} disabled={savingVisibility} activeOpacity={0.85}
-                            accessibilityRole="radio" accessibilityState={{ selected: active, disabled: savingVisibility }}
+                            accessibilityRole="radio" accessibilityState={{ checked: active, disabled: savingVisibility }}
                             accessibilityLabel={`${v.label} : ${v.desc}`}>
                             <Ionicons name={v.icon} size={18} color={active ? C.white : C.green} />
                             <View style={{ flex: 1 }}>

@@ -208,7 +208,7 @@ export default function NotificationsScreen({ navigation }) {
     return groups;
   }, [items]);
 
-  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('TabDashboard'));
+  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('TabDashboard', { screen: 'Dashboard' }));
 
   const renderItem = ({ item: n }) => {
     const look = LOOK[n.type] || LOOK.payment_succeeded;

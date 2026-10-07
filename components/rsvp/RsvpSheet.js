@@ -50,7 +50,7 @@ export function RsvpQuestion({ question: q, value, onChange, error }) {
           {[['Oui', true], ['Non', false]].map(([label, v]) => (
             <Pressable key={label} onPress={() => onChange(value === v ? null : v)}
               style={[styles.pill, value === v && styles.pillOn]} accessibilityRole="radio"
-              accessibilityState={{ selected: value === v, checked: value === v }} accessibilityLabel={label}>
+              accessibilityState={{ checked: value === v, checked: value === v }} accessibilityLabel={label}>
               <Text style={[styles.pillTxt, value === v && { color: C.white }]}>{label}</Text>
             </Pressable>
           ))}
