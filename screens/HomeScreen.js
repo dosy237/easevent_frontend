@@ -18,7 +18,7 @@
  */
 
 import { StatusBar as RNStatusBar } from 'react-native';
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ import {
   RefreshControl,
   Linking,
   TextInput,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -50,6 +51,10 @@ import { SkeletonGroup, Bone, EventCardSkeleton } from '../components/ui/Skeleto
 import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
 import { logDev } from '../utils/log';
 import { openInMaps } from '../components/maps/EventMap';
+import LikeButton from '../components/events/LikeButton';
+import ShareSheet from '../components/events/ShareSheet';
+import { seedLikes } from '../utils/likes';
+import { showAlert } from '../utils/dialog';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -169,7 +174,18 @@ const InvitationCard = React.memo(({ event, onPress, isLoggedIn, onLoginPress })
   );
 });
 
-const CardFeatured = React.memo(({ event, onPress }) => (
+// « J'aime » et « Partager » : mêmes boutons sur toutes les cartes du fil
+const EngageRow = ({ event, engage, light }) => (
+  <View style={styles.engageRow}>
+    <LikeButton event={event} isAuthenticated={engage.isLoggedIn} onRequireLogin={engage.onRequireLogin} light={light} compact />
+    <Pressable onPress={() => engage.onShare(event)} hitSlop={8} accessibilityRole="button"
+      accessibilityLabel={`Partager « ${event.title} »`} style={[styles.shareBtn, light && styles.shareBtnLight]}>
+      <Ionicons name="paper-plane-outline" size={18} color={light ? C.white : C.text} />
+    </Pressable>
+  </View>
+);
+
+const CardFeatured = React.memo(({ event, onPress, engage }) => (
   <TouchableOpacity style={styles.cardFeatured} onPress={() => onPress(event)} activeOpacity={0.92}>
     <SafeImage uri={event.cover_image} style={styles.cardFeaturedImg} />
     <View style={styles.cardFeaturedBadge}>
@@ -179,29 +195,30 @@ const CardFeatured = React.memo(({ event, onPress }) => (
       <Text style={styles.cardFeaturedDate}>{event.date_formatted}</Text>
       <View style={styles.cardFeaturedRow}>
         <Text style={styles.cardFeaturedTitle} numberOfLines={1}>{event.title}</Text>
-        <View style={styles.addCircle}>
-          <Ionicons name="add" size={18} color={C.green} />
-        </View>
+        <EngageRow event={event} engage={engage} />
       </View>
       <LocationRow address={event.location_address} color={C.textMut} />
     </View>
   </TouchableOpacity>
 ));
 
-const CardSmall = React.memo(({ event, onPress }) => (
+const CardSmall = React.memo(({ event, onPress, engage }) => (
   <TouchableOpacity style={styles.cardSmall} onPress={() => onPress(event)} activeOpacity={0.88}>
     <SafeImage uri={event.cover_image} style={styles.cardSmallImg} />
     <View style={styles.cardSmallBody}>
       <Text style={styles.cardSmallDate}>{event.date_formatted}</Text>
       <Text style={styles.cardSmallTitle} numberOfLines={2}>{event.title}</Text>
-      <TouchableOpacity style={styles.inscribeBtn} onPress={() => onPress(event)} activeOpacity={0.75}>
-        <Text style={styles.inscribeTxt}>S'inscrire</Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <TouchableOpacity style={styles.inscribeBtn} onPress={() => onPress(event)} activeOpacity={0.75}>
+          <Text style={styles.inscribeTxt}>S'inscrire</Text>
+        </TouchableOpacity>
+        <LikeButton event={event} isAuthenticated={engage.isLoggedIn} onRequireLogin={engage.onRequireLogin} compact />
+      </View>
     </View>
   </TouchableOpacity>
 ));
 
-const CardStandard = React.memo(({ event, onPress }) => {
+const CardStandard = React.memo(({ event, onPress, engage }) => {
   return (
     <TouchableOpacity style={styles.cardStd} onPress={() => onPress(event)} activeOpacity={0.92}>
       <View style={styles.cardStdImgBox}>
@@ -222,6 +239,7 @@ const CardStandard = React.memo(({ event, onPress }) => {
             </Text>
           </View>
         </View>
+        <EngageRow event={event} engage={engage} />
       </View>
     </TouchableOpacity>
   );
@@ -238,6 +256,12 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
+  const [shareEvent, setShareEvent] = useState(null);
+  const engage = useMemo(() => ({
+    isLoggedIn,
+    onShare: setShareEvent,
+    onRequireLogin: () => navigation.navigate('Login', { mode: 'login' }),
+  }), [isLoggedIn, navigation]);
   const [searchText, setSearchText] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
@@ -254,6 +278,7 @@ export default function HomeScreen({ navigation }) {
 
       const data = await eventService.fetchPublicEvents(params);
       
+      seedLikes(data.events);
       setEvents(data.events || []);
       setError(null);
     } catch (err) {
@@ -341,6 +366,9 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.root}>
+      <ShareSheet event={shareEvent} visible={!!shareEvent} onClose={() => setShareEvent(null)} isAuthenticated={isLoggedIn}
+        onAddFriends={() => navigation.navigate('TabProfile', { screen: 'Friends', initial: false, params: { tab: 'add' } })}
+        onSent={(res) => showAlert('Partagé', res.message || 'Envoyé.')} />
       <StatusBar barStyle="dark-content" backgroundColor={C.white} />
       <SafeAreaView style={styles.safe}>
         {/* HEADER */}
@@ -549,21 +577,21 @@ export default function HomeScreen({ navigation }) {
 
                 {searchText &&
                   events.map((ev) => (
-                    <CardStandard key={ev.id} event={ev} onPress={goToDetail} />
+                    <CardStandard key={ev.id} event={ev} onPress={goToDetail} engage={engage} />
                   ))}
 
                 {!searchText && events.length > 0 && (
                   <>
-                    {featuredEvent && <CardFeatured event={featuredEvent} onPress={goToDetail} />}
+                    {featuredEvent && <CardFeatured event={featuredEvent} onPress={goToDetail} engage={engage} />}
                     {smallEvents.length > 0 && (
                       <View style={styles.smallRow}>
                         {smallEvents.map((ev) => (
-                          <CardSmall key={ev.id} event={ev} onPress={goToDetail} />
+                          <CardSmall key={ev.id} event={ev} onPress={goToDetail} engage={engage} />
                         ))}
                       </View>
                     )}
                     {restEvents.map((ev) => (
-                      <CardStandard key={ev.id} event={ev} onPress={goToDetail} />
+                      <CardStandard key={ev.id} event={ev} onPress={goToDetail} engage={engage} />
                     ))}
                   </>
                 )}
@@ -847,6 +875,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardFeaturedTitle: { fontSize: 17, fontWeight: '800', color: C.text, flex: 1, letterSpacing: -0.2 },
+  engageRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 6 },
+  shareBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  shareBtnLight: { backgroundColor: 'rgba(0,0,0,0.32)' },
   addCircle: {
     width: 32,
     height: 32,

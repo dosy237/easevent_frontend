@@ -15,6 +15,7 @@ import { C, TOUCH } from '../constants/theme';
 import { BackButton } from '../components/ui/Buttons';
 import friendService from '../services/friendService';
 import invitationService from '../services/invitationService';
+import messageService from '../services/messageService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
 import { useTicketBadge } from '../context/TicketBadgeContext';
@@ -69,6 +70,19 @@ export default function FriendsScreen({ navigation, route }) {
     setResults((prev) => prev.map((x) => (x.id === u.id ? { ...x, friend_status: r.status === 'accepted' ? 'friend' : 'sent' } : x)));
   });
 
+  // Conversation directe avec un ami (créée au besoin)
+  const writeTo = async (row) => {
+    setBusy(`msg-${row.id}`);
+    try {
+      const conv = await messageService.openDirect(row.user.id);
+      navigation.navigate('Chat', { conversationId: conv.id, title: row.user.name });
+    } catch (err) {
+      showAlert('Conversation impossible', apiErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const removeFriend = (row) => showAlert('Retirer cet ami', `${row.user.name} ne sera plus dans votre liste d'amis.`, [
     { text: 'Annuler', style: 'cancel' },
     { text: 'Retirer', style: 'destructive', onPress: () => act(`rm-${row.id}`, () => friendService.remove(row.id)) },
@@ -120,6 +134,10 @@ export default function FriendsScreen({ navigation, route }) {
           {data && tab === 'friends' && (
             data.friends.length ? data.friends.map((row) => (
               <Person key={row.id} user={row.user} sub="Ami · invitable en un geste">
+                <Pressable onPress={() => writeTo(row)} style={styles.iconBtn} accessibilityRole="button"
+                  accessibilityLabel={`Écrire à ${row.user.name}`}>
+                  {busy === `msg-${row.id}` ? <ActivityIndicator size="small" color={C.green} /> : <Ionicons name="chatbubble-ellipses-outline" size={19} color={C.green} />}
+                </Pressable>
                 <Pressable onPress={() => removeFriend(row)} style={styles.iconBtn} accessibilityRole="button"
                   accessibilityLabel={`Retirer ${row.user.name}`}>
                   {busy === `rm-${row.id}` ? <ActivityIndicator size="small" color={C.textSub} /> : <Ionicons name="person-remove-outline" size={18} color={C.textSub} />}

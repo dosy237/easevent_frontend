@@ -43,6 +43,11 @@
               "scheme": "https",
               "host": "easevent.nitypulse.com",
               "pathPrefix": "/i/"
+            },
+            {
+              "scheme": "https",
+              "host": "easevent.nitypulse.com",
+              "pathPrefix": "/e/"
             }
           ],
           "category": [

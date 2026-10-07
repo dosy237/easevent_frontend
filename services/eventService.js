@@ -83,6 +83,14 @@ const eventService = {
     }
   },
 
+  // « J'aime » (événements publics) : { liked, likes_count }
+  like: async (eventId, on = true) =>
+    (await (on ? apiClient.post(`/api/events/${eventId}/like/`) : apiClient.delete(`/api/events/${eventId}/like/`))).data,
+
+  // Partager un événement public à des amis (carte dans leur messagerie)
+  share: async (eventId, userIds, message = '') =>
+    (await apiClient.post(`/api/events/${eventId}/share/`, { user_ids: userIds, message })).data,
+
   // Événements restants ce mois-ci selon le plan : { limit, used, remaining, resets_on }
   fetchQuota: async () => (await apiClient.get('/api/events/quota/')).data,
 

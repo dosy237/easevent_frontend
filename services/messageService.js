@@ -9,6 +9,8 @@ const messageService = {
     (await apiClient.get('/api/conversations/', { params: { ...(eventId ? { event: eventId } : {}), ...(q ? { q } : {}) } })).data,
   open: async (eventId, participantId) =>
     (await apiClient.post('/api/conversations/', { event_id: eventId, ...(participantId ? { participant_id: participantId } : {}) })).data,
+  // Conversation directe avec un ami (une seule par paire)
+  openDirect: async (friendId) => (await apiClient.post('/api/conversations/', { friend_id: friendId })).data,
   unreadCount: async () => (await apiClient.get('/api/conversations/unread-count/')).data.unread,
   detail: async (id) => (await apiClient.get(`/api/conversations/${id}/`)).data,
   messages: async (id, { after, before } = {}) =>

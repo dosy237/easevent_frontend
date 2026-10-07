@@ -50,7 +50,10 @@ import { useAuth } from '../context/AuthContext';
 import ticketService from '../services/ticketService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
+import { seedLikes } from '../utils/likes';
 import EventMap, { openInMaps } from '../components/maps/EventMap';
+import LikeButton from '../components/events/LikeButton';
+import ShareSheet from '../components/events/ShareSheet';
 import { formatPrice } from '../utils/format';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { isRsvpCancel } from '../utils/rsvp';
@@ -205,6 +208,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [loading, setLoading]   = useState(!event?.description);
   const [error, setError]       = useState(null);
   const [viewer, setViewer]     = useState(null);     // photo affichée en plein écran
+  const [sharing, setSharing]   = useState(false);    // feuille de partage
 
   // « Je participe » touché dans le mini-site : même parcours que le bouton de cette page
   const participateRef = useRef(null);
@@ -243,6 +247,7 @@ export default function EventDetailScreen({ route, navigation }) {
     try {
       setLoading(true);
       const response = await apiClient.get(`/api/events/publics/${id}/`);
+      seedLikes([response.data]);
       setFullEvent(response.data);
       setError(null);
     } catch (err) {
@@ -389,6 +394,11 @@ export default function EventDetailScreen({ route, navigation }) {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <ImageViewer uri={viewer} onClose={() => setViewer(null)} />
+      {fullEvent?.share_url ? (
+        <ShareSheet event={fullEvent} visible={sharing} onClose={() => setSharing(false)} isAuthenticated={isAuthenticated}
+          onAddFriends={() => navigation.navigate('TabProfile', { screen: 'Friends', initial: false, params: { tab: 'add' } })}
+          onSent={(res) => showAlert('Partagé', res.message || 'Envoyé.')} />
+      ) : null}
 
       {/* ══ HEADER FLOTTANT ═══════════════════════════════════
           Position absolute — flotte au-dessus du scroll.
@@ -486,6 +496,19 @@ export default function EventDetailScreen({ route, navigation }) {
                 </Text>
               </View>
             </View>
+
+            {/* J'aime et partage (événements publics publiés) */}
+            {fullEvent.share_url ? (
+              <View style={styles.heroEngage}>
+                <LikeButton event={fullEvent} light isAuthenticated={isAuthenticated}
+                  onRequireLogin={() => navigation.navigate('Login', { mode: 'login' })} />
+                <Pressable onPress={() => setSharing(true)} style={styles.heroShare} accessibilityRole="button"
+                  accessibilityLabel={`Partager « ${fullEvent.title} »`}>
+                  <Ionicons name="paper-plane-outline" size={18} color={C.white} />
+                  <Text style={styles.heroShareTxt}>Partager</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -882,6 +905,9 @@ const styles = StyleSheet.create({
   },
 
   // ── Card description
+  heroEngage: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  heroShare: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.32)' },
+  heroShareTxt: { color: C.white, fontWeight: '700', fontSize: 14 },
   minisiteBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.greenLight, borderRadius: 16, padding: 14, marginBottom: 14 },
   minisiteIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
   minisiteTitle: { fontSize: 16, fontWeight: '800', color: C.green },

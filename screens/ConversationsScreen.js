@@ -119,7 +119,7 @@ export default function ConversationsScreen({ navigation, route }) {
         onPress={() => { refreshBadges({ force: true }); navigation.navigate('Chat', { conversationId: c.id, title: c.other.name }); }}
         style={({ pressed }) => [styles.row, unread && styles.rowUnread, pressed && { opacity: 0.85 }]}
         accessibilityRole="button"
-        accessibilityLabel={`${c.other.name}, ${c.event.title}. ${last ? (last.from_me ? 'Vous : ' : '') + last.text : ''}${unread ? `. ${c.unread} non lu${c.unread > 1 ? 's' : ''}` : ''}`}
+        accessibilityLabel={`${c.other.name}, ${c.event ? c.event.title : 'ami'}. ${last ? (last.from_me ? 'Vous : ' : '') + last.text : ''}${unread ? `. ${c.unread} non lu${c.unread > 1 ? 's' : ''}` : ''}`}
       >
         <View>
           <View style={[styles.avatar, { backgroundColor: bg }]}><Text style={[styles.avatarTxt, { color: fg }]}>{c.other.initials}</Text></View>
@@ -131,7 +131,7 @@ export default function ConversationsScreen({ navigation, route }) {
             {last && <Text style={[styles.time, unread && styles.timeUnread]}>{when(last.created_at)}</Text>}
           </View>
           <Text style={[styles.event, !unread && { color: C.textMut }]} numberOfLines={1}>
-            {c.event.title.toUpperCase()}{c.role === 'participant' ? ' · ORGANISATEUR' : ''}
+            {c.event ? `${c.event.title.toUpperCase()}${c.role === 'participant' ? ' · ORGANISATEUR' : ''}` : 'AMI'}
           </Text>
           <View style={styles.rowBottom}>
             {last?.is_system ? (

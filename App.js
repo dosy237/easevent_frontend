@@ -111,6 +111,7 @@ const soon = (screenId, title, description) => ({
 // Connecté, le lien d'invitation s'ouvre dans l'onglet Tickets (même écran M31)
 let linkingAuthenticated = false;
 const INVITE_PATH = /^\/?i\/([^/?#]+)/;
+const EVENT_PATH = /^\/?(?:e|evenement)\/([0-9a-fA-F-]{36})\/?(?:\?.*)?$/;
 
 const linking = {
   prefixes: [Linking.createURL('/'), 'https://easevent.nitypulse.com', 'https://easevent.app', 'easevent://'],
@@ -130,6 +131,14 @@ const linking = {
     }
   },
   getStateFromPath(path, options) {
+    // Lien de partage /e/<id> (ou /evenement/<id>) : la page de l'événement, connecté ou non
+    const shared = path.match(EVENT_PATH);
+    if (shared) {
+      const params = { id: shared[1] };
+      return linkingAuthenticated
+        ? { routes: [{ name: 'TabDiscover', state: { routes: [{ name: 'DiscoverHome' }, { name: 'EventDetail', params }] } }] }
+        : { routes: [{ name: 'Home' }, { name: 'EventDetail', params }] };
+    }
     const match = path.match(INVITE_PATH);
     if (match && linkingAuthenticated) {
       return {

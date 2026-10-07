@@ -272,7 +272,11 @@ export default function ChatScreen({ navigation, route }) {
   const role = head?.role;
   const other = head?.other;
   const ev = head?.event;
+  const direct = !!head?.direct;                 // conversation entre amis (sans événement)
   const status = STATUS[head?.guest_status] || STATUS.contact;
+  const openShared = (card) => navigation.navigate('TabDiscover', {
+    screen: 'EventDetail', initial: false, params: { id: card.event_id, event: { id: card.event_id, title: card.title } },
+  });
 
   const openEvent = () => {
     if (!ev) return;
@@ -280,7 +284,10 @@ export default function ChatScreen({ navigation, route }) {
     else navigation.navigate('TabDiscover', { screen: 'EventDetail', initial: false, params: { event: { id: ev.id, title: ev.title } } });
   };
 
-  const quickReplies = role === 'organizer'
+  const quickReplies = direct ? [
+    ['Super idée !', 'Super idée, je regarde ça !'],
+    ['On y va ensemble ?', 'On y va ensemble ?'],
+  ] : role === 'organizer'
     ? [
       ...(ev?.location_address ? [["Envoyer l'itinéraire", sendItinerary]] : []),
       ['Merci pour votre réponse', 'Merci pour votre réponse, à très bientôt !'],
@@ -333,6 +340,31 @@ export default function ChatScreen({ navigation, route }) {
           {m.body ? <Text style={[styles.body, { paddingHorizontal: 10, paddingTop: 6 }, mine && { color: C.white }]}>{m.body}</Text> : null}
           <Text style={[styles.metaTxt, styles.mediaMeta, mine && { color: 'rgba(255,255,255,0.8)' }]}>{m.pending ? 'Envoi…' : hhmm(d)}</Text>
         </Pressable>
+      );
+    }
+    if (m.kind === 'event' && m.event) {
+      const card = m.event;
+      const when = card.start_date ? new Date(card.start_date) : null;
+      return (
+        <View style={[styles.media, mine ? styles.mediaMine : styles.mediaTheirs, { width: 264 }]}>
+          <Pressable onPress={() => openShared(card)} accessibilityRole="button"
+            accessibilityLabel={`Événement partagé : ${card.title}${when ? `, ${shortDay(when)}` : ''}. Ouvrir`}>
+            {card.cover_image ? <Image source={{ uri: card.cover_image }} style={styles.sharedCover} resizeMode="cover" /> : null}
+            <View style={styles.locBody}>
+              <Text style={[styles.sharedType, mine && { color: 'rgba(255,255,255,0.85)' }]}>{card.type}</Text>
+              <Text style={[styles.locTitle, mine && { color: C.white }]} numberOfLines={2}>{card.title}</Text>
+              <Text style={[styles.locAddr, mine && { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={2}>
+                {[when ? `${JOURS[when.getDay()]} ${shortDay(when)} · ${hhmm(when)}` : '', card.location].filter(Boolean).join('\n')}
+              </Text>
+              <View style={[styles.locBtn, mine && { backgroundColor: C.white }]}>
+                <Ionicons name="open-outline" size={15} color={mine ? C.green : C.white} />
+                <Text style={[styles.locBtnTxt, mine && { color: C.green }]}>Voir l'événement</Text>
+              </View>
+            </View>
+          </Pressable>
+          {m.body ? <Text style={[styles.body, { paddingHorizontal: 12, paddingBottom: 4 }, mine && { color: C.white }]}>{m.body}</Text> : null}
+          <Text style={[styles.metaTxt, styles.mediaMeta, mine && { color: 'rgba(255,255,255,0.8)' }]}>{hhmm(d)}</Text>
+        </View>
       );
     }
     if (m.kind === 'location' && m.location) {
@@ -391,13 +423,15 @@ export default function ChatScreen({ navigation, route }) {
           <View style={{ flex: 1 }}>
             <Text style={styles.name} numberOfLines={1} accessibilityRole="header">{other?.name || route.params?.title || 'Conversation'}</Text>
             <Text style={[styles.presence, online && { color: C.green }]} numberOfLines={1}>
-              {typing ? "En train d'écrire…" : online ? 'En ligne' : role === 'participant' ? 'Organisateur' : ev?.title || ''}
+              {typing ? "En train d'écrire…" : online ? 'En ligne' : direct ? 'Ami' : role === 'participant' ? 'Organisateur' : ev?.title || ''}
             </Text>
           </View>
-          <Pressable onPress={openEvent} style={styles.info} accessibilityRole="button"
-            accessibilityLabel={role === 'organizer' ? "Gérer l'événement" : "Voir l'événement"}>
-            <Ionicons name="information-circle-outline" size={24} color={C.text} />
-          </Pressable>
+          {!direct ? (
+            <Pressable onPress={openEvent} style={styles.info} accessibilityRole="button"
+              accessibilityLabel={role === 'organizer' ? "Gérer l'événement" : "Voir l'événement"}>
+              <Ionicons name="information-circle-outline" size={24} color={C.text} />
+            </Pressable>
+          ) : null}
         </View>
 
         {error ? (
@@ -406,6 +440,7 @@ export default function ChatScreen({ navigation, route }) {
           <View style={styles.loading}><ActivityIndicator color={C.green} /><LoadingMessages messages={['Nous ouvrons la conversation…', 'Encore un instant…']} /></View>
         ) : (
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            {ev ? (
             <Pressable onPress={openEvent} style={styles.card} accessibilityRole="button" accessibilityLabel={`${ev.title}. ${status.label}`}>
               {ev.cover_image ? <Image source={{ uri: ev.cover_image }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
               <View style={styles.cardShade} />
@@ -423,6 +458,7 @@ export default function ChatScreen({ navigation, route }) {
                 </View>
               </View>
             </Pressable>
+            ) : null}
 
             <FlatList
               ref={list}
@@ -491,6 +527,8 @@ export default function ChatScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
+  sharedCover: { width: '100%', height: 130 },
+  sharedType: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', color: C.green, marginBottom: 2 },
   header: { backgroundColor: C.white, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border, flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { fontSize: 15, fontWeight: '800', color: C.green },
