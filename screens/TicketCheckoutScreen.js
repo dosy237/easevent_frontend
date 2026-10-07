@@ -24,6 +24,8 @@ import LoadingMessages from '../components/ui/LoadingMessages';
 import ticketService from '../services/ticketService';
 import { apiErrorMessage } from '../services/authService';
 import { formatDateLong, formatPrice } from '../utils/format';
+import { passWord } from '../utils/wording';
+import Price from '../components/ui/Price';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 
 const POLL_EVERY = 2000;
@@ -45,7 +47,7 @@ export default function TicketCheckoutScreen({ navigation, route }) {
       if (alive.current) setTicket(t);
       return t;
     } catch (err) {
-      if (alive.current) setError(apiErrorMessage(err, 'Ticket introuvable.'));
+      if (alive.current) setError(apiErrorMessage(err, 'Invitation ou billet introuvable.'));
       return null;
     }
   }, [ticketId]);
@@ -92,6 +94,7 @@ export default function TicketCheckoutScreen({ navigation, route }) {
 
   const e = ticket?.event || {};
   const price = ticket ? formatPrice(ticket.price, ticket.currency) : '';
+  const pw = passWord(e);
   const busy = phase === 'opening' || phase === 'waiting';
 
   return (
@@ -99,7 +102,7 @@ export default function TicketCheckoutScreen({ navigation, route }) {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={styles.header}>
           <BackButton variant="square" onPress={goBack} />
-          <Text style={styles.headerTitle} accessibilityRole="header">Payer mon ticket</Text>
+          <Text style={styles.headerTitle} accessibilityRole="header">{ticket ? `Payer ${pw.my}` : 'Paiement'}</Text>
           <View style={styles.secure}>
             <Ionicons name="lock-closed-outline" size={14} color={C.green} />
             <Text style={styles.secureTxt}>Sécurisé</Text>
@@ -120,7 +123,7 @@ export default function TicketCheckoutScreen({ navigation, route }) {
                     </Text>
                   </View>
                   <View style={styles.glassBottom}>
-                    <Text style={styles.glassChip} numberOfLines={1}>1 ticket · {ticket.participant}</Text>
+                    <Text style={styles.glassChip} numberOfLines={1}>1 {pw.one} · {ticket.participant}</Text>
                     <Text style={styles.glassPrice}>{price}</Text>
                   </View>
                 </View>
@@ -128,12 +131,15 @@ export default function TicketCheckoutScreen({ navigation, route }) {
 
               <View style={styles.summary}>
                 <View style={[styles.sumRow, styles.sumRowBorder]}>
-                  <Text style={styles.sumLabel} numberOfLines={1}>Ticket · {e.title}</Text>
+                  <Text style={styles.sumLabel} numberOfLines={1}>{pw.One} · {e.title}</Text>
                   <Text style={styles.sumValue}>{price}</Text>
                 </View>
                 <View style={styles.sumRow}>
                   <Text style={styles.sumTotal}>Total TTC</Text>
-                  <Text style={styles.sumTotalValue}>{price}</Text>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.sumTotalValue}>{price}</Text>
+                    <Price amount={ticket.price} currency={ticket.currency || 'EUR'} text={null} />
+                  </View>
                 </View>
               </View>
 
@@ -159,14 +165,14 @@ export default function TicketCheckoutScreen({ navigation, route }) {
           {phase === 'waiting' && (
             <View style={styles.notice} accessibilityLiveRegion="polite">
               <ActivityIndicator color={C.green} />
-              <LoadingMessages messages={['Nous attendons la confirmation de Stripe…', 'Votre ticket est en préparation…', 'Encore un instant…']} />
+              <LoadingMessages messages={['Nous attendons la confirmation de Stripe…', `${pw.One} en préparation…`, 'Encore un instant…']} />
             </View>
           )}
           {phase === 'processing' && (
             <View style={[styles.notice, styles.noticeInfo]} accessibilityRole="alert">
               <Ionicons name="time-outline" size={18} color={C.green} />
               <Text style={styles.noticeTxt}>
-                Paiement enregistré. Pour un prélèvement bancaire, la confirmation peut prendre quelques jours : votre ticket sera généré automatiquement.
+                Paiement enregistré. Pour un prélèvement bancaire, la confirmation peut prendre quelques jours : {`${pw.your} sera généré${pw.e} automatiquement.`}
               </Text>
             </View>
           )}
@@ -180,10 +186,10 @@ export default function TicketCheckoutScreen({ navigation, route }) {
 
         <View style={styles.footer}>
           {phase === 'processing' ? (
-            <PrimaryButton label="Voir mes tickets" onPress={() => navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } })} />
+            <PrimaryButton label={`Voir mes ${pw.many}`} onPress={() => navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } })} />
           ) : (
             <PrimaryButton
-              label={busy ? 'Paiement en cours…' : `Payer ${price} et générer mon ticket`}
+              label={busy ? 'Paiement en cours…' : `Payer ${price} et générer ${pw.my}`}
               onPress={pay}
               loading={busy}
               disabled={!ticket || ticket.status !== 'pending'}
@@ -192,7 +198,7 @@ export default function TicketCheckoutScreen({ navigation, route }) {
           <View style={styles.footNote}>
             <Ionicons name="information-circle-outline" size={14} color={C.green} />
             <Text style={styles.footNoteTxt}>
-              Si vous quittez cet écran, votre ticket reste dans Mes tickets › En attente. Vous pourrez payer plus tard ou l'annuler.
+              {`Si vous quittez cet écran, ${pw.your} reste dans Invitations › En attente.`} Vous pourrez payer plus tard ou l'annuler.
             </Text>
           </View>
         </View>

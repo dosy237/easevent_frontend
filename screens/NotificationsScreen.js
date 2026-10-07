@@ -50,7 +50,7 @@ const LOADING = ['Nous relevons votre courrier…', 'On trie vos nouvelles…', 
 // Pastille par type : icône, couleurs, appel à l'action
 const LOOK = {
   invitation_received: { icon: 'mail-open-outline', bg: C.greenLight, fg: C.green },
-  ticket_to_validate:  { icon: 'ticket-outline', bg: C.green, fg: C.white, cta: 'Valider mon ticket' },
+  ticket_to_validate:  { icon: 'ticket-outline', bg: C.green, fg: C.white, cta: 'Valider mon invitation' },
   ticket_generated:    { icon: 'qr-code-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
   daily_summary:       { icon: 'people-outline', bg: C.greenLight, fg: C.green },
   reminder:            { icon: 'time-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: 'Voir' },
@@ -174,7 +174,7 @@ export default function NotificationsScreen({ navigation }) {
       if (status === 'confirmed') {
         showAlert('Invitation acceptée', 'Elle vous attend dans Mes invitations : validez-la pour recevoir votre QR code.', [
           { text: 'Plus tard', style: 'cancel' },
-          { text: 'Voir mon ticket', onPress: () => navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } }) },
+          { text: 'Voir mon invitation', onPress: () => navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } }) },
         ]);
       }
       await load();

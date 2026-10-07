@@ -13,11 +13,11 @@ import { images, when } from '../theme';
 // Réponses calculées sur le téléphone (fuseau horaire de l'invité)
 function localAnswer(item, event) {
   if (item.key !== 'when') return item.a;
-  const a = when(event.start_date);
-  const b = when(event.end_date);
+  const a = when(event.start_date, event.timezone);
+  const b = when(event.end_date, event.timezone);
   if (!a) return item.a;
   const same = b && a.date.toDateString() === b.date.toDateString();
-  return `Le ${a.long} à ${a.time}${b ? (same ? `, jusqu’à ${b.time}` : `, jusqu’au ${b.long}`) : ''}.`;
+  return `Le ${a.long} à ${a.time}${b ? (same ? `, jusqu’à ${b.time}` : `, jusqu’au ${b.long}`) : ''}${a.local ? ` (${a.zone} ; ${a.local})` : ''}.`;
 }
 
 const pad = 26;

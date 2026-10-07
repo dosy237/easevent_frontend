@@ -5,6 +5,7 @@
  * Les contrastes sont garantis par le serveur (minisite/colors.py).
  */
 import { pairFor } from './fonts';
+import { eventTime } from '../../utils/timezone';
 
 export const RADIUS = {
   sharp: { card: 2, btn: 2, img: 0, chip: 2 },
@@ -51,14 +52,17 @@ export function tone(theme, name) {
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
-export function when(iso) {
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return null;
-  const time = `${d.getHours()}h${d.getMinutes() ? String(d.getMinutes()).padStart(2, '0') : ''}`;
+export function when(iso, tz) {
+  // Date dans le fuseau de l'événement ; « local » : l'heure chez le visiteur si elle diffère
+  const t = eventTime(iso, tz);
+  if (!t) return null;
+  const p = t.parts;
+  const date = new Date(p.year, p.month, p.day, p.hour, p.minute);
   return {
-    date: d, day: d.getDate(), dayName: DAYS[d.getDay()], month: MONTHS[d.getMonth()], year: d.getFullYear(), time,
-    long: `${DAYS[d.getDay()]} ${d.getDate() === 1 ? '1er' : d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`,
-    short: `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}.`,
+    date, day: p.day, dayName: DAYS[p.weekday], month: MONTHS[p.month], year: p.year, time: t.time,
+    long: `${DAYS[p.weekday]} ${p.day === 1 ? '1er' : p.day} ${MONTHS[p.month]} ${p.year}`,
+    short: `${p.day} ${MONTHS[p.month].slice(0, 3)}.`,
+    zone: t.zone, local: t.local,
   };
 }
 

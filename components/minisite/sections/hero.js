@@ -13,14 +13,14 @@ import { images, when } from '../theme';
 export default function Hero({ s, copy = {}, event, theme, t, actions }) {
   const { c, radius, width } = theme;
   const cover = images(event)[0];
-  const w = when(event.start_date);
+  const w = when(event.start_date, event.timezone);
   const align = s.align === 'left' ? 'left' : 'center';
   const items = align === 'center' ? 'center' : 'flex-start';
   const title = event.title;
   const pad = 26;
   const openCover = cover ? () => actions.viewImage(cover) : undefined;
   // Date et heure : toujours issues de l'événement (fuseau du téléphone), jamais de l'IA
-  const dateLine = w ? `${w.long.charAt(0).toUpperCase()}${w.long.slice(1)} · ${w.time}` : '';
+  const dateLine = w ? `${w.long.charAt(0).toUpperCase()}${w.long.slice(1)} · ${w.time}${w.local ? ` (${w.zone}) · ${w.local}` : ''}` : '';
   const DateLine = ({ tt, a = align, style }) => (dateLine ? (
     <Text style={[{ fontFamily: theme.fonts.bold, color: tt.text, fontSize: 14, letterSpacing: 0.4, textAlign: a, marginTop: 10 }, style]}>{dateLine}</Text>
   ) : null);

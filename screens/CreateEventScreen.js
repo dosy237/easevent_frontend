@@ -38,6 +38,7 @@ import { logDev } from '../utils/log';
 import QuotaReached from '../components/ui/QuotaReached';
 import EventVideo from '../components/events/EventVideo';
 import { uploadVideo, VIDEO_MAX_SECONDS } from '../utils/videoUpload';
+import { deviceTz } from '../utils/timezone';
 import { isPlanLimit, openPlans, planLimitAlert } from '../utils/plans';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -743,6 +744,8 @@ export default function CreateEventScreen({ navigation, route }) {
         ambiance, palette, visibility, template_config,
         ambiance_label:   ambiance === 'autre' ? ambianceLabel.trim() : '',
         theme:            theme.trim(),
+        // Fuseau du lieu : celui du téléphone de l'organisateur à la création (inchangé en modification)
+        ...(editing ? {} : { timezone: deviceTz() }),
         // Vidéo : seulement pour un événement public ; null la retire (modification)
         ...(visibility === 'public' && videoPublicId ? { video: { public_id: videoPublicId, caption: videoCaption.trim() } }
           : editing && initialVideo.current && (!videoPublicId || visibility !== 'public') ? { video: null } : {}),

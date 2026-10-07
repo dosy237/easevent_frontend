@@ -25,6 +25,7 @@ import { openDirections } from './maps/EventMap';
 import rsvpService from '../services/rsvpService';
 import { askRsvp } from '../utils/rsvp';
 import { passWord } from '../utils/wording';
+import { eventTime } from '../utils/timezone';
 
 // Lien « Ajouter à Google Agenda » : fonctionne sur tous les appareils, sans permission
 const calendarUrl = (ticket) => {
@@ -89,7 +90,10 @@ export default function TicketView({ ticket, justPaid = false }) {
   }).catch(() => {});
 
   const rows = [
-    { label: 'Date', value: formatDateLong(e.start_date) },
+    { label: 'Date', value: (() => {
+      const t = eventTime(e.start_date, e.timezone);
+      return t ? `${t.date} · ${t.time}${t.zone ? ` (${t.zone})` : ''}${t.local ? `\n${t.local}` : ''}` : formatDateLong(e.start_date);
+    })() },
     { label: 'Lieu', value: e.is_online ? 'En ligne' : (e.location_address || '—') },
     { label: 'Participant', value: ticket.participant },
     { label: 'Prix', value: formatPrice(ticket.price, ticket.currency), strong: true },

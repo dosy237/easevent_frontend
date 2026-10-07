@@ -248,7 +248,7 @@ function DiscoverStackNavigator() {
       <DiscoverStack.Screen name="MiniSiteView"  component={MiniSiteViewScreen} options={{ title: 'Mini-site' }} />
       <DiscoverStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <DiscoverStack.Screen name="Chat"          component={ChatScreen} options={{ title: 'Conversation' }} />
-      <DiscoverStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
+      <DiscoverStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Paiement' }} />
     </DiscoverStack.Navigator>
   );
 }
@@ -259,8 +259,8 @@ function DiscoverStackNavigator() {
 function TicketsStackNavigator() {
   return (
     <TicketsStack.Navigator screenOptions={stackOptions}>
-      <TicketsStack.Screen name="Tickets"        component={TicketsScreen} options={{ title: 'Mes tickets' }} />
-      <TicketsStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
+      <TicketsStack.Screen name="Tickets"        component={TicketsScreen} options={{ title: 'Mes invitations' }} />
+      <TicketsStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Paiement' }} />
       <TicketsStack.Screen name="InvitationLanding" component={InvitationLandingScreen} options={{ title: 'Invitation' }} />
       <TicketsStack.Screen name="Chat"           component={ChatScreen} options={{ title: 'Conversation' }} />
       <TicketsStack.Screen name="VerifyPhone"    component={VerifyPhoneScreen} options={{ title: 'Mon numéro' }} />

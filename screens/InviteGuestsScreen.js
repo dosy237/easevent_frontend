@@ -240,7 +240,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
               <View style={styles.info}>
                 <Ionicons name="information-circle-outline" size={16} color={C.green} />
                 <Text style={styles.infoTxt}>
-                  Après acceptation, chaque invité retrouve son ticket à valider dans Mes tickets
+                  Après acceptation, chaque invité retrouve son invitation à valider dans l’onglet Invitations
                   (prix : {formatPrice(event.is_paid ? event.price : 0, event.currency)}).
                 </Text>
               </View>

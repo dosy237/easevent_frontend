@@ -51,9 +51,11 @@ import ticketService from '../services/ticketService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
 import { seedLikes } from '../utils/likes';
+import { eventTime } from '../utils/timezone';
 import EventMap, { openInMaps } from '../components/maps/EventMap';
 import LikeButton from '../components/events/LikeButton';
 import ShareSheet from '../components/events/ShareSheet';
+import Price from '../components/ui/Price';
 import EventVideo from '../components/events/EventVideo';
 import { formatPrice } from '../utils/format';
 import { useTicketBadge } from '../context/TicketBadgeContext';
@@ -156,7 +158,7 @@ const typeLabel = (type) => {
 // - value   : valeur affichée (ex: "Samedi 13 juin 2026")
 // - onPress : optionnel — rend la ligne cliquable
 // ════════════════════════════════════════════════════════════════
-const InfoRow = ({ icon, label, value, onPress }) => {
+const InfoRow = ({ icon, label, value, onPress, extra }) => {
   const Wrapper = onPress ? TouchableOpacity : View;
   return (
     <Wrapper
@@ -175,6 +177,7 @@ const InfoRow = ({ icon, label, value, onPress }) => {
         <Text style={styles.infoValue} numberOfLines={onPress ? 1 : 3}>
           {value}
         </Text>
+        {extra}
       </View>
 
       {/* Flèche si cliquable */}
@@ -532,7 +535,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon="calendar-outline"
               label="Date"
-              value={formatDateComplete(fullEvent.start_date)}
+              value={(() => { const t = eventTime(fullEvent.start_date, fullEvent.timezone); return t ? t.date.charAt(0).toUpperCase() + t.date.slice(1) : formatDateComplete(fullEvent.start_date); })()}
             />
             <View style={styles.divider} />
 
@@ -540,7 +543,13 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon="time-outline"
               label="Horaires"
-              value={`${formatHeure(fullEvent.start_date)} — ${formatHeure(fullEvent.end_date)}`}
+              value={(() => {
+                const a = eventTime(fullEvent.start_date, fullEvent.timezone);
+                const b = eventTime(fullEvent.end_date, fullEvent.timezone);
+                if (!a) return `${formatHeure(fullEvent.start_date)} — ${formatHeure(fullEvent.end_date)}`;
+                // « 12h00 — 18h00 (heure de Paris) · 11h00 chez vous »
+                return `${a.time}${b ? ` — ${b.time}` : ''}${a.zone ? ` (${a.zone})` : ''}${a.local ? `\n${a.local}` : ''}`;
+              })()}
             />
             <View style={styles.divider} />
 
@@ -559,6 +568,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon="ticket-outline"
               label={`Prix ${pw.kind === 'invitation' ? "de l'invitation" : 'du billet'}`}
+              extra={isPaid ? <Price amount={fullEvent.price} currency={fullEvent.currency || 'EUR'} text={null} /> : null}
               value={`${isPaid ? priceTxt : '0,00 € · gratuit'}${fullEvent.spots_left != null ? ` · ${fullEvent.spots_left} place${fullEvent.spots_left > 1 ? 's' : ''} restante${fullEvent.spots_left > 1 ? 's' : ''}` : ''}`}
             />
             {fullEvent.dress_code ? (
@@ -726,6 +736,7 @@ export default function EventDetailScreen({ route, navigation }) {
           <View>
             <Text style={styles.ticketBarLabel}>{pw.One}</Text>
             <Text style={styles.ticketBarPrice}>{isPaid ? priceTxt : '0,00 €'}</Text>
+            {isPaid ? <Price amount={fullEvent.price} currency={fullEvent.currency || 'EUR'} text={null} compact /> : null}
           </View>
           <TouchableOpacity
             style={[styles.ticketBarBtn, soldOut && !isOrganizer && styles.ticketBarBtnOff]}

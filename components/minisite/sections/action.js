@@ -66,7 +66,7 @@ export function Cta({ s, copy = {}, event, theme, t, actions }) {
 }
 
 export function Footer({ s, copy = {}, event, theme, t }) {
-  const a = when(event.start_date);
+  const a = when(event.start_date, event.timezone);
   if (s.variant === 'signature') {
     return (
       <View style={{ paddingHorizontal: pad, alignItems: 'center' }}>

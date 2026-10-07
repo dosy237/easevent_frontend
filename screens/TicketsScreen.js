@@ -421,8 +421,8 @@ export default function TicketsScreen({ navigation, route }) {
   const renderContent = () => {
     if (activeSection === 'generated') {
       return generated.length === 0
-        ? <Empty icon="ticket-outline" title="Aucun ticket généré"
-            text="Validez un ticket en attente ou participez à un événement : votre ticket apparaîtra ici avec son QR code." cta={discoverBtn} />
+        ? <Empty icon="ticket-outline" title="Rien de généré pour l’instant"
+            text="Validez une invitation en attente ou participez à un événement : votre invitation ou votre billet apparaîtra ici avec son QR code." cta={discoverBtn} />
         : generated.map((t) => <GeneratedTicketCard key={t.id} ticket={t} onOpen={(x) => { setJustPaid(false); setOpenTicket(x); }} />);
     }
     if (activeSection === 'pending') {
@@ -442,7 +442,7 @@ export default function TicketsScreen({ navigation, route }) {
           <>
             {phoneBanner}
             <Empty icon="hourglass-outline" title="Rien en attente"
-              text="Les invitations reçues et les tickets à valider apparaîtront ici." cta={discoverBtn} />
+              text="Les invitations reçues et les billets à valider apparaîtront ici." cta={discoverBtn} />
           </>
         );
       }
@@ -468,7 +468,7 @@ export default function TicketsScreen({ navigation, route }) {
     }
     if (counts.archived === 0) {
       return <Empty icon="archive-outline" title="Aucun élément archivé"
-        text="Les tickets annulés ou expirés et les invitations déclinées apparaîtront ici." />;
+        text="Les billets annulés ou expirés et les invitations déclinées apparaîtront ici." />;
     }
     return (
       <>
@@ -523,7 +523,7 @@ export default function TicketsScreen({ navigation, route }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.green} colors={[C.green]} />}
         >
           {loading ? (
-            <SkeletonGroup label="Chargement de vos tickets">
+            <SkeletonGroup label="Chargement de vos invitations">
               <LoadingMessages messages={LOADING_MESSAGES} />
               <Bone width={150} height={14} style={{ marginBottom: 12 }} />
               <EventCardSkeleton horizontal />

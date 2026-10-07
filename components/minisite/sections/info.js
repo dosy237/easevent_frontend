@@ -96,12 +96,15 @@ export function Countdown({ s, copy = {}, event, theme, t, preview }) {
 
 // ── Informations (date, heure, lieu, prix) ───────────────────────
 function facts(event) {
-  const a = when(event.start_date);
-  const b = when(event.end_date);
+  const a = when(event.start_date, event.timezone);
+  const b = when(event.end_date, event.timezone);
   const sameDay = a && b && a.date.toDateString() === b.date.toDateString();
   const out = [];
   if (a) out.push({ icon: 'calendar-outline', label: 'Date', value: a.long + (b && !sameDay ? ` → ${b.long}` : '') });
-  if (a) out.push({ icon: 'time-outline', label: 'Heure', value: b && sameDay ? `${a.time} – ${b.time}` : a.time });
+  if (a) {
+    const hours = b && sameDay ? `${a.time} – ${b.time}` : a.time;
+    out.push({ icon: 'time-outline', label: 'Heure', value: a.local ? `${hours} (${a.zone})\n${a.local}` : hours });
+  }
   if (event.is_online && !event.location_address) out.push({ icon: 'videocam-outline', label: 'Lieu', value: 'En ligne' });
   else if (event.location_address) out.push({ icon: 'location-outline', label: 'Lieu', value: event.location_address });
   out.push({ icon: 'ticket-outline', label: 'Participation', value: priceText(event) });
@@ -150,7 +153,7 @@ export function Details({ s, copy = {}, event, theme, t }) {
     );
   }
   if (s.variant === 'stub') {
-    const a = when(event.start_date);
+    const a = when(event.start_date, event.timezone);
     return (
       <View style={{ paddingHorizontal: pad }}>
         {head}
@@ -332,7 +335,7 @@ export function Capacity({ s, copy = {}, event, theme, t }) {
 
 // ── Agenda ───────────────────────────────────────────────────────
 export function Calendar({ s, copy = {}, event, theme, t, actions }) {
-  const a = when(event.start_date);
+  const a = when(event.start_date, event.timezone);
   if (s.variant === 'card') {
     return (
       <View style={{ paddingHorizontal: pad }}>

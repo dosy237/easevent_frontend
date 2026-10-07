@@ -16,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 
 import { C, TOUCH } from '../constants/theme';
+import Price from '../components/ui/Price';
 import { BackButton, PrimaryButton } from '../components/ui/Buttons';
 import { Bone, SkeletonGroup } from '../components/ui/Skeleton';
 import subscriptionService from '../services/subscriptionService';
@@ -174,6 +175,7 @@ export default function PlansScreen({ navigation, route }) {
                   <Text style={styles.per}>{price ? ` / ${interval === 'annual' ? 'an' : 'mois'}` : ' pour toujours'}</Text>
                 </Text>
                 {interval === 'annual' && price ? <Text style={styles.monthly}>soit {euros(Math.round(price / 12))} par mois</Text> : null}
+                {price ? <Price amount={price / 100} currency="EUR" text={null} /> : null}
                 <View style={styles.features}>
                   {plan.features.map((f) => (
                     <View key={f} style={styles.feature}>
