@@ -691,7 +691,7 @@ export default function EventDetailScreen({ route, navigation }) {
                 Participer à cet événement
               </Text>
               <Text style={styles.participateBannerSub}>
-                Télécharge l'application Easevent pour confirmer ta présence,
+                Téléchargez l'application Easevent pour confirmer votre présence,
                 recevoir les mises à jour et rejoindre la communauté.
               </Text>
             </View>
