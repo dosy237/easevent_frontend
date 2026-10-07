@@ -28,6 +28,8 @@ import { setLogoutCallback } from '../services/apiClient';
 import { authService } from '../services/authService';
 import invitationService from '../services/invitationService';
 import { KEYS, getItem, setItem, deleteItem, clearSession } from '../services/storage';
+import realtime from '../services/realtime';
+import { unregister as unregisterPush } from '../services/push';
 
 // ─────────────────────────────────────────────────────────────────
 // CRÉATION DU CONTEXTE
@@ -110,6 +112,9 @@ export function AuthProvider({ children }) {
   // le refresh token est mis en liste noire côté serveur.
   const logout = useCallback(async ({ revokeSession = false } = {}) => {
     try {
+      // Ce téléphone ne reçoit plus les notifications de ce compte ; connexion temps réel fermée
+      realtime.stop();
+      if (revokeSession) await unregisterPush();
       if (revokeSession) {
         const refresh = await getItem(KEYS.REFRESH_TOKEN);
         if (refresh) await authService.logout(refresh).catch(() => {});

@@ -278,7 +278,29 @@ const handlePublish = async () => {
   };
 
   // ── Invités (M12, M13) ────────────────────────────────────────
-  const goInvite = () => navigation.navigate('InviteGuests', { event });
+  // Inviter ouvre l'événement aux invités : il doit être publié d'abord
+  const goInvite = () => {
+    if (event.status !== 'published') {
+      showAlert("Publiez d'abord l'événement",
+        event.visibility === 'private'
+          ? "Il restera privé : seules les personnes invitées pourront le voir."
+          : 'Il apparaîtra dans Découvrir, puis vous pourrez inviter vos proches.',
+        [{ text: 'Plus tard', style: 'cancel' }, {
+          text: 'Publier et inviter', onPress: async () => {
+            try {
+              await eventService.publishEvent(event.id, event.visibility);
+              const published = { ...event, status: 'published' };
+              setEvent(published);
+              navigation.navigate('InviteGuests', { event: published });
+            } catch (err) {
+              showAlert('Publication impossible', err.response?.data?.detail || 'Réessayez.');
+            }
+          },
+        }]);
+      return;
+    }
+    navigation.navigate('InviteGuests', { event });
+  };
   const goGuests = (filter = 'all') => navigation.navigate('GuestList', { event, filter });
 
   // ── Badge de statut de l'événement ───────────────────────────
@@ -449,6 +471,8 @@ const handlePublish = async () => {
                       onPress={() => goGuests('all')} />
                     <ActionRow icon="chatbubbles-outline" title="Messages des invités"
                       subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id, eventTitle: event.title })} />
+                    <ActionRow icon="qr-code-outline" title="Scanner les tickets"
+                      subtitle="Contrôle à l'entrée avec l'appareil photo" onPress={() => navigation.navigate('ScanTickets', { event })} />
                     <ActionRow icon="help-circle-outline" title="Questions RSVP" last
                       subtitle="Posez jusqu'à 5 questions à vos invités" onPress={() => navigation.navigate('RsvpQuestions', { event })} />
                   </View>
@@ -542,7 +566,6 @@ const handlePublish = async () => {
                       { icon: 'shirt-outline',     label: 'Dress code',  value: event.dress_code || '—' },
                       { icon: 'eye-outline',       label: 'Visibilité',  value: event.visibility === 'public' ? 'Public' : 'Privé' },
                       { icon: 'color-palette-outline', label: 'Ambiance', value: event.ambiance || '—' },
-                      { icon: 'link-outline',      label: 'Lien',        value: event.subdomain ? `easevent.app/${event.subdomain}` : '—' },
                     ].map((row, i) => (
                       <View key={i} style={styles.infoRow}>
                         <View style={styles.infoRowLeft}>

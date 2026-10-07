@@ -29,6 +29,8 @@ import LoadingMessages from '../components/ui/LoadingMessages';
 import messageService from '../services/messageService';
 import { apiErrorMessage } from '../services/authService';
 import { useTicketBadge } from '../context/TicketBadgeContext';
+import realtime from '../services/realtime';
+import { setActiveConversation } from '../services/push';
 
 const POLL_MS = 4000;
 const TYPING_EVERY = 3000;
@@ -104,6 +106,21 @@ export default function ChatScreen({ navigation, route }) {
     return () => { alive = false; };
   }, [paramId, eventId, participantId]);
 
+  // Ajoute ou met à jour un message (temps réel, réponse du serveur) sans doublon
+  const merge = useCallback((msg, tempId) => {
+    setMessages((prev) => {
+      const without = tempId ? prev.filter((m) => m.id !== tempId) : prev;
+      if (without.some((m) => m.id === msg.id)) return without.map((m) => (m.id === msg.id ? { ...m, ...msg } : m));
+      // Mon propre message reçu par le temps réel avant la réponse de l'envoi : il remplace le brouillon
+      if (msg.from_me && !tempId) {
+        const i = without.findIndex((m) => m.pending && m.kind === msg.kind && (m.kind !== 'text' || m.body === msg.body));
+        if (i >= 0) return [...without.slice(0, i), msg, ...without.slice(i + 1)];
+      }
+      const sent = without.filter((m) => !m.pending);
+      return [...sent, msg, ...without.filter((m) => m.pending)];
+    });
+  }, []);
+
   const applyMeta = (res) => {
     setOtherReadAt(res.other_read_at);
     setTyping(res.other_typing);
@@ -138,10 +155,45 @@ export default function ChatScreen({ navigation, route }) {
   useFocusEffect(useCallback(() => {
     if (!convId) return undefined;
     pollRef.current(true);
-    const timer = setInterval(() => { if (appActive.current) pollRef.current(false); }, POLL_MS);
-    const sub = AppState.addEventListener('change', (s) => { appActive.current = s === 'active'; });
-    return () => { clearInterval(timer); sub.remove(); refreshBadges({ force: true }); };
-  }, [convId, refreshBadges]));
+    setActiveConversation(convId);                 // pas de notification pour la conversation ouverte
+    let lastPoll = Date.now();
+    let typingTimer = null;
+    // Temps réel : messages, « écrit… », accusés de lecture instantanés
+    const unsub = realtime.subscribe((evt) => {
+      if (evt.type === 'connected') { pollRef.current(false); return; }
+      if (evt.conversation_id !== convId) return;
+      if (evt.type === 'message') {
+        merge(evt.message);
+        if (!evt.message.from_me) {
+          setTyping(false);
+          pollRef.current(false);                    // marque comme lu → accusé de lecture chez l'autre
+          lastPoll = Date.now();
+        }
+      } else if (evt.type === 'typing') {
+        setTyping(true);
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => setTyping(false), 6000);
+      } else if (evt.type === 'read') {
+        setOtherReadAt(evt.read_at);
+      }
+    });
+    // Sans temps réel (réseau, serveur) : interrogation toutes les 4 s ; avec, toutes les 30 s
+    const timer = setInterval(() => {
+      if (!appActive.current) return;
+      if (realtime.isLive() && Date.now() - lastPoll < 30000) return;
+      lastPoll = Date.now();
+      pollRef.current(false);
+    }, POLL_MS);
+    const sub = AppState.addEventListener('change', (st) => {
+      appActive.current = st === 'active';
+      if (st === 'active') pollRef.current(false);
+    });
+    return () => {
+      unsub(); clearInterval(timer); clearTimeout(typingTimer); sub.remove();
+      setActiveConversation(null);
+      refreshBadges({ force: true });
+    };
+  }, [convId, refreshBadges, merge]));
 
   const loadOlder = async () => {
     const first = messages.find((m) => !m.pending);
@@ -161,7 +213,7 @@ export default function ChatScreen({ navigation, route }) {
     const now = Date.now();
     if (convId && value.trim() && now - lastTyping.current > TYPING_EVERY) {
       lastTyping.current = now;
-      messageService.typing(convId).catch(() => {});
+      if (!realtime.send({ type: 'typing', conversation_id: convId })) messageService.typing(convId).catch(() => {});
     }
   };
 
@@ -173,7 +225,7 @@ export default function ChatScreen({ navigation, route }) {
     if (body === text) setText('');
     try {
       const saved = await messageService.send(convId, clean);
-      setMessages((prev) => prev.map((m) => (m.id === temp.id ? saved : m)));
+      merge(saved, temp.id);
     } catch (err) {
       setMessages((prev) => prev.map((m) => (m.id === temp.id ? { ...m, pending: false, failed: apiErrorMessage(err) } : m)));
     }
@@ -196,7 +248,7 @@ export default function ChatScreen({ navigation, route }) {
     setMessages((prev) => [...prev, temp]);
     try {
       const saved = await messageService.sendImage(convId, asset);
-      setMessages((prev) => prev.map((m) => (m.id === temp.id ? saved : m)));
+      merge(saved, temp.id);
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== temp.id));
       showAlert('Envoi impossible', apiErrorMessage(err, "L'image n'a pas pu être envoyée."));
@@ -207,7 +259,7 @@ export default function ChatScreen({ navigation, route }) {
     if (!convId) return;
     try {
       const saved = await messageService.sendLocation(convId);
-      setMessages((prev) => [...prev, saved]);
+      merge(saved);
     } catch (err) {
       showAlert('Itinéraire indisponible', apiErrorMessage(err));
     }
@@ -224,8 +276,8 @@ export default function ChatScreen({ navigation, route }) {
 
   const openEvent = () => {
     if (!ev) return;
-    if (role === 'organizer') navigation.navigate('TabDashboard', { screen: 'EventDashboard', params: { event: { id: ev.id, title: ev.title } } });
-    else navigation.navigate('TabDiscover', { screen: 'EventDetail', params: { event: { id: ev.id, title: ev.title } } });
+    if (role === 'organizer') navigation.navigate('TabDashboard', { screen: 'EventDashboard', initial: false, params: { event: { id: ev.id, title: ev.title } } });
+    else navigation.navigate('TabDiscover', { screen: 'EventDetail', initial: false, params: { event: { id: ev.id, title: ev.title } } });
   };
 
   const quickReplies = role === 'organizer'
@@ -353,7 +405,7 @@ export default function ChatScreen({ navigation, route }) {
         ) : !head ? (
           <View style={styles.loading}><ActivityIndicator color={C.green} /><LoadingMessages messages={['Nous ouvrons la conversation…', 'Encore un instant…']} /></View>
         ) : (
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <Pressable onPress={openEvent} style={styles.card} accessibilityRole="button" accessibilityLabel={`${ev.title}. ${status.label}`}>
               {ev.cover_image ? <Image source={{ uri: ev.cover_image }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
               <View style={styles.cardShade} />

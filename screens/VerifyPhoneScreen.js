@@ -100,7 +100,7 @@ export default function VerifyPhoneScreen({ navigation, route }) {
           <Text style={styles.headerTitle} accessibilityRole="header">Mon numéro de téléphone</Text>
           <View style={{ width: 44 }} />
         </View>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
             <View style={styles.icon}><Ionicons name={step === 'code' ? 'chatbubble-ellipses-outline' : 'call-outline'} size={30} color={C.green} /></View>
             {user?.phone_verified && step === 'phone' ? (

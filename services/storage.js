@@ -37,6 +37,7 @@ export const KEYS = {
   PENDING_INVITE: 'easevent_pending_invite',
   // Referrer du Play Store déjà lu (premier lancement)
   INSTALL_REFERRER_DONE: 'easevent_install_referrer_done',
+  PUSH_TOKEN: 'easevent_push_token',
 };
 
 export const getItem    = (key)        => storage.getItemAsync(key);

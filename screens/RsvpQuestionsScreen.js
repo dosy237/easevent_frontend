@@ -63,7 +63,7 @@ function QuestionEditor({ draft, onClose, onSave, saving }) {
     <Modal transparent visible animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Fermer" />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.sheetWrap}>
           <SafeAreaView edges={['bottom']} style={styles.sheet}>
             <View style={styles.sheetHead}>
               <Text style={styles.sheetTitle} accessibilityRole="header">{draft.id ? 'Modifier la question' : 'Nouvelle question'}</Text>

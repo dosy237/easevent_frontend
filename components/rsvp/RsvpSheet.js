@@ -137,7 +137,7 @@ export default function RsvpSheet() {
     <Modal transparent visible animationType="slide" onRequestClose={() => finish(null)}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={() => finish(null)} accessibilityLabel="Fermer" accessibilityRole="button" />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.sheetWrap}>
           <SafeAreaView edges={['bottom']} style={styles.sheet} accessibilityViewIsModal role="dialog" aria-modal="true">
             <View style={styles.handle} />
             <View style={styles.head}>

@@ -178,7 +178,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
           <View style={{ width: 44 }} />
         </View>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
             <View style={styles.tabs} accessibilityRole="tablist">
               {MODES.map((m) => {

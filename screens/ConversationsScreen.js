@@ -25,6 +25,7 @@ import messageService from '../services/messageService';
 import eventService from '../services/eventService';
 import { apiErrorMessage } from '../services/authService';
 import { useTicketBadge } from '../context/TicketBadgeContext';
+import realtime from '../services/realtime';
 
 const LOADING = ['Nous ouvrons vos conversations…', 'On rassemble les messages…', 'Encore un instant…'];
 const SYSTEM_LOOK = {
@@ -73,7 +74,17 @@ export default function ConversationsScreen({ navigation, route }) {
     }
   }, [q, eventId, setMessages]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    load();
+    // Nouveau message : la liste (aperçu, non lus, ordre) se met à jour en direct
+    let timer = null;
+    const unsub = realtime.subscribe((evt) => {
+      if (evt.type !== 'message' && evt.type !== 'connected') return;
+      clearTimeout(timer);
+      timer = setTimeout(() => load(), 300);
+    });
+    return () => { unsub(); clearTimeout(timer); };
+  }, [load]));
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const search = (text) => {

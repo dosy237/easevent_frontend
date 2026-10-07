@@ -52,7 +52,7 @@ const SECTIONS = [
   },
   {
     title: '4. Prestataires (paiement, emails, SMS)',
-    body: "Nous faisons appel à des prestataires reconnus : Stripe (paiements — nous ne voyons jamais votre carte), SendGrid (emails), Twilio (SMS), Cloudinary (photos). Certains sont situés hors de l'Union européenne ; ces transferts sont encadrés par les clauses contractuelles types de la Commission européenne.",
+    body: "Nous faisons appel à des prestataires reconnus : Stripe (paiements et abonnements — nous ne voyons jamais votre carte), SendGrid (emails), Twilio (SMS), Cloudinary (photos), Expo, Google Firebase et Apple (notifications sur le téléphone, avec un simple identifiant d'appareil). Les adresses saisies peuvent être complétées par OpenStreetMap ou Google Maps. Certains sont situés hors de l'Union européenne ; ces transferts sont encadrés par les clauses contractuelles types de la Commission européenne.",
   },
   {
     title: '5. Vos droits (RGPD)',

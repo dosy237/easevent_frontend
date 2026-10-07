@@ -34,6 +34,8 @@ import { apiErrorMessage } from '../services/authService';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { showAlert } from '../utils/dialog';
 import { isRsvpCancel } from '../utils/rsvp';
+import { openNotification } from '../utils/notificationRoutes';
+import realtime from '../services/realtime';
 
 const FILTERS = [
   { id: 'all', label: 'Tout' },
@@ -54,7 +56,15 @@ const LOOK = {
   reminder:            { icon: 'time-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: 'Voir mon ticket' },
   message_received:    { icon: 'chatbubble-outline', bg: C.orangeL, fg: C.orangeDark },
   payment_failed:      { icon: 'card-outline', bg: C.errorBg, fg: C.errorText, cta: 'Réessayer le paiement' },
-  payment_succeeded:   { icon: 'card-outline', bg: '#F4F4F4', fg: C.text },
+  payment_succeeded:   { icon: 'card-outline', bg: C.greenLight, fg: C.green, cta: 'Voir mon ticket' },
+  payment_refunded:    { icon: 'arrow-undo-outline', bg: '#F4F4F4', fg: C.text },
+  guest_response:      { icon: 'people-circle-outline', bg: C.greenLight, fg: C.green, cta: 'Voir les réponses' },
+  event_full:          { icon: 'trophy-outline', bg: '#FFF6E0', fg: '#7A4F00' },
+  event_updated:       { icon: 'create-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: "Voir l'événement" },
+  event_cancelled:     { icon: 'close-circle-outline', bg: C.errorBg, fg: C.errorText },
+  invitation_revoked:  { icon: 'remove-circle-outline', bg: '#F4F4F4', fg: C.text },
+  payouts_ready:       { icon: 'wallet-outline', bg: C.greenLight, fg: C.green },
+  subscription:        { icon: 'star-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Mon abonnement' },
   friend_request:      { icon: 'person-add-outline', bg: C.greenLight, fg: C.green },
   friend_accepted:     { icon: 'people-outline', bg: C.greenLight, fg: C.green, cta: 'Voir mes amis' },
 };
@@ -110,7 +120,17 @@ export default function NotificationsScreen({ navigation }) {
     }
   }, [filter, applyUnread]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    load();
+    // Nouvelle notification pendant que l'écran est ouvert : la liste se met à jour seule
+    let timer = null;
+    const unsub = realtime.subscribe((evt) => {
+      if (evt.type !== 'badge') return;
+      clearTimeout(timer);
+      timer = setTimeout(() => load(), 600);
+    });
+    return () => { unsub(); clearTimeout(timer); };
+  }, [load]));
 
   const changeFilter = (id) => { setFilter(id); setItems(null); load(id); };
 
@@ -141,28 +161,7 @@ export default function NotificationsScreen({ navigation }) {
 
   const open = (n) => {
     markRead(n);
-    const tickets = (params) => navigation.navigate('TabTickets', { screen: 'Tickets', params });
-    switch (n.type) {
-      case 'invitation_received':
-      case 'ticket_to_validate':
-      case 'payment_failed':
-        return tickets({ tab: 'pending' });
-      case 'ticket_generated':
-      case 'reminder':
-        return tickets({ tab: 'generated', openTicketId: n.ticket_id || undefined });
-      case 'daily_summary':
-        return n.event && navigation.navigate('TabDashboard', { screen: 'EventDashboard', params: { event: n.event } });
-      case 'message_received':
-        return navigation.navigate('Chat', { conversationId: n.data?.conversation_id, title: n.title });
-      case 'payment_succeeded':
-        return navigation.navigate('TabProfile', { screen: 'Plans' });
-      case 'friend_request':
-        return navigation.navigate('TabProfile', { screen: 'Friends', params: { tab: 'requests' } });
-      case 'friend_accepted':
-        return navigation.navigate('TabProfile', { screen: 'Friends', params: { tab: 'friends' } });
-      default:
-        return null;
-    }
+    openNotification(navigation, n);
   };
 
   const answer = async (n, status) => {
@@ -360,6 +359,9 @@ function PreferencesSheet({ visible, onClose }) {
   };
 
   const rows = [
+    ['push', 'Notifications sur le téléphone', 'Recevoir les alertes même quand l\'application est fermée.'],
+    ['messages', 'Nouveaux messages', 'Une alerte à chaque message reçu.'],
+    ['guest_responses', 'Réponses de mes invités (organisateur)', 'Quand un invité accepte, décline ou prend un ticket.'],
     ['reminders', 'Rappels avant mes événements', 'J-7, la veille et le jour J pour vos tickets.'],
     ['daily_summary', 'Bilan du jour (organisateur)', 'Le nombre de nouvelles confirmations de vos événements.'],
   ];

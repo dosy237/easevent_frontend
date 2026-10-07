@@ -23,9 +23,10 @@
  * ════════════════════════════════════════════════════════════════
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, ActivityIndicator, Platform } from 'react-native';
-import { NavigationContainer, getStateFromPath as defaultGetStateFromPath } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef, getStateFromPath as defaultGetStateFromPath } from '@react-navigation/native';
+import * as SplashScreen from 'expo-splash-screen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -63,9 +64,23 @@ import ChatScreen from './screens/ChatScreen';
 import ContactPickerScreen from './screens/ContactPickerScreen';
 import VerifyPhoneScreen from './screens/VerifyPhoneScreen';
 import FriendsScreen from './screens/FriendsScreen';
+import PlansScreen from './screens/PlansScreen';
+import SubscriptionCheckoutScreen from './screens/SubscriptionCheckoutScreen';
+import SubscriptionSuccessScreen from './screens/SubscriptionSuccessScreen';
+import TermsScreen from './screens/TermsScreen';
+import HelpScreen from './screens/HelpScreen';
+import ScanTicketsScreen from './screens/ScanTicketsScreen';
 import * as Application from 'expo-application';
 import { KEYS, getItem, setItem } from './services/storage';
 import { TicketBadgeProvider, useTicketBadge } from './context/TicketBadgeContext';
+import realtime from './services/realtime';
+import { register as registerPush, onTap as onPushTap, setBadge } from './services/push';
+import { openNotification } from './utils/notificationRoutes';
+
+// Écran de démarrage (logo) gardé jusqu'à la lecture de la session : pas d'écran blanc
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+const navigationRef = createNavigationContainerRef();
 
 // ─────────────────────────────────────────────────────────────────
 // NAVIGATEURS
@@ -146,7 +161,12 @@ const linking = {
       TabDiscover: { screens: { DiscoverHome: 'decouvrir' } },
       TabCreate:   'creer',
       TabTickets:  { screens: { Tickets: 'tickets' } },
-      TabProfile:  { screens: { Profile: 'profil', Plans: 'profil/plans', Payouts: 'profil/paiements' } },
+      TabProfile:  {
+        screens: {
+          Profile: 'profil', Plans: 'profil/plans', Payouts: 'profil/paiements',
+          SubscriptionSuccess: 'profil/abonnement/succes',
+        },
+      },
     },
   },
 };
@@ -164,8 +184,8 @@ function PublicNavigator() {
       <PublicStack.Screen name="ResetPassword"  component={ResetPasswordScreen}  options={{ title: 'Nouveau mot de passe' }} />
       <PublicStack.Screen name="VerifyEmail"    component={VerifyEmailScreen}    options={{ title: 'Vérifiez votre email' }} />
       <PublicStack.Screen name="PrivacyPolicy"  component={PrivacyPolicyScreen}  options={{ title: 'Confidentialité' }} />
-      <PublicStack.Screen name="Terms"             {...soon('CGU', "Conditions d'utilisation", 'Les conditions d’utilisation seront publiées ici dès leur validation par le juridique.')} />
-      <PublicStack.Screen name="Help"              {...soon('Aide', 'Aide', 'Le centre d’aide arrive bientôt.')} />
+      <PublicStack.Screen name="Terms"             component={TermsScreen} options={{ title: "Conditions d'utilisation" }} />
+      <PublicStack.Screen name="Help"              component={HelpScreen}  options={{ title: 'Aide' }} />
       <PublicStack.Screen name="InvitationLanding" component={InvitationLandingScreen} options={{ title: 'Invitation' }} />
     </PublicStack.Navigator>
   );
@@ -186,6 +206,7 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="MiniSiteEditor"     {...soon('M08', 'Éditeur du mini-site')} />
       <DashStack.Screen name="EventPublished"     {...soon('M10', 'Événement publié')} />
       <DashStack.Screen name="EventDashboard"     component={EventDashboardScreen} options={{ title: 'Gérer un événement' }} />
+      <DashStack.Screen name="ScanTickets"        component={ScanTicketsScreen}    options={{ title: 'Scanner les tickets' }} />
       <DashStack.Screen name="EditEvent"          component={CreateEventScreen}    options={{ title: "Modifier l'événement" }} />
       <DashStack.Screen name="InviteGuests"       component={InviteGuestsScreen}   options={{ title: 'Inviter des participants' }} />
       <DashStack.Screen name="Friends"            component={FriendsScreen}        options={{ title: 'Mes amis' }} />
@@ -242,9 +263,11 @@ function ProfileStackNavigator() {
       <ProfileStack.Screen name="VerifyPhone"          component={VerifyPhoneScreen} options={{ title: 'Mon numéro' }} />
       <ProfileStack.Screen name="Chat"                 component={ChatScreen} options={{ title: 'Conversation' }} />
       <ProfileStack.Screen name="Payouts"              component={PayoutsScreen} options={{ title: 'Paiements & virements' }} />
-      <ProfileStack.Screen name="Plans"                {...soon('M20', 'Choisir un plan')} />
-      <ProfileStack.Screen name="SubscriptionCheckout" {...soon('M21', 'Paiement')} />
-      <ProfileStack.Screen name="SubscriptionSuccess"  {...soon('M22', 'Paiement confirmé')} />
+      <ProfileStack.Screen name="Plans"                component={PlansScreen}                options={{ title: 'Choisir un plan' }} />
+      <ProfileStack.Screen name="SubscriptionCheckout" component={SubscriptionCheckoutScreen} options={{ title: 'Paiement' }} />
+      <ProfileStack.Screen name="SubscriptionSuccess"  component={SubscriptionSuccessScreen}  options={{ title: 'Paiement confirmé' }} />
+      <ProfileStack.Screen name="Terms"                component={TermsScreen}                options={{ title: "Conditions d'utilisation" }} />
+      <ProfileStack.Screen name="Help"                 component={HelpScreen}                 options={{ title: 'Aide' }} />
     </ProfileStack.Navigator>
   );
 }
@@ -358,6 +381,55 @@ function RootNavigator() {
     : <PublicNavigator key="public" />;
 }
 
+// ════════════════════════════════════════════════════════════════
+// SESSION CONNECTÉE : temps réel, notifications push, badges
+// ════════════════════════════════════════════════════════════════
+function SessionBridge() {
+  const { isAuthenticated, user } = useAuth();
+  const { refresh, notifications } = useTicketBadge();
+  const pendingTap = useRef(null);
+  const ready = isAuthenticated && !!user?.phone;
+
+  // Connexion temps réel + badges mis à jour à chaque événement
+  useEffect(() => {
+    if (!ready) return undefined;
+    realtime.start();
+    refresh({ force: true });
+    let timer = null;
+    const unsub = realtime.subscribe((evt) => {
+      if (evt.type === 'badge' || evt.type === 'connected' || evt.type === 'message') {
+        clearTimeout(timer);
+        timer = setTimeout(() => refresh({ force: true }), 400);
+      }
+    });
+    return () => { unsub(); clearTimeout(timer); };
+  }, [ready, refresh]);
+
+  // Notifications push : enregistrement du téléphone, tap → écran concerné
+  useEffect(() => {
+    if (!ready) return undefined;
+    registerPush();
+    const go = (data, content) => {
+      const n = { ...data, data, title: content?.title };
+      if (navigationRef.isReady()) openNotification(navigationRef, n);
+      else pendingTap.current = n;
+    };
+    const unsub = onPushTap(go);
+    const wait = setInterval(() => {
+      if (pendingTap.current && navigationRef.isReady()) {
+        openNotification(navigationRef, pendingTap.current);
+        pendingTap.current = null;
+      }
+    }, 300);
+    return () => { unsub(); clearInterval(wait); };
+  }, [ready]);
+
+  // Pastille de l'icône de l'application = notifications non lues
+  useEffect(() => { if (ready) setBadge(notifications); }, [ready, notifications]);
+
+  return null;
+}
+
 // La navigation démarre une fois la session lue : un lien profond
 // (ex. invitation) est ainsi interprété avec le bon état de connexion.
 function NavigationShell() {
@@ -374,10 +446,13 @@ function NavigationShell() {
 
   return (
     <NavigationContainer
+      ref={navigationRef}
+      onReady={() => SplashScreen.hideAsync().catch(() => {})}
       linking={linking}
       documentTitle={{ formatter: (options) => (options?.title ? `${options.title} · Easevent` : 'Easevent') }}
     >
       <StatusBar style="dark" />
+      <SessionBridge />
       <RootNavigator />
     </NavigationContainer>
   );
