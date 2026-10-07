@@ -178,7 +178,7 @@ export default function ConversationsScreen({ navigation, route }) {
                 const on = eventId === e.id;
                 return (
                   <Pressable key={e.id || 'all'} onPress={() => pickEvent(e.id)} style={[styles.chip, on && styles.chipOn]}
-                    accessibilityRole="tab" accessibilityState={{ selected: on }}>
+                    accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on}>
                     <Text style={[styles.chipTxt, on && styles.chipTxtOn]} numberOfLines={1}>{e.title}</Text>
                   </Pressable>
                 );

@@ -78,7 +78,7 @@ function QuestionEditor({ draft, onClose, onSave, saving }) {
                   const on = kind === k.value;
                   return (
                     <Pressable key={k.value} onPress={() => { setKind(k.value); setError(''); }} style={[styles.kind, on && styles.kindOn]}
-                      accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} accessibilityLabel={k.label}>
+                      accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} aria-selected={on} aria-checked={on} accessibilityLabel={k.label}>
                       <Ionicons name={k.icon} size={18} color={on ? C.white : C.green} />
                       <Text style={[styles.kindTxt, on && { color: C.white }]}>{k.label}</Text>
                     </Pressable>
@@ -243,7 +243,7 @@ export default function RsvpQuestionsScreen({ navigation, route }) {
         <View style={styles.tabs} accessibilityRole="tablist">
           {[['questions', `Questions (${questions.length})`], ['answers', 'Réponses']].map(([id, label]) => (
             <Pressable key={id} onPress={() => setTab(id)} style={[styles.tab, tab === id && styles.tabOn]}
-              accessibilityRole="tab" accessibilityState={{ selected: tab === id }}>
+              accessibilityRole="tab" accessibilityState={{ selected: tab === id }} aria-selected={tab === id}>
               <Text style={[styles.tabTxt, tab === id && styles.tabTxtOn]}>{label}</Text>
             </Pressable>
           ))}
@@ -282,12 +282,12 @@ export default function RsvpQuestionsScreen({ navigation, route }) {
                   </View>
                   <View style={styles.cardActions}>
                     <Pressable onPress={() => move(i, -1)} disabled={i === 0} style={[styles.iconBtn, i === 0 && { opacity: 0.3 }]}
-                      accessibilityRole="button" accessibilityLabel={`Monter « ${q.label} »`} accessibilityState={{ disabled: i === 0 }}>
+                      accessibilityRole="button" accessibilityLabel={`Monter « ${q.label} »`} accessibilityState={{ disabled: i === 0 }} aria-disabled={i === 0}>
                       <Ionicons name="arrow-up" size={18} color={C.textSub} />
                     </Pressable>
                     <Pressable onPress={() => move(i, 1)} disabled={i === questions.length - 1}
                       style={[styles.iconBtn, i === questions.length - 1 && { opacity: 0.3 }]}
-                      accessibilityRole="button" accessibilityLabel={`Descendre « ${q.label} »`} accessibilityState={{ disabled: i === questions.length - 1 }}>
+                      accessibilityRole="button" accessibilityLabel={`Descendre « ${q.label} »`} accessibilityState={{ disabled: i === questions.length - 1 }} aria-disabled={i === questions.length - 1}>
                       <Ionicons name="arrow-down" size={18} color={C.textSub} />
                     </Pressable>
                     <View style={{ flex: 1 }} />

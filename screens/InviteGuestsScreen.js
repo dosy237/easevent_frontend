@@ -190,7 +190,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
                     onPress={() => setMode(m.id)}
                     style={[styles.tab, active && styles.tabActive]}
                     accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{ selected: active }} aria-selected={active}
                     accessibilityLabel={`${m.label}${count ? `, ${count} sélectionné${count > 1 ? 's' : ''}` : ''}`}
                   >
                     <Ionicons name={m.icon} size={15} color={active ? C.white : C.textSub} />
@@ -253,7 +253,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
               disabled={!total || sending}
               style={({ pressed }) => [styles.sendBtn, (!total || sending) && styles.sendBtnOff, pressed && { opacity: 0.9 }]}
               accessibilityRole="button"
-              accessibilityState={{ disabled: !total || sending, busy: sending }}
+              accessibilityState={{ disabled: !total || sending, busy: sending }} aria-disabled={!total || sending} aria-busy={sending}
             >
               {sending ? <ActivityIndicator color={C.white} /> : <Ionicons name="paper-plane-outline" size={18} color={C.white} />}
               <Text style={styles.sendTxt}>
@@ -374,7 +374,7 @@ function MembersMode({ eventId, selected, onChange }) {
         return (
           <View key={u.id} style={[styles.person, checked && styles.personOn, u.already_invited && { opacity: 0.6 }]}>
             <Pressable onPress={() => !u.already_invited && toggle(u)} disabled={u.already_invited} style={styles.personMain}
-              accessibilityRole="checkbox" accessibilityState={{ checked, disabled: u.already_invited }}
+              accessibilityRole="checkbox" accessibilityState={{ checked, disabled: u.already_invited }} aria-checked={checked} aria-disabled={u.already_invited}
               accessibilityLabel={`${u.first_name} ${u.last_name}${u.already_invited ? ', déjà invité' : ''}`}>
               <View style={styles.avatar}><Text style={styles.avatarTxt}>{u.initials}</Text></View>
               <View style={{ flex: 1 }}>
@@ -622,7 +622,7 @@ function PhoneMode({ list, onChange, onPickContacts }) {
                 style={styles.countryRow}
                 onPress={() => { setCountry(item); setPicker(false); }}
                 accessibilityRole="button"
-                accessibilityState={{ selected: item.code === country.code }}
+                accessibilityState={{ selected: item.code === country.code }} aria-selected={item.code === country.code}
               >
                 <Text style={styles.countryName}>{item.name}</Text>
                 <Text style={styles.countryCode}>+{item.code}</Text>

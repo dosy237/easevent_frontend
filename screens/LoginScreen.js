@@ -636,7 +636,7 @@ export default function LoginScreen({ navigation, route }) {
               const on = codeChannel === id;
               return (
                 <TouchableOpacity key={id} style={[styles.channelBtn, on && styles.channelBtnOn]} onPress={() => setCodeChannel(id)}
-                  accessibilityRole="radio" accessibilityState={{ checked: on }} activeOpacity={0.85}>
+                  accessibilityRole="radio" accessibilityState={{ checked: on }} aria-checked={on} activeOpacity={0.85}>
                   <Ionicons name={icon} size={18} color={on ? C.white : C.green} />
                   <Text style={[styles.channelTxt, on && { color: C.white }]}>{label}</Text>
                 </TouchableOpacity>
@@ -678,7 +678,7 @@ export default function LoginScreen({ navigation, route }) {
             disabled={loading || !acceptedPrivacy}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityState={{ disabled: loading || !acceptedPrivacy, busy: loading }}
+            accessibilityState={{ disabled: loading || !acceptedPrivacy, busy: loading }} aria-disabled={loading || !acceptedPrivacy} aria-busy={loading}
           >
             {loading ? (
               <ActivityIndicator size="small" color={C.white} />

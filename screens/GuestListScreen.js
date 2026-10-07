@@ -190,7 +190,7 @@ export default function GuestListScreen({ navigation, route }) {
           ['declined', counts.declined, 'déclinés', styles.cGrey, '#444444'],
         ].map(([id, n, label, bg, color]) => (
           <Pressable key={id} onPress={() => setFilter(filter === id ? 'all' : id)} style={[styles.counter, bg, filter === id && styles.counterOn]}
-            accessibilityRole="button" accessibilityLabel={`${n} ${label}. Filtrer`} accessibilityState={{ selected: filter === id }}>
+            accessibilityRole="button" accessibilityLabel={`${n} ${label}. Filtrer`} accessibilityState={{ selected: filter === id }} aria-selected={filter === id}>
             <Text style={[styles.counterN, { color }]}>{n}</Text>
             <Text style={[styles.counterL, { color }]}>{label}</Text>
           </Pressable>
@@ -217,7 +217,7 @@ export default function GuestListScreen({ navigation, route }) {
           const n = f.id === 'all' ? counts.total : counts[f.id];
           return (
             <Pressable key={f.id} onPress={() => setFilter(f.id)} style={[styles.filter, on && styles.filterOn]}
-              accessibilityRole="tab" accessibilityState={{ selected: on }}>
+              accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on}>
               <Text style={[styles.filterTxt, on && styles.filterTxtOn]}>{f.label}{f.id === 'all' ? ` ${n}` : ''}</Text>
             </Pressable>
           );
@@ -294,7 +294,7 @@ export default function GuestListScreen({ navigation, route }) {
             disabled={!data?.remindable || busy === 'remind-all'}
             style={[styles.footBtn, styles.footGhost, (!data?.remindable) && { opacity: 0.5 }]}
             accessibilityRole="button"
-            accessibilityState={{ disabled: !data?.remindable }}
+            accessibilityState={{ disabled: !data?.remindable }} aria-disabled={!data?.remindable}
           >
             {busy === 'remind-all' ? <ActivityIndicator size="small" color={C.text} /> : null}
             <Text style={styles.footGhostTxt}>{data?.remindable ? `Relancer les ${data.remindable}` : 'Personne à relancer'}</Text>
@@ -347,7 +347,7 @@ export default function GuestListScreen({ navigation, route }) {
 function SheetAction({ icon, label, note, color, onPress, disabled }) {
   return (
     <Pressable onPress={onPress} disabled={disabled} style={[styles.action, disabled && { opacity: 0.45 }]}
-      accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} accessibilityHint={note}>
+      accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} aria-disabled={!!disabled} accessibilityHint={note}>
       <View style={[styles.actionIcon, { backgroundColor: `${color}1A` }]}><Ionicons name={icon} size={20} color={color} /></View>
       <View style={{ flex: 1 }}>
         <Text style={styles.actionLabel}>{label}</Text>

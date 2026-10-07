@@ -181,7 +181,7 @@ export default function TicketView({ ticket, justPaid = false }) {
           disabled={downloading}
           accessibilityRole="button"
           accessibilityLabel="Télécharger mon ticket en PDF"
-          accessibilityState={{ busy: downloading }}
+          accessibilityState={{ busy: downloading }} aria-busy={downloading}
         >
           {downloading
             ? <ActivityIndicator size="small" color={C.text} />

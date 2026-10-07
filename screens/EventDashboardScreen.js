@@ -370,7 +370,7 @@ const handlePublish = async () => {
               style={[styles.sectionTab, tab.id === 'overview' && styles.sectionTabActive]}
               onPress={tab.onPress || undefined}
               accessibilityRole="tab"
-              accessibilityState={{ selected: tab.id === 'overview' }}
+              accessibilityState={{ selected: tab.id === 'overview' }} aria-selected={tab.id === 'overview'}
             >
               <Text style={[styles.sectionTabTxt, tab.id === 'overview' && styles.sectionTabTxtActive]}>
                 {tab.label}
@@ -496,7 +496,7 @@ const handlePublish = async () => {
                         return (
                           <TouchableOpacity key={v.value} style={[styles.visOpt, active && styles.visOptActive]}
                             onPress={() => changeVisibility(v.value)} disabled={savingVisibility} activeOpacity={0.85}
-                            accessibilityRole="radio" accessibilityState={{ checked: active, disabled: savingVisibility }}
+                            accessibilityRole="radio" accessibilityState={{ checked: active, disabled: savingVisibility }} aria-checked={active} aria-disabled={savingVisibility}
                             accessibilityLabel={`${v.label} : ${v.desc}`}>
                             <Ionicons name={v.icon} size={18} color={active ? C.white : C.green} />
                             <View style={{ flex: 1 }}>

@@ -181,7 +181,7 @@ export default function PrivacyPolicyScreen({ navigation }) {
               onPress={handleMyData}
               disabled={exporting}
               accessibilityRole="button"
-              accessibilityState={{ busy: exporting }}
+              accessibilityState={{ busy: exporting }} aria-busy={exporting}
               style={({ pressed }) => [styles.actionGhost, pressed && { opacity: 0.85 }]}
             >
               <Ionicons name="download-outline" size={16} color={C.text} />

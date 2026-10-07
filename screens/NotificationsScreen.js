@@ -279,7 +279,7 @@ export default function NotificationsScreen({ navigation }) {
               const n = unread[f.id] || 0;
               return (
                 <Pressable key={f.id} onPress={() => changeFilter(f.id)} style={[styles.filter, on && styles.filterOn]}
-                  accessibilityRole="tab" accessibilityState={{ selected: on }}
+                  accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on}
                   accessibilityLabel={`${f.label}${n ? `, ${n} non lue${n > 1 ? 's' : ''}` : ''}`}>
                   <Text style={[styles.filterTxt, on && styles.filterTxtOn]}>{f.label}{n ? ` · ${n}` : ''}</Text>
                 </Pressable>

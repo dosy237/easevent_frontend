@@ -694,7 +694,7 @@ export default function ProfileScreen({ navigation }) {
                 onPress={handleExport}
                 disabled={exporting}
                 accessibilityRole="button"
-                accessibilityState={{ busy: exporting }}
+                accessibilityState={{ busy: exporting }} aria-busy={exporting}
               >
                 <View style={styles.menuItemLeft}>
                   <View style={[styles.menuIconBox, { backgroundColor: C.orangeL }]}>

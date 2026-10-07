@@ -13,7 +13,7 @@ export default function Checkbox({ checked, onChange, children, accessibilityLab
     <Pressable
       onPress={() => onChange(!checked)}
       accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
+      accessibilityState={{ checked }} aria-checked={checked}
       accessibilityLabel={accessibilityLabel}
       aria-required={required}
       style={styles.row}

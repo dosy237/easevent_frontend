@@ -787,7 +787,7 @@ export default function CreateEventScreen({ navigation, route }) {
             onPress={() => { setEventType(t.value); setErrors((p) => ({ ...p, eventType: undefined })); }}
             activeOpacity={0.8}
             accessibilityRole="radio"
-            accessibilityState={{ checked: eventType === t.value }}
+            accessibilityState={{ checked: eventType === t.value }} aria-checked={eventType === t.value}
             accessibilityLabel={t.label}
           >
             <Ionicons name={t.icon} size={22} color={eventType === t.value ? C.white : C.green} />
@@ -971,7 +971,7 @@ export default function CreateEventScreen({ navigation, route }) {
             }}
             activeOpacity={0.8}
             accessibilityRole="radio"
-            accessibilityState={{ checked: ambiance === a.value }}
+            accessibilityState={{ checked: ambiance === a.value }} aria-checked={ambiance === a.value}
             accessibilityLabel={`Ambiance ${a.label}`}
           >
             <Text style={[styles.ambianceLabel, ambiance === a.value && { color: C.white, fontWeight: '800' }]}>
@@ -1011,7 +1011,7 @@ export default function CreateEventScreen({ navigation, route }) {
                 style={[styles.colorSlot, active && styles.colorSlotActive]}
                 onPress={() => setEditingColor(slot.key)}
                 accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
+                accessibilityState={{ selected: active }} aria-selected={active}
                 accessibilityLabel={`Couleur ${slot.label.toLowerCase()} ${slot.value || 'non choisie'}`}
               >
                 <View style={[styles.colorSlotDot, { backgroundColor: slot.value || C.bg }]} />
@@ -1094,7 +1094,7 @@ export default function CreateEventScreen({ navigation, route }) {
             onPress={() => { setIsPaid(!isPaid); setErrors((p) => ({ ...p, price: undefined })); }}
             accessibilityRole="switch"
             accessibilityLabel="Événement payant"
-            accessibilityState={{ checked: isPaid }}
+            accessibilityState={{ checked: isPaid }} aria-checked={isPaid}
             hitSlop={8}
           >
             <View style={[styles.toggleThumb, isPaid && styles.toggleThumbActive]} />
@@ -1148,7 +1148,7 @@ export default function CreateEventScreen({ navigation, route }) {
             onPress={() => { setHasDressCode(!hasDressCode); setErrors((p) => ({ ...p, dressCode: undefined })); }}
             accessibilityRole="switch"
             accessibilityLabel="Dress code"
-            accessibilityState={{ checked: hasDressCode }}
+            accessibilityState={{ checked: hasDressCode }} aria-checked={hasDressCode}
             hitSlop={8}
           >
             <View style={[styles.toggleThumb, hasDressCode && styles.toggleThumbActive]} />
@@ -1165,7 +1165,7 @@ export default function CreateEventScreen({ navigation, route }) {
                     style={[styles.dressChip, active && styles.dressChipActive]}
                     onPress={() => chooseDress(label)}
                     accessibilityRole="radio"
-                    accessibilityState={{ checked: active }}
+                    accessibilityState={{ checked: active }} aria-checked={active}
                   >
                     <Text style={[styles.dressChipTxt, active && styles.dressChipTxtActive]}>{label}</Text>
                   </TouchableOpacity>

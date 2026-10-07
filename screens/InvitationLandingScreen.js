@@ -193,7 +193,7 @@ export default function InvitationLandingScreen({ navigation, route }) {
                 </View>
 
                 {isAuthenticated ? (
-                  <Pressable onPress={accept} disabled={!!busy} style={[styles.btn, styles.btnWhite]} accessibilityRole="button" accessibilityState={{ busy: busy === 'accept' }}>
+                  <Pressable onPress={accept} disabled={!!busy} style={[styles.btn, styles.btnWhite]} accessibilityRole="button" accessibilityState={{ busy: busy === 'accept' }} aria-busy={busy === 'accept'}>
                     {busy === 'accept' ? <ActivityIndicator color={C.green} /> : <Text style={styles.btnWhiteTxt}>Accepter l'invitation</Text>}
                     {busy !== 'accept' && <Ionicons name="arrow-forward" size={18} color={C.green} />}
                   </Pressable>

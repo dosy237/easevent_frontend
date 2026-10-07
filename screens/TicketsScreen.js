@@ -215,7 +215,7 @@ const PendingTicketCard = ({ ticket, onValidate, onPay, onCancel, onOpenEvent })
             onPress={() => onPay(ticket)}
             disabled={processing}
             accessibilityRole="button"
-            accessibilityState={{ disabled: processing }}
+            accessibilityState={{ disabled: processing }} aria-disabled={processing}
           >
             <Ionicons name="card-outline" size={16} color={C.white} />
             <Text style={styles.tMainTxt}>
@@ -507,7 +507,7 @@ export default function TicketsScreen({ navigation, route }) {
               style={[styles.tab, activeSection === sec.id && styles.tabActive]}
               onPress={() => setActiveSection(sec.id)}
               accessibilityRole="tab"
-              accessibilityState={{ selected: activeSection === sec.id }}
+              accessibilityState={{ selected: activeSection === sec.id }} aria-selected={activeSection === sec.id}
             >
               <Text style={[styles.tabTxt, activeSection === sec.id && styles.tabTxtActive]}>{sec.label}</Text>
             </TouchableOpacity>

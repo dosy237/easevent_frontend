@@ -204,7 +204,7 @@ export default function ColorPicker({ value, onChange, suggestions = [], recent 
                 onPress={() => { setHsv(hexToHsv(c)); setHexText(c); lastEmitted.current = c; onChange(c); }}
                 accessibilityRole="button"
                 accessibilityLabel={`Choisir la couleur ${c}`}
-                accessibilityState={{ selected: active }}
+                accessibilityState={{ selected: active }} aria-selected={active}
                 style={[styles.swatchHit]}
               >
                 <View style={[styles.swatch, { backgroundColor: c }, active && styles.swatchActive]} />

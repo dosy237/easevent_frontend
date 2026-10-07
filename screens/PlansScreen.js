@@ -137,7 +137,7 @@ export default function PlansScreen({ navigation, route }) {
               const on = interval === id;
               return (
                 <Pressable key={id} onPress={() => setInterval_(id)} style={[styles.toggleOpt, on && styles.toggleOn]}
-                  accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }}>
+                  accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} aria-selected={on} aria-checked={on}>
                   <Text style={[styles.toggleTxt, on && { color: C.white }]}>{label}</Text>
                   {id === 'annual' ? <Text style={[styles.toggleBadge, on && { color: C.white }]}>2 mois offerts</Text> : null}
                 </Pressable>

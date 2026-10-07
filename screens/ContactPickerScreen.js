@@ -100,7 +100,7 @@ export default function ContactPickerScreen({ navigation, route }) {
         disabled={r.taken}
         style={[styles.row, on && styles.rowOn, r.taken && { opacity: 0.5 }]}
         accessibilityRole="checkbox"
-        accessibilityState={{ checked: on, disabled: r.taken }}
+        accessibilityState={{ checked: on, disabled: r.taken }} aria-checked={on} aria-disabled={r.taken}
         accessibilityLabel={`${r.name}, ${r.display}${r.taken ? ', déjà dans la liste' : ''}`}
       >
         <View style={[styles.avatar, on && { backgroundColor: C.green }]}>
@@ -177,7 +177,7 @@ export default function ContactPickerScreen({ navigation, route }) {
             />
             <View style={styles.footer}>
               <Pressable onPress={confirm} disabled={!count} style={[styles.primary, styles.wide, !count && { opacity: 0.5 }]}
-                accessibilityRole="button" accessibilityState={{ disabled: !count }}>
+                accessibilityRole="button" accessibilityState={{ disabled: !count }} aria-disabled={!count}>
                 <Ionicons name="person-add-outline" size={18} color={C.white} />
                 <Text style={styles.primaryTxt}>{count ? `Ajouter ${count} contact${count > 1 ? 's' : ''}` : 'Cochez des contacts'}</Text>
               </Pressable>

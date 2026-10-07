@@ -104,7 +104,7 @@ export default function FriendsScreen({ navigation, route }) {
               const n = id === 'friends' ? data?.friends.length : id === 'requests' ? incoming.length : 0;
               return (
                 <Pressable key={id} onPress={() => setTab(id)} style={[styles.tab, on && styles.tabOn]}
-                  accessibilityRole="tab" accessibilityState={{ selected: on }}>
+                  accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on}>
                   <Text style={[styles.tabTxt, on && styles.tabTxtOn]}>{label}{n ? ` · ${n}` : ''}</Text>
                 </Pressable>
               );

@@ -675,7 +675,7 @@ export default function EventDetailScreen({ route, navigation }) {
             disabled={ticketBusy || (soldOut && !isOrganizer)}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityState={{ disabled: soldOut && !isOrganizer, busy: ticketBusy }}
+            accessibilityState={{ disabled: soldOut && !isOrganizer, busy: ticketBusy }} aria-disabled={soldOut && !isOrganizer} aria-busy={ticketBusy}
           >
             {ticketBusy ? <ActivityIndicator color={C.white} /> : (
               <>

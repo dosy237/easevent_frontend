@@ -17,7 +17,7 @@ export function PrimaryButton({ label, onPress, icon, loading = false, disabled 
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
-      accessibilityState={{ disabled: inactive, busy: loading }}
+      accessibilityState={{ disabled: inactive, busy: loading }} aria-disabled={inactive} aria-busy={loading}
       style={({ pressed }) => [styles.primary, inactive && styles.primaryDisabled, pressed && styles.pressed, style]}
     >
       {loading ? (
@@ -39,7 +39,7 @@ export function SecondaryButton({ label, onPress, icon, disabled = false, style,
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled }} aria-disabled={disabled}
       style={({ pressed }) => [styles.secondary, disabled && styles.secondaryDisabled, pressed && styles.pressed, style]}
     >
       {icon ? <Ionicons name={icon} size={18} color={C.text} /> : null}

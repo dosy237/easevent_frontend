@@ -472,7 +472,7 @@ export default function ChatScreen({ navigation, route }) {
                 accessibilityLabel="Votre message"
               />
               <Pressable onPress={() => send()} disabled={!text.trim()} style={[styles.sendBtn, !text.trim() && { opacity: 0.5 }]}
-                accessibilityRole="button" accessibilityLabel="Envoyer" accessibilityState={{ disabled: !text.trim() }}>
+                accessibilityRole="button" accessibilityLabel="Envoyer" accessibilityState={{ disabled: !text.trim() }} aria-disabled={!text.trim()}>
                 <Ionicons name="paper-plane-outline" size={18} color={C.white} />
               </Pressable>
             </View>

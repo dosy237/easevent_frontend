@@ -27,7 +27,7 @@ export function RsvpQuestion({ question: q, value, onChange, error }) {
   const labelId = `rsvp-${q.id}`;
   const choice = (label, selected, onPress, multiple) => (
     <Pressable key={label} onPress={onPress} style={[styles.choice, selected && styles.choiceOn]}
-      accessibilityRole={multiple ? 'checkbox' : 'radio'} accessibilityState={{ checked: selected, selected }}
+      accessibilityRole={multiple ? 'checkbox' : 'radio'} accessibilityState={{ checked: selected, selected }} aria-checked={selected} aria-selected={selected}
       accessibilityLabel={label}>
       <Ionicons name={multiple ? (selected ? 'checkbox' : 'square-outline') : (selected ? 'radio-button-on' : 'radio-button-off')}
         size={20} color={selected ? C.green : C.textMut} />
@@ -50,7 +50,7 @@ export function RsvpQuestion({ question: q, value, onChange, error }) {
           {[['Oui', true], ['Non', false]].map(([label, v]) => (
             <Pressable key={label} onPress={() => onChange(value === v ? null : v)}
               style={[styles.pill, value === v && styles.pillOn]} accessibilityRole="radio"
-              accessibilityState={{ checked: value === v, checked: value === v }} accessibilityLabel={label}>
+              accessibilityState={{ checked: value === v, checked: value === v }} aria-checked={value === v} aria-checked={value === v} accessibilityLabel={label}>
               <Text style={[styles.pillTxt, value === v && { color: C.white }]}>{label}</Text>
             </Pressable>
           ))}
