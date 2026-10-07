@@ -24,7 +24,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, ActivityIndicator, Platform } from 'react-native';
+import { View, ActivityIndicator, Platform, Text } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef, getStateFromPath as defaultGetStateFromPath } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -322,7 +322,7 @@ function AppTabNavigator() {
             <Ionicons
               name={focused ? active : idle}
               size={route.name === 'TabCreate' ? 30 : size}
-              color={color}
+              color={route.name === 'TabCreate' ? C.orange : color}
             />
           );
         },
@@ -354,10 +354,13 @@ function AppTabNavigator() {
         name="TabCreate"
         component={CreateEventScreen}
         options={{
-          tabBarLabel: 'Créer',
+          // « Créer » en orange : sur son icône et son libellé seulement (une couleur posée ici
+          // s'appliquerait à toute la barre quand cet onglet est ouvert)
+          tabBarLabel: ({ position }) => (
+            <Text style={{ color: C.orange, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3,
+              marginTop: position === 'beside-icon' ? 0 : 2, marginLeft: position === 'beside-icon' ? 16 : 0 }}>Créer</Text>
+          ),
           title: 'Créer un événement',
-          tabBarActiveTintColor: C.orange,
-          tabBarInactiveTintColor: C.orange,
         }}
       />
       <Tabs.Screen

@@ -22,3 +22,9 @@ export function passWord(event) {
   if (event.visibility === 'private' || CELEBRATIONS.includes(event.event_type)) return INVITATION;
   return BILLET;
 }
+
+// « de Paul », « d’Aïcha » : élision devant une voyelle ou un h (même règle que le serveur)
+export function de(name) {
+  const n = String(name || '').trim();
+  return /^[aeiouyhàâäéèêëîïôöùûüœæ]/i.test(n) ? `d’${n}` : `de ${n}`;
+}

@@ -37,7 +37,7 @@ import { useTicketBadge } from '../context/TicketBadgeContext';
 import { useAuth } from '../context/AuthContext';
 import { isRsvpCancel } from '../utils/rsvp';
 import SafeImage from '../components/ui/SafeImage';
-import { passWord } from '../utils/wording';
+import { de, passWord } from '../utils/wording';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -130,7 +130,7 @@ const InvitationCard = ({ invitation, onRespond, onOpenEvent }) => {
       <View style={styles.invBody}>
         <View style={styles.invFrom}>
           <Text style={styles.invFromTxt} numberOfLines={1}>
-            Invitation de {event.organizer?.name?.split(' ')[0] || "l'organisateur"}
+            {event.organizer?.name ? `Invitation ${de(event.organizer.name.split(' ')[0])}` : "Invitation de l'organisateur"}
           </Text>
         </View>
         <Text style={styles.invTitle} numberOfLines={2}>{event.title}</Text>
