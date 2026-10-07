@@ -1,15 +1,16 @@
 /**
  * screens/MiniSiteEditorScreen.js — M08 · Retoucher son mini-site
  * ════════════════════════════════════════════════════════════════
- * Aperçu en direct + 4 onglets : Couleurs (harmonies toutes lisibles), Polices,
- * Sections (ordre, masquer), Textes. Le serveur revalide tout à l'enregistrement.
+ * Aperçu en direct + 5 onglets : Bannière (photo, filtre verre / teinte / voile),
+ * Couleurs (harmonies toutes lisibles), Polices, Sections (ordre, masquer), Textes. Le serveur revalide tout à l'enregistrement.
  * params : { eventId }
  * ════════════════════════════════════════════════════════════════
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 import MiniSite from '../components/minisite/MiniSite';
 import { FONT_LABELS, HARMONY_LABELS, LOCKED, SECTION_LABELS } from '../components/minisite/catalog';
@@ -17,10 +18,19 @@ import { FONT_PAIRS, useMiniSiteFonts } from '../components/minisite/fonts';
 import { BackButton, PrimaryButton } from '../components/ui/Buttons';
 import { C } from '../constants/theme';
 import minisiteService from '../services/minisiteService';
+import eventService from '../services/eventService';
+import { TINTS } from '../components/minisite/sections/hero';
+import { images } from '../components/minisite/theme';
 import { showAlert } from '../utils/dialog';
 
 const BASE_W = 390;
-const TABS = [['colors', 'Couleurs'], ['fonts', 'Polices'], ['sections', 'Sections'], ['texts', 'Textes']];
+const TABS = [['banner', 'Bannière'], ['colors', 'Couleurs'], ['fonts', 'Polices'], ['sections', 'Sections'], ['texts', 'Textes']];
+const FILTERS = [
+  ['veil', 'Voile', 'Dégradé sombre sous le texte'],
+  ['glass', 'Verre', 'Texte sur un panneau de verre dépoli'],
+  ['tint', 'Teinte', 'La photo prend une couleur'],
+];
+const TINT_LABELS = { primary: 'Couleur du thème', blue: 'Bleu', rose: 'Rose', gold: 'Or', sage: 'Sauge', night: 'Nuit' };
 const FIELD_LABELS = { kicker: 'Accroche', subtitle: 'Sous-titre', title: 'Titre', body: 'Texte', note: 'Précision', label: 'Bouton', text: 'Texte' };
 const LIMITS = {
   hero: { kicker: 40, subtitle: 140 }, countdown: { title: 60 }, intro: { title: 60, body: 600 }, details: { title: 60 },
@@ -36,6 +46,7 @@ export default function MiniSiteEditorScreen({ route, navigation }) {
   const [spec, setSpec] = useState(null);
   const [tab, setTab] = useState('colors');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fontsReady = useMiniSiteFonts(Object.keys(FONT_PAIRS));
 
   useEffect(() => {
@@ -80,6 +91,24 @@ export default function MiniSiteEditorScreen({ route, navigation }) {
     s.hidden = [...h];
     return s;
   });
+  const hero = sections[0];
+  const setHero = (patch) => set((s) => { Object.assign(s.sections[0], patch); return s; });
+  const pickPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') { showAlert('Permission refusée', "Autorisez l'accès à vos photos dans les réglages."); return; }
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [3, 4], quality: 0.85, base64: true });
+      if (res.canceled) return;
+      setUploading(true);
+      const { url } = await eventService.uploadImage(`data:image/jpeg;base64,${res.assets[0].base64}`, 'banner');
+      // La photo s'affiche en plein cadre, où les filtres s'appliquent
+      setHero({ image: url, variant: 'fullbleed', filter: hero.filter || 'veil' });
+    } catch (err) {
+      showAlert('Envoi impossible', err.response?.data?.detail || "La photo n'a pas pu être envoyée. Réessayez.");
+    } finally {
+      setUploading(false);
+    }
+  };
   const setText = (kind, field, value) => set((s) => { s.copy[kind] = { ...(s.copy[kind] || {}), [field]: value }; return s; });
 
   const save = async () => {
@@ -96,6 +125,11 @@ export default function MiniSiteEditorScreen({ route, navigation }) {
       if (a !== undefined && a !== before.copy?.[kind]?.[f]) copy[kind] = { ...(copy[kind] || {}), [f]: a };
     }));
     if (Object.keys(copy).length) changes.copy = copy;
+    const banner = {};
+    const h0 = before.sections[0];
+    if ((hero.image || null) !== (h0.image || null)) banner.image = hero.image || null;
+    ['filter', 'tint', 'variant'].forEach((k) => { if (hero[k] && hero[k] !== h0[k]) banner[k] = hero[k]; });
+    if (Object.keys(banner).length) changes.banner = banner;
     setSaving(true);
     try {
       const res = await minisiteService.edit(eventId, changes);
@@ -144,6 +178,67 @@ export default function MiniSiteEditorScreen({ route, navigation }) {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.panel} keyboardShouldPersistTaps="handled">
+          {tab === 'banner' ? (
+            <View style={{ gap: 14 }}>
+              <View style={styles.photoRow}>
+                {(hero.image || images(saved.event)[0]) ? (
+                  <Image source={{ uri: hero.image || images(saved.event)[0] }} style={styles.photo} accessibilityIgnoresInvertColors />
+                ) : <View style={[styles.photo, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={28} color={C.textMut} /></View>}
+                <View style={{ flex: 1, gap: 8 }}>
+                  <Text style={styles.group}>{hero.image ? 'Photo de la bannière' : 'Photo de couverture'}</Text>
+                  <Pressable onPress={pickPhoto} disabled={uploading} style={styles.outline} accessibilityRole="button" accessibilityLabel="Choisir une photo pour la bannière">
+                    {uploading ? <ActivityIndicator color={C.green} /> : <Ionicons name="image-outline" size={18} color={C.green} />}
+                    <Text style={styles.outlineTxt}>{uploading ? 'Envoi…' : 'Choisir une photo'}</Text>
+                  </Pressable>
+                  {hero.image ? (
+                    <Pressable onPress={() => setHero({ image: null })} accessibilityRole="button" style={{ paddingVertical: 6 }}>
+                      <Text style={styles.link}>Reprendre la photo de couverture</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+              {hero.variant !== 'fullbleed' ? (
+                <View style={styles.hint}>
+                  <Text style={styles.note}>Les filtres s'appliquent quand la photo occupe tout l'accueil.</Text>
+                  <Pressable onPress={() => setHero({ variant: 'fullbleed', filter: hero.filter || 'veil' })} accessibilityRole="button" style={{ paddingTop: 8 }}>
+                    <Text style={styles.link}>Afficher la photo en plein cadre</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              <Text style={styles.group}>Filtre</Text>
+              <View style={styles.wrap}>
+                {FILTERS.map(([id, label, help]) => {
+                  const on = (hero.filter || 'veil') === id;
+                  return (
+                    <Pressable key={id} onPress={() => setHero({ filter: id, ...(hero.variant !== 'fullbleed' ? { variant: 'fullbleed' } : {}) })}
+                      style={[styles.choice, on && styles.choiceOn]} accessibilityRole="radio" accessibilityState={{ checked: on }} aria-checked={on}
+                      accessibilityLabel={`Filtre ${label} : ${help}`}>
+                      <Ionicons name={{ veil: 'contrast-outline', glass: 'water-outline', tint: 'color-filter-outline' }[id]} size={22} color={C.text} />
+                      <Text style={styles.choiceTxt}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {(hero.filter || 'veil') === 'tint' ? (
+                <>
+                  <Text style={styles.group}>Teinte</Text>
+                  <View style={styles.wrap}>
+                    {Object.keys(TINT_LABELS).map((id) => {
+                      const on = (hero.tint || 'primary') === id;
+                      return (
+                        <Pressable key={id} onPress={() => setHero({ tint: id })} style={[styles.choice, on && styles.choiceOn]}
+                          accessibilityRole="radio" accessibilityState={{ checked: on }} aria-checked={on} accessibilityLabel={`Teinte ${TINT_LABELS[id]}`}>
+                          <View style={[styles.swatch, { backgroundColor: TINTS[id] || theme.colors.primary }]} />
+                          <Text style={styles.choiceTxt}>{TINT_LABELS[id]}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
+            </View>
+          ) : null}
+
           {tab === 'colors' ? (
             <View style={styles.wrap}>
               {harmonies.map((h) => {
@@ -247,8 +342,9 @@ const styles = StyleSheet.create({
   preview: { alignSelf: 'center', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: C.border, backgroundColor: C.white },
   tabs: { flexDirection: 'row', marginHorizontal: 16, marginTop: 12, backgroundColor: C.white, borderRadius: 14, padding: 4, borderWidth: 1, borderColor: C.border },
   tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  // 5 onglets : texte un peu plus petit pour tenir sur un téléphone étroit
   tabOn: { backgroundColor: C.green },
-  tabTxt: { fontSize: 14, fontWeight: '700', color: C.textSub },
+  tabTxt: { fontSize: 13, fontWeight: '700', color: C.textSub },
   tabTxtOn: { color: C.white },
   panel: { padding: 16, paddingBottom: 40 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -264,5 +360,11 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 12, color: C.textSub, marginBottom: 4 },
   input: { backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 12, fontSize: 15, color: C.text },
   note: { fontSize: 13, color: C.textSub, lineHeight: 19 },
+  photoRow: { flexDirection: 'row', gap: 14, alignItems: 'center' },
+  photo: { width: 92, height: 122, borderRadius: 14, backgroundColor: C.white, borderWidth: 1, borderColor: C.border },
+  outline: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, borderColor: C.green, backgroundColor: C.white },
+  outlineTxt: { color: C.green, fontWeight: '700', fontSize: 14 },
+  link: { color: C.green, fontWeight: '700', fontSize: 14, textDecorationLine: 'underline' },
+  hint: { backgroundColor: C.greenLight, borderRadius: 12, padding: 12 },
   footer: { padding: 16, borderTopWidth: 1, borderColor: C.border, backgroundColor: C.white },
 });

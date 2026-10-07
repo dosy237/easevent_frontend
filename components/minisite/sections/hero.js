@@ -1,18 +1,26 @@
 /**
  * Accueil — 7 mises en page : fullbleed, split, framed, typographic, stacked, arch, poster
+ * Plein cadre : la photo (celle choisie pour la bannière, sinon la couverture) reçoit un filtre :
+ *   veil  — dégradé sombre sous le texte
+ *   glass — texte posé sur un panneau de verre dépoli
+ *   tint  — la photo prend une couleur (thème, bleu, rose, or, sauge, nuit)
+ * Toucher la photo l'ouvre en grand.
  */
 import React from 'react';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 
 import SafeImage from '../../ui/SafeImage';
 import Ornament from '../Ornament';
 import { Body, Button, Kicker, Title } from '../atoms';
 import { images, when } from '../theme';
 
+export const TINTS = { blue: '#1D3FAF', rose: '#A3204F', gold: '#8A5A12', sage: '#3C6247', night: '#0B1020' };
+
 export default function Hero({ s, copy = {}, event, theme, t, actions }) {
   const { c, radius, width } = theme;
-  const cover = images(event)[0];
+  const cover = s.image || images(event)[0];
   const w = when(event.start_date, event.timezone);
   const align = s.align === 'left' ? 'left' : 'center';
   const items = align === 'center' ? 'center' : 'flex-start';
@@ -26,19 +34,46 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
   ) : null);
 
   if (s.variant === 'fullbleed') {
-    const inner = (
-      <LinearGradient colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={{ flex: 1, justifyContent: 'flex-end', padding: pad, paddingBottom: 40 }}>
-        <View style={{ alignItems: items }}>
-          <Kicker theme={theme} t={{ accent: '#FFFFFF' }} align={align}>{copy.kicker}</Kicker>
-          <Title theme={theme} t={{ text: '#FFFFFF' }} size={42} align={align}>{title}</Title>
-          <Body theme={theme} t={{ text: '#FFFFFF' }} align={align} style={{ marginTop: 12, opacity: 0.92 }}>{copy.subtitle}</Body>
-          <DateLine tt={{ text: '#FFFFFF' }} />
-          <Ornament kind={theme.ornament} color="#FFFFFF" width={180} style={{ marginTop: 18 }} />
-        </View>
-      </LinearGradient>
+    const filter = cover ? (s.filter || 'veil') : 'veil';
+    const white = { text: '#FFFFFF', accent: '#FFFFFF' };
+    const texts = (
+      <View style={{ alignItems: items }}>
+        <Kicker theme={theme} t={white} align={align}>{copy.kicker}</Kicker>
+        <Title theme={theme} t={white} size={42} align={align}>{title}</Title>
+        <Body theme={theme} t={white} align={align} style={{ marginTop: 12, opacity: 0.94 }}>{copy.subtitle}</Body>
+        <DateLine tt={white} />
+        <Ornament kind={theme.ornament} color="#FFFFFF" width={180} style={{ marginTop: 18 }} />
+      </View>
     );
+    let inner;
+    if (filter === 'glass') {
+      // Verre dépoli : flou de l'arrière-plan + voile sombre léger, texte blanc lisible sur toute photo
+      inner = (
+        <View style={{ flex: 1, justifyContent: 'flex-end', padding: 16, paddingBottom: 28, backgroundColor: 'rgba(0,0,0,0.12)' }}>
+          <View style={{ borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' }}>
+            <BlurView intensity={42} tint="dark" style={{ padding: 22, backgroundColor: 'rgba(12,12,18,0.38)' }}>{texts}</BlurView>
+          </View>
+        </View>
+      );
+    } else if (filter === 'tint') {
+      const tint = TINTS[s.tint] || c.primary;
+      inner = (
+        <View style={{ flex: 1 }}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: tint, opacity: 0.55 }} />
+          <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.7)']} style={{ flex: 1, justifyContent: 'flex-end', padding: pad, paddingBottom: 40 }}>
+            {texts}
+          </LinearGradient>
+        </View>
+      );
+    } else {
+      inner = (
+        <LinearGradient colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.82)']} style={{ flex: 1, justifyContent: 'flex-end', padding: pad, paddingBottom: 40 }}>
+          {texts}
+        </LinearGradient>
+      );
+    }
     return cover ? (
-      <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de couverture">
+      <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo">
         <ImageBackground source={{ uri: cover }} style={{ height: Math.min(620, width * 1.45) }} resizeMode="cover">{inner}</ImageBackground>
       </Pressable>
     ) : (
@@ -50,7 +85,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
     const row = theme.wide;
     return (
       <View style={{ flexDirection: row ? 'row' : 'column', backgroundColor: t.bg }}>
-        <Pressable onPress={openCover} disabled={!cover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de couverture"
+        <Pressable onPress={openCover} disabled={!cover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo"
           style={{ width: row ? '50%' : '100%' }}>
           <SafeImage uri={cover} style={{ width: '100%', height: row ? 520 : Math.min(360, width * 0.85),
             borderBottomRightRadius: row ? 0 : radius.img * 2.5 }} />
@@ -72,7 +107,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
         <View style={{ borderWidth: 1, borderColor: t.accent, padding: 6, borderRadius: radius.card }}>
           <View style={{ borderWidth: 1, borderColor: t.line, borderRadius: Math.max(0, radius.card - 4), padding: pad, paddingVertical: 44, alignItems: 'center' }}>
             {cover ? (
-              <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de couverture">
+              <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo">
                 <SafeImage uri={cover} style={{ width: 132, height: 132, borderRadius: 66, marginBottom: 22, borderWidth: 3, borderColor: t.card }} />
               </Pressable>
             ) : null}
@@ -100,7 +135,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
         <Body theme={theme} t={t} muted align={align} style={{ marginTop: 14, maxWidth: 520 }}>{copy.subtitle}</Body>
         {w ? <DateLine tt={t} style={{ marginTop: 4 }} /> : null}
         {cover ? (
-          <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de couverture" style={{ marginTop: 30, alignSelf: 'stretch' }}>
+          <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo" style={{ marginTop: 30, alignSelf: 'stretch' }}>
             <SafeImage uri={cover} style={{ height: 190, borderRadius: radius.img }} />
           </Pressable>
         ) : null}
@@ -115,7 +150,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
           <Kicker theme={theme} t={t} align={align}>{copy.kicker}</Kicker>
           <Title theme={theme} t={t} size={40} align={align}>{title}</Title>
         </View>
-        <Pressable onPress={openCover} disabled={!cover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de couverture">
+        <Pressable onPress={openCover} disabled={!cover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo">
           <SafeImage uri={cover} style={{ height: Math.min(420, width), marginHorizontal: 14, marginTop: 26, borderRadius: radius.img }} />
         </Pressable>
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20, paddingHorizontal: pad, gap: 12, flexWrap: 'wrap' }}>
@@ -131,7 +166,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
     return (
       <View style={{ backgroundColor: t.bg, alignItems: 'center', paddingTop: 44, paddingBottom: 38, paddingHorizontal: pad }}>
         <View style={{ padding: 8, borderWidth: 1, borderColor: t.accent, borderTopLeftRadius: archW / 2 + 8, borderTopRightRadius: archW / 2 + 8 }}>
-          <Pressable onPress={openCover} disabled={!cover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de couverture">
+          <Pressable onPress={openCover} disabled={!cover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo">
             <SafeImage uri={cover} style={{ width: archW, height: archW * 1.25, borderTopLeftRadius: archW / 2, borderTopRightRadius: archW / 2 }} />
           </Pressable>
         </View>
@@ -149,7 +184,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
   return (
     <View style={{ backgroundColor: c.inverseBg, paddingHorizontal: pad, paddingTop: 50, paddingBottom: 40, overflow: 'hidden' }}>
       {cover ? (
-        <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de couverture">
+        <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo">
           <SafeImage uri={cover} style={{ height: 230, borderRadius: radius.img, marginBottom: 26 }} />
         </Pressable>
       ) : null}
