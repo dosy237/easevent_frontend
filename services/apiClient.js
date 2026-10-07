@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { API_BASE } from '../config';
 import { KEYS, getItem, setItem, clearSession } from './storage';
+import { logDev } from '../utils/log';
 
 const API_URL = API_BASE;
 
@@ -65,7 +66,7 @@ apiClient.interceptors.response.use(
 
     if (originalRequest._retry) {
       // If we already retried and still got 401 → session toast
-      console.error('[apiClient] 401 on retried request → session expired');
+      logDev('[apiClient] 401 on retried request → session expired');
       await triggerLogout();
       return Promise.reject(error);
     }
@@ -118,7 +119,7 @@ apiClient.interceptors.response.use(
       return apiClient(originalRequest);
 
     } catch (refreshError) {
-      console.error('[apiClient] Refresh failed:', refreshError.response?.status || refreshError.message);
+      logDev('[apiClient] Refresh failed:', refreshError.response?.status || refreshError.message);
       // Refresh failed → force logout so the user can re-login
       processQueue(refreshError, null);
       await triggerLogout();

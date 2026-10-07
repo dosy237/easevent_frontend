@@ -18,7 +18,8 @@
  */
 
 import { StatusBar as RNStatusBar } from 'react-native';
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import Announcements from '../components/events/Announcements';
 import {
   View,
   Text,
@@ -33,6 +34,7 @@ import {
   RefreshControl,
   Linking,
   TextInput,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,8 +45,17 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import eventService from '../services/eventService';
 import { LogoMark } from '../components/illustrations';
+import SafeImage from '../components/ui/SafeImage';
+
+const STORE_URL = 'https://play.google.com/store/apps/details?id=com.eranis.easevent';
 import { SkeletonGroup, Bone, EventCardSkeleton } from '../components/ui/Skeleton';
 import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
+import { logDev } from '../utils/log';
+import { openInMaps } from '../components/maps/EventMap';
+import LikeButton from '../components/events/LikeButton';
+import ShareSheet from '../components/events/ShareSheet';
+import { seedLikes } from '../utils/likes';
+import { showAlert } from '../utils/dialog';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -78,17 +89,11 @@ const FILTERS = [
 // ─────────────────────────────────────────────────────────────────
 // FONCTIONS UTILITAIRES
 // ─────────────────────────────────────────────────────────────────
-const openGoogleMaps = async (address) => {
+// Le lien https Google Maps ouvre l'application Maps quand elle est installée
+// (Android et iOS), sinon le navigateur — et fonctionne aussi sur le web.
+const openGoogleMaps = (address) => {
   if (!address) return;
-  const query = encodeURIComponent(address);
-  const appUrl = `comgooglemaps://?q=${query}`;
-  const webUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
-  try {
-    const canOpen = await Linking.canOpenURL(appUrl);
-    await Linking.openURL(canOpen ? appUrl : webUrl);
-  } catch {
-    await Linking.openURL(webUrl);
-  }
+  openInMaps(null, address);
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -149,12 +154,13 @@ const InvitationCard = React.memo(({ event, onPress, isLoggedIn, onLoginPress })
   if (!event) return null;
 
   return (
-    <TouchableOpacity style={styles.invitCard} onPress={() => onPress(event)} activeOpacity={0.92}>
-      <Image source={{ uri: event.cover_image }} style={styles.invitImage} resizeMode="cover" />
+    <TouchableOpacity style={styles.invitCard} onPress={() => onPress(event)} activeOpacity={0.92}
+      accessibilityRole="button" accessibilityLabel={`Invitation : ${event.title}, ${event.date_formatted || ''}`}>
+      <SafeImage uri={event.cover_image} style={styles.invitImage} />
       <View style={styles.invitBody}>
         <View style={styles.invitHeaderRow}>
           <View style={styles.invitBadge}>
-            <Text style={styles.invitBadgeText}>EXCLUSIF</Text>
+            <Text style={styles.invitBadgeText}>INVITATION</Text>
           </View>
           <Text style={styles.invitDateText}>{event.date_formatted}</Text>
         </View>
@@ -169,9 +175,20 @@ const InvitationCard = React.memo(({ event, onPress, isLoggedIn, onLoginPress })
   );
 });
 
-const CardFeatured = React.memo(({ event, onPress }) => (
+// « J'aime » et « Partager » : mêmes boutons sur toutes les cartes du fil
+const EngageRow = ({ event, engage, light }) => (
+  <View style={styles.engageRow}>
+    <LikeButton event={event} isAuthenticated={engage.isLoggedIn} onRequireLogin={engage.onRequireLogin} light={light} compact />
+    <Pressable onPress={() => engage.onShare(event)} hitSlop={8} accessibilityRole="button"
+      accessibilityLabel={`Partager « ${event.title} »`} style={[styles.shareBtn, light && styles.shareBtnLight]}>
+      <Ionicons name="paper-plane-outline" size={18} color={light ? C.white : C.text} />
+    </Pressable>
+  </View>
+);
+
+const CardFeatured = React.memo(({ event, onPress, engage }) => (
   <TouchableOpacity style={styles.cardFeatured} onPress={() => onPress(event)} activeOpacity={0.92}>
-    <Image source={{ uri: event.cover_image }} style={styles.cardFeaturedImg} resizeMode="cover" />
+    <SafeImage uri={event.cover_image} style={styles.cardFeaturedImg} />
     <View style={styles.cardFeaturedBadge}>
       <Text style={styles.cardFeaturedBadgeTxt}>{(event.event_type_display || event.event_type)?.toUpperCase()}</Text>
     </View>
@@ -179,58 +196,43 @@ const CardFeatured = React.memo(({ event, onPress }) => (
       <Text style={styles.cardFeaturedDate}>{event.date_formatted}</Text>
       <View style={styles.cardFeaturedRow}>
         <Text style={styles.cardFeaturedTitle} numberOfLines={1}>{event.title}</Text>
-        <View style={styles.addCircle}>
-          <Ionicons name="add" size={18} color={C.green} />
-        </View>
+        <EngageRow event={event} engage={engage} />
       </View>
       <LocationRow address={event.location_address} color={C.textMut} />
     </View>
   </TouchableOpacity>
 ));
 
-const CardSmall = React.memo(({ event, onPress }) => (
+const CardSmall = React.memo(({ event, onPress, engage }) => (
   <TouchableOpacity style={styles.cardSmall} onPress={() => onPress(event)} activeOpacity={0.88}>
-    <Image source={{ uri: event.cover_image }} style={styles.cardSmallImg} resizeMode="cover" />
+    <SafeImage uri={event.cover_image} style={styles.cardSmallImg} />
     <View style={styles.cardSmallBody}>
       <Text style={styles.cardSmallDate}>{event.date_formatted}</Text>
       <Text style={styles.cardSmallTitle} numberOfLines={2}>{event.title}</Text>
-      <TouchableOpacity style={styles.inscribeBtn} onPress={() => onPress(event)} activeOpacity={0.75}>
-        <Text style={styles.inscribeTxt}>S'inscrire</Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <TouchableOpacity style={styles.inscribeBtn} onPress={() => onPress(event)} activeOpacity={0.75}>
+          <Text style={styles.inscribeTxt}>S'inscrire</Text>
+        </TouchableOpacity>
+        <LikeButton event={event} isAuthenticated={engage.isLoggedIn} onRequireLogin={engage.onRequireLogin} compact />
+      </View>
     </View>
   </TouchableOpacity>
 ));
 
-const CardStandard = React.memo(({ event, onPress }) => {
-  const [saved, setSaved] = useState(false);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handleBookmark = () => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.85, duration: 80, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
-    ]).start();
-    setSaved(!saved);
-  };
-
+const CardStandard = React.memo(({ event, onPress, engage }) => {
   return (
     <TouchableOpacity style={styles.cardStd} onPress={() => onPress(event)} activeOpacity={0.92}>
       <View style={styles.cardStdImgBox}>
-        <Image source={{ uri: event.cover_image }} style={styles.cardStdImg} resizeMode="cover" />
+        <SafeImage uri={event.cover_image} style={styles.cardStdImg} />
         <View style={styles.dateBadge}>
           <Text style={styles.dateBadgeTxt}>{event.date_formatted}</Text>
         </View>
-        <Animated.View style={[styles.bookmarkBtn, { transform: [{ scale: scaleAnim }] }]}>
-          <TouchableOpacity onPress={handleBookmark} activeOpacity={0.8}>
-            <View style={styles.bookmarkInner}>
-              <Ionicons
-                name={saved ? 'bookmark' : 'bookmark-outline'}
-                size={15}
-                color={saved ? C.orange : C.textMut}
-              />
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
+        {event.video ? (
+          <View style={styles.videoBadge} accessible accessibilityLabel="Avec une vidéo de présentation">
+            <Ionicons name="play" size={11} color={C.white} />
+            <Text style={styles.videoBadgeTxt}>Vidéo</Text>
+          </View>
+        ) : null}
       </View>
       <View style={styles.cardStdBody}>
         <Text style={styles.cardStdTitle} numberOfLines={1}>{event.title}</Text>
@@ -244,6 +246,7 @@ const CardStandard = React.memo(({ event, onPress }) => {
             </Text>
           </View>
         </View>
+        <EngageRow event={event} engage={engage} />
       </View>
     </TouchableOpacity>
   );
@@ -260,6 +263,12 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
+  const [shareEvent, setShareEvent] = useState(null);
+  const engage = useMemo(() => ({
+    isLoggedIn,
+    onShare: setShareEvent,
+    onRequireLogin: () => navigation.navigate('Login', { mode: 'login' }),
+  }), [isLoggedIn, navigation]);
   const [searchText, setSearchText] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
@@ -276,21 +285,33 @@ export default function HomeScreen({ navigation }) {
 
       const data = await eventService.fetchPublicEvents(params);
       
+      seedLikes(data.events);
       setEvents(data.events || []);
       setError(null);
     } catch (err) {
       setError('Impossible de charger les événements.');
-      console.error('Erreur API HomeScreen:', err);
+      logDev('Erreur API HomeScreen:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [activeFilter]);
 
+  // Invitations en attente de réponse (connecté) : affichées en tête du fil
+  const [myInvitations, setMyInvitations] = useState([]);
+  const loadInvitations = useCallback(async () => {
+    if (!isLoggedIn) { setMyInvitations([]); return; }
+    try {
+      const data = await eventService.fetchMyInvitations();
+      setMyInvitations((data.invitations || []).filter((i) => ['sent', 'opened'].includes(i.status) && i.event));
+    } catch { /* le fil reste utilisable */ }
+  }, [isLoggedIn]);
+
   useFocusEffect(
     useCallback(() => {
       fetchEvents(searchText, activeFilter);
-    }, [activeFilter])
+      loadInvitations();
+    }, [activeFilter, loadInvitations])
   );
 
   // ── Recherche avec debounce ──────────────────────────────────
@@ -337,6 +358,7 @@ export default function HomeScreen({ navigation }) {
   const onRefresh = () => {
     setRefreshing(true);
     fetchEvents(searchText, activeFilter);
+    loadInvitations();
   };
 
   const goToDetail = (event) => navigation?.navigate('EventDetail', { event });
@@ -351,6 +373,9 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.root}>
+      <ShareSheet event={shareEvent} visible={!!shareEvent} onClose={() => setShareEvent(null)} isAuthenticated={isLoggedIn}
+        onAddFriends={() => navigation.navigate('TabProfile', { screen: 'Friends', initial: false, params: { tab: 'add' } })}
+        onSent={(res) => showAlert('Partagé', res.message || 'Envoyé.')} />
       <StatusBar barStyle="dark-content" backgroundColor={C.white} />
       <SafeAreaView style={styles.safe}>
         {/* HEADER */}
@@ -512,18 +537,23 @@ export default function HomeScreen({ navigation }) {
           {/* Contenu principal */}
           {!loading && !error && (
             <>
-              {/* Invitations */}
-              {!searchActive && !searchText && (
+              {/* Annonces de l'équipe Easevent (priorité, mises à jour en direct) */}
+              {!searchActive && !searchText ? <Announcements style={{ marginBottom: 8 }} /> : null}
+
+              {/* Invitations : vraies invitations en attente (connecté), sinon carte de connexion */}
+              {!searchActive && !searchText && (!isLoggedIn || myInvitations.length > 0) && (
                 <View style={styles.sec}>
                   <View style={styles.secRow}>
                     <Text style={styles.secTitle}>Vos Invitations</Text>
+                    {myInvitations.length > 1 ? (
+                      <View style={styles.countBadge}><Text style={styles.countText}>{myInvitations.length}</Text></View>
+                    ) : null}
                   </View>
-                  <InvitationCard
-                    event={featuredEvent}
-                    onPress={goToDetail}
-                    isLoggedIn={isLoggedIn}
-                    onLoginPress={goToLogin}
-                  />
+                  {isLoggedIn
+                    ? myInvitations.slice(0, 3).map((inv) => (
+                      <InvitationCard key={inv.id} event={inv.event} onPress={goToDetail} isLoggedIn />
+                    ))
+                    : <InvitationCard isLoggedIn={false} onLoginPress={goToLogin} />}
                 </View>
               )}
 
@@ -557,28 +587,28 @@ export default function HomeScreen({ navigation }) {
 
                 {searchText &&
                   events.map((ev) => (
-                    <CardStandard key={ev.id} event={ev} onPress={goToDetail} />
+                    <CardStandard key={ev.id} event={ev} onPress={goToDetail} engage={engage} />
                   ))}
 
                 {!searchText && events.length > 0 && (
                   <>
-                    {featuredEvent && <CardFeatured event={featuredEvent} onPress={goToDetail} />}
+                    {featuredEvent && <CardFeatured event={featuredEvent} onPress={goToDetail} engage={engage} />}
                     {smallEvents.length > 0 && (
                       <View style={styles.smallRow}>
                         {smallEvents.map((ev) => (
-                          <CardSmall key={ev.id} event={ev} onPress={goToDetail} />
+                          <CardSmall key={ev.id} event={ev} onPress={goToDetail} engage={engage} />
                         ))}
                       </View>
                     )}
                     {restEvents.map((ev) => (
-                      <CardStandard key={ev.id} event={ev} onPress={goToDetail} />
+                      <CardStandard key={ev.id} event={ev} onPress={goToDetail} engage={engage} />
                     ))}
                   </>
                 )}
               </View>
 
-              {/* Bannière */}
-              {!searchText && (
+              {/* Bannière : sur le site web, pour les visiteurs (dans l'application, elle n'a pas de sens) */}
+              {!searchText && Platform.OS === 'web' && !isLoggedIn && (
                 <View style={styles.dlBanner}>
                   <View style={styles.dlLeft}>
                     <View style={styles.dlIconBox}>
@@ -589,7 +619,8 @@ export default function HomeScreen({ navigation }) {
                       <Text style={styles.dlSub}>Télécharger l'application</Text>
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.dlBtn} activeOpacity={0.85}>
+                  <TouchableOpacity style={styles.dlBtn} activeOpacity={0.85} accessibilityRole="link"
+                    onPress={() => Linking.openURL(STORE_URL).catch(() => {})}>
                     <Text style={styles.dlBtnTxt}>Installer</Text>
                   </TouchableOpacity>
                 </View>
@@ -612,7 +643,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: C.white,
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
   header: {
     flexDirection: 'row',
@@ -855,6 +885,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardFeaturedTitle: { fontSize: 17, fontWeight: '800', color: C.text, flex: 1, letterSpacing: -0.2 },
+  videoBadge: { position: 'absolute', right: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  videoBadgeTxt: { color: C.white, fontSize: 11, fontWeight: '800' },
+  engageRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 6 },
+  shareBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  shareBtnLight: { backgroundColor: 'rgba(0,0,0,0.32)' },
   addCircle: {
     width: 32,
     height: 32,

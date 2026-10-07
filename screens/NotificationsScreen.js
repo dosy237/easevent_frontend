@@ -29,14 +29,19 @@ import { Bone, SkeletonGroup } from '../components/ui/Skeleton';
 import LoadingMessages from '../components/ui/LoadingMessages';
 import notificationService from '../services/notificationService';
 import eventService from '../services/eventService';
+import friendService from '../services/friendService';
 import { apiErrorMessage } from '../services/authService';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { showAlert } from '../utils/dialog';
+import { isRsvpCancel } from '../utils/rsvp';
+import { openNotification } from '../utils/notificationRoutes';
+import realtime from '../services/realtime';
 
 const FILTERS = [
   { id: 'all', label: 'Tout' },
   { id: 'events', label: 'Événements' },
   { id: 'messages', label: 'Messages' },
+  { id: 'social', label: 'Amis' },
   { id: 'system', label: 'Système' },
 ];
 
@@ -45,13 +50,33 @@ const LOADING = ['Nous relevons votre courrier…', 'On trie vos nouvelles…', 
 // Pastille par type : icône, couleurs, appel à l'action
 const LOOK = {
   invitation_received: { icon: 'mail-open-outline', bg: C.greenLight, fg: C.green },
-  ticket_to_validate:  { icon: 'ticket-outline', bg: C.green, fg: C.white, cta: 'Valider mon ticket' },
-  ticket_generated:    { icon: 'qr-code-outline', bg: C.greenLight, fg: C.green, cta: 'Voir mon ticket' },
+  ticket_to_validate:  { icon: 'ticket-outline', bg: C.green, fg: C.white, cta: 'Valider mon invitation' },
+  ticket_generated:    { icon: 'qr-code-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
+  ticket_gift:         { icon: 'gift-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
+  question_to_answer:  { icon: 'help-circle-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Répondre' },
+  team_invite:         { icon: 'people-outline', bg: C.greenLight, fg: C.green, cta: 'Répondre' },
+  team_response:       { icon: 'people-outline', bg: C.greenLight, fg: C.green, cta: 'Voir l’équipe' },
+  event_broadcast:     { icon: 'megaphone-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Lire' },
+  event_comment:       { icon: 'chatbox-ellipses-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
+  memories_added:      { icon: 'images-outline', bg: C.greenLight, fg: C.green, cta: 'Voir les photos' },
+  basket_open:         { icon: 'basket-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Voir le panier' },
+  basket_contribution: { icon: 'basket-outline', bg: C.greenLight, fg: C.green, cta: 'Voir le panier' },
   daily_summary:       { icon: 'people-outline', bg: C.greenLight, fg: C.green },
-  reminder:            { icon: 'time-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: 'Voir mon ticket' },
+  reminder:            { icon: 'time-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: 'Voir' },
   message_received:    { icon: 'chatbubble-outline', bg: C.orangeL, fg: C.orangeDark },
   payment_failed:      { icon: 'card-outline', bg: C.errorBg, fg: C.errorText, cta: 'Réessayer le paiement' },
-  payment_succeeded:   { icon: 'card-outline', bg: '#F4F4F4', fg: C.text },
+  payment_succeeded:   { icon: 'card-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
+  payment_refunded:    { icon: 'arrow-undo-outline', bg: '#F4F4F4', fg: C.text },
+  guest_response:      { icon: 'people-circle-outline', bg: C.greenLight, fg: C.green, cta: 'Voir les réponses' },
+  event_full:          { icon: 'trophy-outline', bg: '#FFF6E0', fg: '#7A4F00' },
+  event_updated:       { icon: 'create-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: "Voir l'événement" },
+  event_cancelled:     { icon: 'close-circle-outline', bg: C.errorBg, fg: C.errorText },
+  invitation_revoked:  { icon: 'remove-circle-outline', bg: '#F4F4F4', fg: C.text },
+  payouts_ready:       { icon: 'wallet-outline', bg: C.greenLight, fg: C.green },
+  minisite_ready:      { icon: 'sparkles-outline', bg: C.greenLight, fg: C.green, cta: 'Choisir mon mini-site' },
+  subscription:        { icon: 'star-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Mon abonnement' },
+  friend_request:      { icon: 'person-add-outline', bg: C.greenLight, fg: C.green },
+  friend_accepted:     { icon: 'people-outline', bg: C.greenLight, fg: C.green, cta: 'Voir mes amis' },
 };
 
 function ago(iso) {
@@ -105,7 +130,17 @@ export default function NotificationsScreen({ navigation }) {
     }
   }, [filter, applyUnread]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    load();
+    // Nouvelle notification pendant que l'écran est ouvert : la liste se met à jour seule
+    let timer = null;
+    const unsub = realtime.subscribe((evt) => {
+      if (evt.type !== 'badge') return;
+      clearTimeout(timer);
+      timer = setTimeout(() => load(), 600);
+    });
+    return () => { unsub(); clearTimeout(timer); };
+  }, [load]));
 
   const changeFilter = (id) => { setFilter(id); setItems(null); load(id); };
 
@@ -136,24 +171,7 @@ export default function NotificationsScreen({ navigation }) {
 
   const open = (n) => {
     markRead(n);
-    const tickets = (params) => navigation.navigate('TabTickets', { screen: 'Tickets', params });
-    switch (n.type) {
-      case 'invitation_received':
-      case 'ticket_to_validate':
-      case 'payment_failed':
-        return tickets({ tab: 'pending' });
-      case 'ticket_generated':
-      case 'reminder':
-        return tickets({ tab: 'generated', openTicketId: n.ticket_id || undefined });
-      case 'daily_summary':
-        return n.event && navigation.navigate('TabDashboard', { screen: 'EventDashboard', params: { event: n.event } });
-      case 'message_received':
-        return navigation.navigate('Chat', { conversationId: n.data?.conversation_id, title: n.title });
-      case 'payment_succeeded':
-        return navigation.navigate('TabProfile', { screen: 'Plans' });
-      default:
-        return null;
-    }
+    openNotification(navigation, n);
   };
 
   const answer = async (n, status) => {
@@ -163,11 +181,25 @@ export default function NotificationsScreen({ navigation }) {
       await markRead(n);
       refreshBadges({ force: true });
       if (status === 'confirmed') {
-        showAlert('Invitation acceptée', 'Votre ticket vous attend dans Mes tickets : validez-le pour le générer.', [
+        showAlert('Invitation acceptée', 'Elle vous attend dans Mes invitations : validez-la pour recevoir votre QR code.', [
           { text: 'Plus tard', style: 'cancel' },
-          { text: 'Voir mon ticket', onPress: () => navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } }) },
+          { text: 'Voir mon invitation', onPress: () => navigation.navigate('TabTickets', { screen: 'Tickets', params: { tab: 'pending' } }) },
         ]);
       }
+      await load();
+    } catch (err) {
+      if (isRsvpCancel(err)) return;      // fenêtre des questions fermée : rien n'est envoyé
+      showAlert('Action impossible', apiErrorMessage(err));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const answerFriend = async (n, ok) => {
+    setBusy(`${n.id}:friend-${ok ? 'ok' : 'no'}`);
+    try {
+      if (ok) await friendService.accept(n.friendship.id); else await friendService.remove(n.friendship.id);
+      await markRead(n);
       await load();
     } catch (err) {
       showAlert('Action impossible', apiErrorMessage(err));
@@ -186,11 +218,12 @@ export default function NotificationsScreen({ navigation }) {
     return groups;
   }, [items]);
 
-  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('TabDashboard'));
+  const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('TabDashboard', { screen: 'Dashboard' }));
 
   const renderItem = ({ item: n }) => {
     const look = LOOK[n.type] || LOOK.payment_succeeded;
     const canAnswer = n.type === 'invitation_received' && n.invitation?.can_answer;
+    const canAnswerFriend = n.type === 'friend_request' && n.friendship?.can_answer;
     return (
       <Pressable
         onPress={() => open(n)}
@@ -219,6 +252,18 @@ export default function NotificationsScreen({ navigation }) {
               </Pressable>
             </View>
           )}
+          {canAnswerFriend && (
+            <View style={styles.answers}>
+              <Pressable onPress={() => answerFriend(n, true)} disabled={!!busy} style={[styles.answer, styles.accept]}
+                accessibilityRole="button" accessibilityLabel={`Accepter la demande d'ami de ${n.title}`}>
+                {busy === `${n.id}:friend-ok` ? <ActivityIndicator size="small" color={C.white} /> : <Text style={styles.acceptTxt}>Accepter</Text>}
+              </Pressable>
+              <Pressable onPress={() => answerFriend(n, false)} disabled={!!busy} style={[styles.answer, styles.decline]}
+                accessibilityRole="button" accessibilityLabel={`Refuser la demande d'ami de ${n.title}`}>
+                <Text style={styles.declineTxt}>Refuser</Text>
+              </Pressable>
+            </View>
+          )}
           {look.cta && !n.read ? <Text style={styles.cta}>{look.cta} ›</Text> : null}
           <Text style={styles.time}>{n.type === 'daily_summary' ? `Bilan du jour · ${ago(n.created_at)}` : ago(n.created_at)}</Text>
         </View>
@@ -244,7 +289,7 @@ export default function NotificationsScreen({ navigation }) {
               const n = unread[f.id] || 0;
               return (
                 <Pressable key={f.id} onPress={() => changeFilter(f.id)} style={[styles.filter, on && styles.filterOn]}
-                  accessibilityRole="tab" accessibilityState={{ selected: on }}
+                  accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on}
                   accessibilityLabel={`${f.label}${n ? `, ${n} non lue${n > 1 ? 's' : ''}` : ''}`}>
                   <Text style={[styles.filterTxt, on && styles.filterTxtOn]}>{f.label}{n ? ` · ${n}` : ''}</Text>
                 </Pressable>
@@ -285,7 +330,7 @@ export default function NotificationsScreen({ navigation }) {
               <View style={styles.empty}>
                 <View style={styles.emptyIcon}><Ionicons name="notifications-off-outline" size={30} color={C.green} /></View>
                 <Text style={styles.emptyTitle}>Rien de neuf pour le moment</Text>
-                <Text style={styles.emptyTxt}>Invitations, tickets et rappels de vos événements apparaîtront ici.</Text>
+                <Text style={styles.emptyTxt}>Invitations, billets et rappels de vos événements apparaîtront ici.</Text>
               </View>
             ) : null}
             ListFooterComponent={hasMore ? (
@@ -324,7 +369,10 @@ function PreferencesSheet({ visible, onClose }) {
   };
 
   const rows = [
-    ['reminders', 'Rappels avant mes événements', 'J-7, la veille et le jour J pour vos tickets.'],
+    ['push', 'Notifications sur le téléphone', 'Recevoir les alertes même quand l\'application est fermée.'],
+    ['messages', 'Nouveaux messages', 'Une alerte à chaque message reçu.'],
+    ['guest_responses', 'Réponses de mes invités (organisateur)', 'Quand un invité accepte, décline ou prend son billet.'],
+    ['reminders', 'Rappels avant mes événements', 'J-7, la veille et le jour J pour vos invitations et billets.'],
     ['daily_summary', 'Bilan du jour (organisateur)', 'Le nombre de nouvelles confirmations de vos événements.'],
   ];
 
@@ -344,7 +392,7 @@ function PreferencesSheet({ visible, onClose }) {
               trackColor={{ true: C.green, false: C.border }} thumbColor={C.white} />
           </View>
         ))}
-        <Text style={styles.prefNote}>Les invitations, tickets et paiements vous sont toujours signalés.</Text>
+        <Text style={styles.prefNote}>Les invitations, billets et paiements vous sont toujours signalés.</Text>
         {error ? <Text style={styles.errorTxt} accessibilityRole="alert">{error}</Text> : null}
         <Pressable onPress={onClose} style={styles.sheetClose} accessibilityRole="button">
           <Text style={styles.sheetCloseTxt}>Fermer</Text>

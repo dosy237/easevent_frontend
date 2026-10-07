@@ -1,22 +1,21 @@
 /**
  * components/illustrations — Easevent
  * Logo et illustrations des maquettes « Easevent — Écrans MVP ».
- * Les fichiers SVG sont hébergés sur le backend (static/app/) et
- * chargés à la demande : aucune image n'est embarquée dans l'APK.
+ * Le logo est inclus dans l'APK ; les illustrations SVG sont hébergées sur le
+ * backend (static/app/) et chargées à la demande.
  */
 import React from 'react';
+import { Image } from 'react-native';
 
 import RemoteSvg from '../ui/RemoteSvg';
 
-// Symbole « calendrier + flèche » (planche Logo & identité)
-export function LogoMark({ size = 64, simplified = false }) {
+// Symbole « calendrier + flèche » (planche Logo & identité) : l'icône de l'application, incluse dans l'APK (toujours affichée, même hors connexion)
+const LOGO = require('../../assets/icon.png');
+
+export function LogoMark({ size = 64 }) {
   return (
-    <RemoteSvg
-      path={simplified ? 'logo-small.svg' : 'logo.svg'}
-      width={size}
-      height={size}
-      accessibilityLabel="Easevent"
-    />
+    <Image source={LOGO} style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
+      accessibilityRole="image" accessibilityLabel="Easevent" />
   );
 }
 

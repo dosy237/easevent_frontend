@@ -25,11 +25,13 @@ import { readAsStringAsync } from 'expo-file-system/legacy';
 import { C, TOUCH } from '../constants/theme';
 import { BackButton } from '../components/ui/Buttons';
 import invitationService from '../services/invitationService';
+import friendService from '../services/friendService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
 import { useAuth } from '../context/AuthContext';
 import { formatPrice } from '../utils/format';
 import { COUNTRIES, formatPhone, isEmail, parseContactsCsv, splitEmails, toE164 } from '../utils/contacts';
+import { deviceDialCode } from '../utils/region';
 
 const MODES = [
   { id: 'members', label: 'Membres', icon: 'people-outline' },
@@ -38,6 +40,7 @@ const MODES = [
 ];
 const PLAN_LABEL = { free: 'Plan Gratuit', standard: 'Plan Standard', pro: 'Plan Pro' };
 const MESSAGE_MAX = 100;
+const BATCH = 100;   // destinataires par requête (limite du serveur)
 
 async function readPickedFile(asset) {
   if (Platform.OS === 'web') {
@@ -60,6 +63,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
 
   const { user } = useAuth();
   const [sending, setSending] = useState(false);
+  const [progress, setProgress] = useState('');
   const total = members.length + emails.length + phones.length;
 
   useEffect(() => {
@@ -76,17 +80,32 @@ export default function InviteGuestsScreen({ navigation, route }) {
       showAlert('Limite du plan atteinte',
         `Votre ${PLAN_LABEL[usage.plan] || 'plan'} permet ${usage.limit} invités par événement. Il vous reste ${remaining} place(s).`,
         [{ text: 'Fermer', style: 'cancel' },
-          { text: 'Voir les plans', onPress: () => navigation.navigate('TabProfile', { screen: 'Plans' }) }]);
+          { text: 'Voir les plans', onPress: () => navigation.navigate('TabProfile', { screen: 'Plans', initial: false, params: { reason: "Passez au plan supérieur pour inviter plus de personnes à vos événements." } }) }]);
       return;
     }
     setSending(true);
     try {
-      const res = await invitationService.invite(event.id, {
-        userIds: members.map((m) => m.id),
-        emails: emails.map((e) => e.email),
-        phoneNumbers: phones.map((p) => ({ phone: p.phone, name: p.name })),
-        message: message.trim(),
-      });
+      // Grandes listes : plusieurs requêtes de 100 ; le serveur étale ensuite
+      // les envois par vagues (emails et SMS).
+      const items = [
+        ...members.map((m) => ['userIds', m.id]),
+        ...emails.map((e) => ['emails', e.email]),
+        ...phones.map((p) => ['phoneNumbers', { phone: p.phone, name: p.name }]),
+      ];
+      const chunks = [];
+      for (let i = 0; i < items.length; i += BATCH) chunks.push(items.slice(i, i + BATCH));
+      const res = { created: [], skipped: [], usage: null, detail: '' };
+      for (let i = 0; i < chunks.length; i += 1) {
+        setProgress(chunks.length > 1 ? `${i + 1}/${chunks.length}` : '');
+        const body = { userIds: [], emails: [], phoneNumbers: [], message: message.trim() };
+        chunks[i].forEach(([key, value]) => body[key].push(value));
+        const part = await invitationService.invite(event.id, body);
+        res.created.push(...part.created);
+        res.skipped.push(...part.skipped);
+        res.usage = part.usage;
+      }
+      const n = res.created.length;
+      res.detail = n ? `${n} invitation${n > 1 ? 's' : ''} envoyée${n > 1 ? 's' : ''}.` : 'Aucune nouvelle invitation : ces personnes sont déjà invitées ou les contacts sont invalides.';
       if (res.usage) setUsage(res.usage);
       const failed = res.created.filter((c) => c.delivery_status === 'failed').length;
       const smsOff = res.created.filter((c) => c.delivery_status === 'not_configured').length;
@@ -106,15 +125,43 @@ export default function InviteGuestsScreen({ navigation, route }) {
       if (data?.code === 'plan_limit') {
         showAlert('Limite du plan atteinte', data.detail, [
           { text: 'Fermer', style: 'cancel' },
-          { text: 'Voir les plans', onPress: () => navigation.navigate('TabProfile', { screen: 'Plans' }) },
+          { text: 'Voir les plans', onPress: () => navigation.navigate('TabProfile', { screen: 'Plans', initial: false, params: { reason: "Passez au plan supérieur pour inviter plus de personnes à vos événements." } }) },
         ]);
       } else {
         showAlert('Envoi impossible', apiErrorMessage(err, "Les invitations n'ont pas pu être envoyées."));
       }
     } finally {
       setSending(false);
+      setProgress('');
     }
   };
+
+  // Retour du sélecteur de contacts (ContactPicker)
+  const pickedAt = route.params?.pickedAt;
+  useEffect(() => {
+    const picked = route.params?.picked;
+    if (!pickedAt || !picked?.length) return;
+    if (route.params?.mode === 'email') {
+      const fresh = picked.map((p) => p.email).filter((e) => !emails.some((x) => x.email === e));
+      setMode('email');
+      setEmails((prev) => [...prev, ...fresh.map((email) => ({ email, checking: true }))]);
+      invitationService.lookupEmails(fresh.slice(0, 50))
+        .then((results) => setEmails((prev) => prev.map((item) => {
+          const r = results.find((x) => x.email === item.email);
+          return r ? { email: item.email, has_account: r.has_account, name: r.name, initials: r.initials } : { ...item, checking: false };
+        }).filter((item) => !results.find((x) => x.email === item.email && x.is_self))))
+        .catch(() => setEmails((prev) => prev.map((item) => ({ ...item, checking: false }))));
+    } else {
+      setMode('phone');
+      setPhones((prev) => [...prev, ...picked.filter((p) => !prev.some((x) => x.phone === p.phone))]);
+    }
+    navigation.setParams({ picked: undefined, pickedAt: undefined });
+  }, [pickedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickContacts = (pickMode, countryCode) => navigation.navigate('ContactPicker', {
+    mode: pickMode, countryCode, event,
+    already: pickMode === 'phone' ? phones.map((p) => p.phone) : emails.map((e) => e.email),
+  });
 
   return (
     <View style={styles.root}>
@@ -132,7 +179,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
           <View style={{ width: 44 }} />
         </View>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
             <View style={styles.tabs} accessibilityRole="tablist">
               {MODES.map((m) => {
@@ -144,7 +191,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
                     onPress={() => setMode(m.id)}
                     style={[styles.tab, active && styles.tabActive]}
                     accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{ selected: active }} aria-selected={active}
                     accessibilityLabel={`${m.label}${count ? `, ${count} sélectionné${count > 1 ? 's' : ''}` : ''}`}
                   >
                     <Ionicons name={m.icon} size={15} color={active ? C.white : C.textSub} />
@@ -159,10 +206,10 @@ export default function InviteGuestsScreen({ navigation, route }) {
               <MembersMode eventId={event.id} selected={members} onChange={setMembers} />
             )}
             {mode === 'email' && (
-              <EmailMode list={emails} onChange={setEmails} event={event} />
+              <EmailMode list={emails} onChange={setEmails} event={event} onPickContacts={() => pickContacts('email', deviceDialCode())} />
             )}
             {mode === 'phone' && (
-              <PhoneMode list={phones} onChange={setPhones} />
+              <PhoneMode list={phones} onChange={setPhones} onPickContacts={(cc) => pickContacts('phone', cc)} />
             )}
 
             <Text style={styles.label} nativeID="msgLabel">Message personnalisé</Text>
@@ -194,7 +241,7 @@ export default function InviteGuestsScreen({ navigation, route }) {
               <View style={styles.info}>
                 <Ionicons name="information-circle-outline" size={16} color={C.green} />
                 <Text style={styles.infoTxt}>
-                  Après acceptation, chaque invité retrouve son ticket à valider dans Mes tickets
+                  Après acceptation, chaque invité retrouve son invitation à valider dans l’onglet Invitations
                   (prix : {formatPrice(event.is_paid ? event.price : 0, event.currency)}).
                 </Text>
               </View>
@@ -207,11 +254,11 @@ export default function InviteGuestsScreen({ navigation, route }) {
               disabled={!total || sending}
               style={({ pressed }) => [styles.sendBtn, (!total || sending) && styles.sendBtnOff, pressed && { opacity: 0.9 }]}
               accessibilityRole="button"
-              accessibilityState={{ disabled: !total || sending, busy: sending }}
+              accessibilityState={{ disabled: !total || sending, busy: sending }} aria-disabled={!total || sending} aria-busy={sending}
             >
               {sending ? <ActivityIndicator color={C.white} /> : <Ionicons name="paper-plane-outline" size={18} color={C.white} />}
               <Text style={styles.sendTxt}>
-                {sending ? 'Envoi en cours…' : total ? `Envoyer ${total} invitation${total > 1 ? 's' : ''}` : 'Ajoutez des invités'}
+                {sending ? `Envoi en cours${progress ? ` · ${progress}` : ''}…` : total ? `Envoyer ${total} invitation${total > 1 ? 's' : ''}` : 'Ajoutez des invités'}
               </Text>
             </Pressable>
           </View>
@@ -227,10 +274,25 @@ export default function InviteGuestsScreen({ navigation, route }) {
 function MembersMode({ eventId, selected, onChange }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
+  const [friends, setFriends] = useState(null);
+  const [invited, setInvited] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const timer = useRef(null);
   const selectedIds = useMemo(() => new Set(selected.map((m) => m.id)), [selected]);
+
+  // Mes amis : invitables en un geste (déjà invités grisés)
+  useEffect(() => {
+    let alive = true;
+    Promise.all([friendService.list(), eventId ? invitationService.participants(eventId) : Promise.resolve(null)])
+      .then(([f, p]) => {
+        if (!alive) return;
+        setFriends(f.friends.map((row) => ({ ...row.user, friend_status: 'friend' })));
+        setInvited(new Set((p?.participants || []).map((g) => g.user_id).filter(Boolean)));
+      })
+      .catch(() => alive && setFriends([]));
+    return () => { alive = false; };
+  }, [eventId]);
 
   const search = useCallback((text) => {
     setQ(text);
@@ -252,6 +314,19 @@ function MembersMode({ eventId, selected, onChange }) {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const toggle = (u) => onChange(selectedIds.has(u.id) ? selected.filter((m) => m.id !== u.id) : [...selected, u]);
+  const addFriend = async (u) => {
+    try {
+      const r = await friendService.request(u.id);
+      setResults((prev) => prev.map((x) => (x.id === u.id ? { ...x, friend_status: r.status === 'accepted' ? 'friend' : 'sent' } : x)));
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  };
+
+  const searching = q.trim().length >= 2;
+  const rows = searching ? results : (friends || []).map((f) => ({ ...f, already_invited: invited.has(f.id) }));
+  const freeFriends = (friends || []).filter((f) => !invited.has(f.id));
+  const allFriendsOn = freeFriends.length > 0 && freeFriends.every((f) => selectedIds.has(f.id));
 
   return (
     <View>
@@ -274,42 +349,51 @@ function MembersMode({ eventId, selected, onChange }) {
         {loading && <ActivityIndicator size="small" color={C.green} />}
       </View>
 
-      {selected.length > 0 && (
-        <View style={styles.chips}>
-          {selected.map((m) => (
-            <View key={m.id} style={styles.chip}>
-              <Text style={styles.chipTxt}>{m.first_name} {m.last_name}</Text>
-              <Pressable onPress={() => toggle(m)} style={styles.chipX} accessibilityRole="button" accessibilityLabel={`Retirer ${m.first_name} ${m.last_name}`}>
-                <Ionicons name="close" size={14} color={C.greenDark} />
-              </Pressable>
-            </View>
-          ))}
+      {error ? <Text style={styles.errorTxt} accessibilityRole="alert">{error}</Text> : null}
+
+      {!searching && (
+        <View style={styles.friendsHead}>
+          <Text style={styles.sectionLabel}>Mes amis{friends ? ` (${friends.length})` : ''}</Text>
+          {freeFriends.length > 1 && (
+            <Pressable onPress={() => onChange(allFriendsOn ? selected.filter((m) => !freeFriends.some((f) => f.id === m.id))
+              : [...selected, ...freeFriends.filter((f) => !selectedIds.has(f.id))])} accessibilityRole="button">
+              <Text style={styles.selectAll}>{allFriendsOn ? 'Tout désélectionner' : 'Tout sélectionner'}</Text>
+            </Pressable>
+          )}
         </View>
       )}
-
-      {error ? <Text style={styles.errorTxt} accessibilityRole="alert">{error}</Text> : null}
-      {q.trim().length >= 2 && !loading && results.length === 0 && !error ? (
+      {!searching && friends === null && <ActivityIndicator color={C.green} style={{ marginVertical: 12 }} />}
+      {!searching && friends?.length === 0 && (
+        <Text style={styles.emptyTxt}>Pas encore d'amis sur Easevent. Recherchez un membre pour l'inviter ou l'ajouter en ami.</Text>
+      )}
+      {searching && !loading && results.length === 0 && !error ? (
         <Text style={styles.emptyTxt}>Aucun membre trouvé. Invitez cette personne par email ou SMS.</Text>
       ) : null}
-      {results.map((u) => {
+
+      {rows.map((u) => {
         const checked = selectedIds.has(u.id);
         return (
-          <Pressable
-            key={u.id}
-            onPress={() => !u.already_invited && toggle(u)}
-            disabled={u.already_invited}
-            style={[styles.person, checked && styles.personOn, u.already_invited && { opacity: 0.6 }]}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked, disabled: u.already_invited }}
-            accessibilityLabel={`${u.first_name} ${u.last_name}${u.already_invited ? ', déjà invité' : ''}`}
-          >
-            <View style={styles.avatar}><Text style={styles.avatarTxt}>{u.initials}</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.personName}>{u.first_name} {u.last_name}</Text>
-              <Text style={styles.personSub}>{u.already_invited ? 'Déjà invité' : 'Membre Easevent'}</Text>
-            </View>
-            <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={22} color={checked ? C.green : C.textMut} />
-          </Pressable>
+          <View key={u.id} style={[styles.person, checked && styles.personOn, u.already_invited && { opacity: 0.6 }]}>
+            <Pressable onPress={() => !u.already_invited && toggle(u)} disabled={u.already_invited} style={styles.personMain}
+              accessibilityRole="checkbox" accessibilityState={{ checked, disabled: u.already_invited }} aria-checked={checked} aria-disabled={u.already_invited}
+              accessibilityLabel={`${u.first_name} ${u.last_name}${u.already_invited ? ', déjà invité' : ''}`}>
+              <View style={styles.avatar}><Text style={styles.avatarTxt}>{u.initials}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personName}>{u.first_name} {u.last_name}</Text>
+                <Text style={styles.personSub}>
+                  {u.already_invited ? 'Déjà invité' : u.friend_status === 'friend' ? 'Ami' : 'Membre Easevent'}
+                </Text>
+              </View>
+              <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={22} color={checked ? C.green : C.textMut} />
+            </Pressable>
+            {searching && !u.friend_status && (
+              <Pressable onPress={() => addFriend(u)} style={styles.addFriend} accessibilityRole="button"
+                accessibilityLabel={`Ajouter ${u.first_name} en ami`}>
+                <Ionicons name="person-add-outline" size={18} color={C.green} />
+              </Pressable>
+            )}
+            {searching && u.friend_status === 'sent' && <Text style={styles.sentTxt}>Demande envoyée</Text>}
+          </View>
         );
       })}
     </View>
@@ -319,7 +403,7 @@ function MembersMode({ eventId, selected, onChange }) {
 // ─────────────────────────────────────────────────────────────
 // Mode Email (M29)
 // ─────────────────────────────────────────────────────────────
-function EmailMode({ list, onChange }) {
+function EmailMode({ list, onChange, onPickContacts }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
 
@@ -354,7 +438,16 @@ function EmailMode({ list, onChange }) {
 
   return (
     <View>
-      <Text style={styles.label} nativeID="emailLabel">Adresse email</Text>
+      <Pressable onPress={onPickContacts} style={styles.contactsBtn} accessibilityRole="button"
+        accessibilityHint="Ouvre vos contacts pour en sélectionner plusieurs">
+        <View style={styles.contactsIcon}><Ionicons name="people" size={20} color={C.white} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.contactsTitle}>Choisir dans mes contacts</Text>
+          <Text style={styles.contactsSub}>Cochez une ou plusieurs personnes</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={C.green} />
+      </Pressable>
+      <Text style={styles.label} nativeID="emailLabel">Ou saisissez une adresse</Text>
       <View style={styles.row}>
         <View style={[styles.inputBox, { flex: 1 }, !!error && { borderColor: C.error }]}>
           <Ionicons name="mail-outline" size={18} color={C.green} />
@@ -416,8 +509,9 @@ function EmailMode({ list, onChange }) {
 // ─────────────────────────────────────────────────────────────
 // Mode Téléphone (M12)
 // ─────────────────────────────────────────────────────────────
-function PhoneMode({ list, onChange }) {
-  const [country, setCountry] = useState(COUNTRIES[0]);
+function PhoneMode({ list, onChange, onPickContacts }) {
+  // Indicatif du pays du téléphone par défaut (Cameroun : +237…)
+  const [country, setCountry] = useState(() => COUNTRIES.find((c) => c.code === deviceDialCode()) || COUNTRIES[0]);
   const [picker, setPicker] = useState(false);
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
@@ -462,7 +556,16 @@ function PhoneMode({ list, onChange }) {
         <Text style={styles.infoTxt}>Un SMS avec un lien personnel est envoyé. La personne n'a pas besoin de compte.</Text>
       </View>
 
-      <Text style={styles.label}>Numéro de téléphone</Text>
+      <Pressable onPress={() => onPickContacts(country.code)} style={styles.contactsBtn} accessibilityRole="button"
+        accessibilityHint="Ouvre vos contacts pour en sélectionner plusieurs">
+        <View style={styles.contactsIcon}><Ionicons name="people" size={20} color={C.white} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.contactsTitle}>Choisir dans mes contacts</Text>
+          <Text style={styles.contactsSub}>Cochez autant de contacts que vous voulez</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={C.green} />
+      </Pressable>
+      <Text style={styles.label}>Ou saisissez un numéro</Text>
       <View style={styles.row}>
         <Pressable onPress={() => setPicker(true)} style={styles.ccBtn} accessibilityRole="button"
           accessibilityLabel={`Indicatif pays : ${country.name} +${country.code}. Modifier`}>
@@ -521,7 +624,7 @@ function PhoneMode({ list, onChange }) {
                 style={styles.countryRow}
                 onPress={() => { setCountry(item); setPicker(false); }}
                 accessibilityRole="button"
-                accessibilityState={{ selected: item.code === country.code }}
+                accessibilityState={{ selected: item.code === country.code }} aria-selected={item.code === country.code}
               >
                 <Text style={styles.countryName}>{item.name}</Text>
                 <Text style={styles.countryCode}>+{item.code}</Text>
@@ -582,6 +685,13 @@ const styles = StyleSheet.create({
   chip: { minHeight: 34, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 2, borderRadius: 17, backgroundColor: C.greenLight },
   chipTxt: { fontSize: 13, fontWeight: '600', color: C.greenDark },
   chipX: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  contactsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, borderRadius: 16, padding: 12, marginBottom: 18,
+    backgroundColor: '#F6FBF8', borderWidth: 1.5, borderColor: C.greenSoft,
+  },
+  contactsIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#25A35A', alignItems: 'center', justifyContent: 'center' },
+  contactsTitle: { fontSize: 15, fontWeight: '800', color: C.text },
+  contactsSub: { fontSize: 12, color: C.textSub, marginTop: 2 },
   csvBtn: {
     minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14,
     borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.green, backgroundColor: '#F6FBF8', marginTop: 6, marginBottom: 18,
@@ -602,6 +712,11 @@ const styles = StyleSheet.create({
   badgeGreenTxt: { fontSize: 11, fontWeight: '700', color: C.greenDark },
   badgeOrange: { alignSelf: 'flex-start', marginTop: 4, backgroundColor: C.orangeL, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   badgeOrangeTxt: { fontSize: 11, fontWeight: '700', color: '#B4492E' },
+  friendsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
+  selectAll: { fontSize: 13, fontWeight: '700', color: C.green, paddingVertical: 8 },
+  personMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  addFriend: { width: TOUCH, height: TOUCH, borderRadius: 12, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  sentTxt: { fontSize: 11, fontWeight: '700', color: C.textSub },
   removeBtn: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
   textarea: {
     minHeight: 74, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.inputBg,

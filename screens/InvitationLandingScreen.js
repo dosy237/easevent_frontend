@@ -31,6 +31,7 @@ import { apiErrorMessage } from '../services/authService';
 import { KEYS, setItem } from '../services/storage';
 import { showAlert } from '../utils/dialog';
 import { formatPrice } from '../utils/format';
+import { isRsvpCancel } from '../utils/rsvp';
 
 const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -75,9 +76,10 @@ export default function InvitationLandingScreen({ navigation, route }) {
       const { invitation_id: id } = await invitationService.claim(token);
       await eventService.respondToInvitation(id, 'confirmed');
       badge?.refresh?.({ force: true });
-      showAlert('Invitation acceptée', 'Votre ticket vous attend dans Mes tickets : validez-le pour le générer.',
-        [{ text: 'Voir mon ticket', onPress: openTickets }]);
+      showAlert('Invitation acceptée', 'Elle vous attend dans Mes invitations : validez-la pour recevoir votre QR code.',
+        [{ text: 'Voir mon invitation', onPress: openTickets }]);
     } catch (err) {
+      if (isRsvpCancel(err)) return;
       showAlert('Action impossible', apiErrorMessage(err));
     } finally {
       setBusy('');
@@ -142,7 +144,7 @@ export default function InvitationLandingScreen({ navigation, route }) {
               <Text style={styles.title}>{error.title}</Text>
               <Text style={styles.body}>{error.detail}</Text>
               <Pressable onPress={leave} style={[styles.btn, styles.btnWhite]} accessibilityRole="button">
-                <Text style={styles.btnWhiteTxt}>{isAuthenticated ? 'Voir mes tickets' : 'Découvrir Easevent'}</Text>
+                <Text style={styles.btnWhiteTxt}>{isAuthenticated ? 'Voir mes invitations' : 'Découvrir Easevent'}</Text>
               </Pressable>
             </View>
           )}
@@ -177,8 +179,8 @@ export default function InvitationLandingScreen({ navigation, route }) {
                 </View>
                 {inv.message ? <Text style={styles.quote}>« {inv.message} »</Text> : null}
 
-                <View style={styles.steps} accessibilityLabel="Étapes : compte, accepter, mon ticket">
-                  {[isAuthenticated ? 'Connecté' : (hasAccount ? 'Se connecter' : 'Créer un compte'), 'Accepter', 'Mon ticket'].map((s, i) => (
+                <View style={styles.steps} accessibilityLabel="Étapes : compte, accepter, mon invitation">
+                  {[isAuthenticated ? 'Connecté' : (hasAccount ? 'Se connecter' : 'Créer un compte'), 'Accepter', 'Mon invitation'].map((s, i) => (
                     <View key={s} style={styles.step}>
                       <View style={[styles.stepN, (i === 0 || (isAuthenticated && i === 1)) && styles.stepNOn]}>
                         {isAuthenticated && i === 0
@@ -191,7 +193,7 @@ export default function InvitationLandingScreen({ navigation, route }) {
                 </View>
 
                 {isAuthenticated ? (
-                  <Pressable onPress={accept} disabled={!!busy} style={[styles.btn, styles.btnWhite]} accessibilityRole="button" accessibilityState={{ busy: busy === 'accept' }}>
+                  <Pressable onPress={accept} disabled={!!busy} style={[styles.btn, styles.btnWhite]} accessibilityRole="button" accessibilityState={{ busy: busy === 'accept' }} aria-busy={busy === 'accept'}>
                     {busy === 'accept' ? <ActivityIndicator color={C.green} /> : <Text style={styles.btnWhiteTxt}>Accepter l'invitation</Text>}
                     {busy !== 'accept' && <Ionicons name="arrow-forward" size={18} color={C.green} />}
                   </Pressable>

@@ -28,6 +28,9 @@ import { setLogoutCallback } from '../services/apiClient';
 import { authService } from '../services/authService';
 import invitationService from '../services/invitationService';
 import { KEYS, getItem, setItem, deleteItem, clearSession } from '../services/storage';
+import realtime from '../services/realtime';
+import { unregister as unregisterPush } from '../services/push';
+import { logDev } from '../utils/log';
 
 // ─────────────────────────────────────────────────────────────────
 // CRÉATION DU CONTEXTE
@@ -59,9 +62,19 @@ export function AuthProvider({ children }) {
       if (storedToken && storedUser) {
         setAccessToken(storedToken);
         setUser(JSON.parse(storedUser));
+        // Profil à jour (numéro, vérification…) sans bloquer le démarrage
+        authService.getProfile()
+          .then(async (fresh) => {
+            const profile = fresh?.user || fresh;
+            if (profile?.id) {
+              await setItem(KEYS.USER, JSON.stringify(profile));
+              setUser(profile);
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
-      console.error('Erreur lecture stockage auth:', err);
+      logDev('Erreur lecture stockage auth:', err);
     } finally {
       setIsLoading(false);
     }
@@ -90,7 +103,7 @@ export function AuthProvider({ children }) {
       setAccessToken(access);
       setUser(userData);
     } catch (err) {
-      console.error('Erreur stockage auth:', err);
+      logDev('Erreur stockage auth:', err);
       throw err;
     }
   }, []);
@@ -100,13 +113,16 @@ export function AuthProvider({ children }) {
   // le refresh token est mis en liste noire côté serveur.
   const logout = useCallback(async ({ revokeSession = false } = {}) => {
     try {
+      // Ce téléphone ne reçoit plus les notifications de ce compte ; connexion temps réel fermée
+      realtime.stop();
+      if (revokeSession) await unregisterPush();
       if (revokeSession) {
         const refresh = await getItem(KEYS.REFRESH_TOKEN);
         if (refresh) await authService.logout(refresh).catch(() => {});
       }
       await clearSession();
     } catch (err) {
-      console.error('Erreur suppression tokens:', err);
+      logDev('Erreur suppression tokens:', err);
     } finally {
       setAccessToken(null);
       setUser(null);
@@ -136,7 +152,7 @@ export function AuthProvider({ children }) {
 
       return data.access;
     } catch (err) {
-      console.error('Erreur rafraîchissement token:', err);
+      logDev('Erreur rafraîchissement token:', err);
       // Only logout if it's a 401 or similar auth error
       if (err.response?.status === 401 || err.response?.status === 400) {
         await logout();
@@ -152,7 +168,7 @@ export function AuthProvider({ children }) {
       await setItem(KEYS.USER, JSON.stringify(newUser));
       setUser(newUser);
     } catch (err) {
-      console.error('Erreur mise à jour user:', err);
+      logDev('Erreur mise à jour user:', err);
     }
   }, [user]);
 

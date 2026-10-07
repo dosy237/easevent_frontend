@@ -23,7 +23,7 @@ import { apiErrorMessage } from '../services/authService';
 
 const STEPS = [
   ['person-circle-outline', 'Vos informations', 'Identité et adresse, demandées par la réglementation bancaire.'],
-  ['business-outline', 'Votre IBAN', 'Le compte bancaire qui recevra l’argent de vos tickets.'],
+  ['business-outline', 'Votre IBAN', 'Le compte bancaire qui recevra l’argent de vos billets.'],
   ['swap-horizontal-outline', 'Virements automatiques', 'Stripe vire vos ventes sur votre compte, commission Easevent déduite.'],
 ];
 
@@ -83,14 +83,14 @@ export default function PayoutsScreen({ navigation }) {
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.statusTitle}>
-                    {active ? 'Paiements activés' : started ? 'Vérification en cours' : 'Recevez l’argent de vos tickets'}
+                    {active ? 'Paiements activés' : started ? 'Vérification en cours' : 'Recevez l’argent de vos billets'}
                   </Text>
                   <Text style={styles.statusText}>
                     {active
                       ? `Vos ventes sont versées sur votre compte Stripe puis virées automatiquement sur votre IBAN.${status.payouts_enabled ? '' : ' Les virements seront actifs dès la fin de la vérification.'}`
                       : started
                         ? 'Stripe vérifie vos informations. Complétez-les si une étape manque.'
-                        : 'Pour vendre des tickets payants, reliez votre compte bancaire. Cela prend environ 5 minutes.'}
+                        : 'Pour vendre des billets, reliez votre compte bancaire. Cela prend environ 5 minutes.'}
                   </Text>
                 </View>
               </View>

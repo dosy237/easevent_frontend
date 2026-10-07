@@ -14,7 +14,8 @@
  * ════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, StatusBar, Animated, Platform, Alert,
@@ -28,9 +29,17 @@ import DateTimePicker       from '@react-native-community/datetimepicker';
 import { useAuth }          from '../context/AuthContext';
 
 import eventService from '../services/eventService';
+import { apiErrorMessage } from '../services/authService';
 import ColorPicker from '../components/ui/ColorPicker';
 import ticketService from '../services/ticketService';
 import { showAlert } from '../utils/dialog';
+import AddressInput from '../components/maps/AddressInput';
+import { logDev } from '../utils/log';
+import QuotaReached from '../components/ui/QuotaReached';
+import EventVideo from '../components/events/EventVideo';
+import { uploadVideo, VIDEO_MAX_SECONDS } from '../utils/videoUpload';
+import { deviceTz } from '../utils/timezone';
+import { isPlanLimit, openPlans, planLimitAlert } from '../utils/plans';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -113,12 +122,9 @@ const formatDateDisplay = (date) => {
 // FONCTION UTILITAIRE : formater une date pour l'API Django
 // Date → "2026-09-15T18:00:00"
 // ─────────────────────────────────────────────────────────────────
-const formatDateISO = (date) => {
-  if (!date) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}` +
-         `T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
-};
+// Heure exacte en UTC (ex. 2026-11-20T18:00:00.000Z) : l'heure choisie sur le téléphone
+// reste la même quel que soit le fuseau du serveur ou de l'invité.
+const formatDateISO = (date) => (date ? date.toISOString() : '');
 
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : StepIndicator
@@ -351,9 +357,17 @@ const DatePickerField = ({ label, date, onChange, minDate, error }) => {
 // Card pour uploader une image vers Cloudinary.
 // Affiche un aperçu de l'image après sélection + statut d'upload.
 // ════════════════════════════════════════════════════════════════
-const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
+const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading, onRemove }) => (
   <View style={styles.imageCard}>
-    <Text style={styles.imageCardLabel}>{label}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text style={styles.imageCardLabel}>{label}</Text>
+      {onRemove && imageUri && !uploading ? (
+        <TouchableOpacity onPress={onRemove} accessibilityRole="button" accessibilityLabel={`${label} : retirer la photo`}
+          style={{ minHeight: 44, paddingHorizontal: 8, justifyContent: 'center' }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: C.error }}>Retirer</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
     {imageUri ? (
       <TouchableOpacity
         onPress={onPick}
@@ -367,14 +381,14 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
           {uploading ? (
             <>
               <ActivityIndicator size="small" color={C.white} />
-              <Text style={styles.imageOverlayTxt}>Upload en cours...</Text>
+              <Text style={styles.imageOverlayTxt}>Envoi en cours…</Text>
             </>
           ) : (
             <>
               <Ionicons name={imageUrl ? 'checkmark-circle' : 'cloud-upload-outline'} size={20}
                 color={imageUrl ? '#2ECC71' : C.white} />
               <Text style={styles.imageOverlayTxt}>
-                {imageUrl ? 'Photo ajoutée — appuyer pour changer' : 'Upload en attente...'}
+                {imageUrl ? 'Photo ajoutée — appuyer pour changer' : 'Envoi en attente…'}
               </Text>
             </>
           )}
@@ -399,9 +413,39 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
 // ════════════════════════════════════════════════════════════════
 // ÉCRAN PRINCIPAL : CreateEventScreen
 // ════════════════════════════════════════════════════════════════
-export default function CreateEventScreen({ navigation }) {
+const DRESS_CHIPS = ['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème', 'Autre'];
+
+// Exemples de thèmes selon le type (placeholder du champ « Thème »)
+// Le thème est le SUJET pour ces types, l'UNIVERS pour les autres (même règle que le serveur)
+const SUBJECT_TYPES = ['conference', 'seminaire', 'atelier', 'exposition'];
+const THEME_EXAMPLES = {
+  mariage: 'Ex : Amour et bohème, Riviera chic, Royal Bamiléké…',
+  anniversaire: 'Ex : Années 80, Garden party, Afro chic…',
+  conference: "Ex : L'impact de l'intelligence artificielle sur les capacités cognitives de l'homme",
+  seminaire: 'Ex : Cap 2027 : réussir notre transformation numérique',
+  concert: 'Ex : Nuit électro, Jazz au clair de lune…',
+  festival: 'Ex : Sons d’été, Saveurs du monde…',
+  gala: 'Ex : Nuit des étoiles, Gala solidaire…',
+  atelier: 'Ex : Apprendre à tourner un bol en céramique',
+  exposition: 'Ex : Lumières africaines, Regards urbains…',
+  soiree: 'Ex : Nuit tropicale, White party…',
+};
+
+export default function CreateEventScreen({ navigation, route }) {
+  // Mode « Modifier l'événement » : le même formulaire, pré-rempli
+  const editing = route?.params?.event || null;
 
   const { accessToken } = useAuth();
+
+  // ── Quota du plan (Gratuit : 1 événement par mois) — vérifié à chaque visite ──
+  const [quota, setQuota] = useState(null);
+  useFocusEffect(useCallback(() => {
+    if (editing) return undefined;
+    let alive = true;
+    eventService.fetchQuota().then((q) => { if (alive) setQuota(q); }).catch(() => {});
+    return () => { alive = false; };
+  }, [editing]));
+  const quotaReached = !editing && quota && quota.limit !== null && quota.remaining === 0;
 
   // ── Étape actuelle ────────────────────────────────────────────
   const [step, setStep] = useState(1);
@@ -420,8 +464,11 @@ export default function CreateEventScreen({ navigation }) {
   const [startDate,       setStartDate]       = useState(null);
   const [endDate,         setEndDate]         = useState(null);
   const [locationAddress, setLocationAddress] = useState('');
+  const [locationCoords, setLocationCoords] = useState({ lat: null, lng: null });
   const [isOnline,        setIsOnline]        = useState(false);
   const [onlineLink,      setOnlineLink]      = useState('');
+  // Lien visible par tous, ou seulement dans le billet / l'invitation des participants
+  const [onlineLinkPublic, setOnlineLinkPublic] = useState(false);
 
   // ── Étape 3 : Images ─────────────────────────────────────────
   const [coverImageUri,  setCoverImageUri]  = useState(null);
@@ -438,6 +485,8 @@ export default function CreateEventScreen({ navigation }) {
   const [ambiance,       setAmbiance]       = useState('');
   // Ambiance libre quand « Autre » est choisi (ex. « Bohème »)
   const [ambianceLabel,  setAmbianceLabel]  = useState('');
+  // Thème : fil conducteur du mini-site (« Bohème champêtre », « IA & climat »)
+  const [theme, setTheme] = useState('');
   const [primaryColor,   setPrimaryColor]   = useState('');
   const [secondaryColor, setSecondaryColor] = useState('');
   // Couleur en cours d'édition dans le sélecteur : 'primary' | 'secondary'
@@ -445,6 +494,13 @@ export default function CreateEventScreen({ navigation }) {
 
   // ── Étape 5 : Paramètres ─────────────────────────────────────
   const [visibility, setVisibility] = useState('public');
+  // ── Vidéo de présentation (événements publics, 45 s au plus) ──
+  const [videoUri, setVideoUri] = useState(null);           // aperçu local ou URL déjà en ligne
+  const [videoMeta, setVideoMeta] = useState(null);         // { width, height, duration, poster }
+  const [videoPublicId, setVideoPublicId] = useState('');
+  const [videoCaption, setVideoCaption] = useState('');
+  const [videoProgress, setVideoProgress] = useState(null); // 0..1 pendant l'envoi
+  const initialVideo = useRef('');
   const [maxGuests,  setMaxGuests]  = useState('');
   const [isPaid,     setIsPaid]     = useState(false);
   const [price,      setPrice]      = useState('');
@@ -511,12 +567,12 @@ export default function CreateEventScreen({ navigation }) {
         const data = await eventService.uploadImage(base64Data, imageName);
         setUrl(data.url);
       } catch (err) {
-        showAlert('Erreur', 'Impossible d\'uploader l\'image. Réessayez.');
+        showAlert('Envoi impossible', apiErrorMessage(err, "La photo n'a pas pu être envoyée. Vérifiez votre connexion et réessayez."));
         setUri(null);
       }
     } catch (err) {
-      showAlert('Erreur', 'Une erreur est survenue lors de l\'upload.');
-      console.error('Erreur upload:', err);
+      showAlert('Photo indisponible', "Cette photo n'a pas pu être ouverte. Choisissez-en une autre.");
+      logDev('Erreur upload:', err);
     } finally {
       setUploading(false);
     }
@@ -551,15 +607,53 @@ export default function CreateEventScreen({ navigation }) {
   const resetForm = () => {
     setStep(1);
     setTitle(''); setEventType(''); setEventTypeLabel(''); setDescription('');
-    setStartDate(null); setEndDate(null); setLocationAddress('');
+    setStartDate(null); setEndDate(null); setLocationAddress(''); setLocationCoords({ lat: null, lng: null });
     setIsOnline(false); setOnlineLink('');
     setCoverImageUri(null); setCoverImageUrl(null);
     setGallery1Uri(null); setGallery1Url(null); setGallery2Uri(null); setGallery2Url(null);
-    setAmbiance(''); setAmbianceLabel(''); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
+    setAmbiance(''); setAmbianceLabel(''); setTheme('');
+    setVideoUri(null); setVideoMeta(null); setVideoPublicId(''); setVideoCaption(''); setVideoProgress(null); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
     setVisibility('public'); setMaxGuests(''); setIsPaid(false); setPrice('');
     setHasDressCode(false); setDressChoice(''); setDressCode('');
     setErrors({});
   };
+
+  // ── Pré-remplissage en mode modification ──────────────────────
+  const initial = useRef(null);
+  React.useEffect(() => {
+    if (!editing) return;
+    let alive = true;
+    const fill = (e) => {
+      if (!alive || !e) return;
+      const tc = e.template_config || {};
+      initial.current = { cover: e.cover_image || null, visibility: e.visibility, status: e.status, template_config: tc };
+      setTitle(e.title || ''); setEventType(e.event_type || ''); setEventTypeLabel(e.event_type_label || '');
+      setDescription(e.description || '');
+      setStartDate(e.start_date ? new Date(e.start_date) : null);
+      setEndDate(e.end_date ? new Date(e.end_date) : null);
+      setIsOnline(!!e.is_online); setOnlineLink(e.online_link || ''); setOnlineLinkPublic(!!e.online_link_public);
+      setLocationAddress(e.location_address || '');
+      setLocationCoords({ lat: e.latitude ?? null, lng: e.longitude ?? null });
+      setCoverImageUri(e.cover_image || null); setCoverImageUrl(e.cover_image || null);
+      const [g1, g2] = Array.isArray(tc.gallery) ? tc.gallery : [];
+      setGallery1Uri(g1 || null); setGallery1Url(g1 || null); setGallery2Uri(g2 || null); setGallery2Url(g2 || null);
+      setAmbiance(e.ambiance || ''); setAmbianceLabel(e.ambiance_label || ''); setTheme(e.theme || '');
+      if (e.video) {
+        setVideoUri(e.video.url); setVideoMeta(e.video); setVideoCaption(e.video.caption || '');
+      }
+      if (e.video_public_id !== undefined) { setVideoPublicId(e.video_public_id || ''); initialVideo.current = e.video_public_id || ''; }
+      setPrimaryColor(e.palette?.primary || ''); setSecondaryColor(e.palette?.secondary || '');
+      setVisibility(e.visibility || 'public');
+      setMaxGuests(e.max_guests ? String(e.max_guests) : '');
+      setIsPaid(!!e.is_paid); setPrice(e.is_paid && e.price ? String(e.price).replace('.', ',') : '');
+      setHasDressCode(!!e.dress_code); setDressCode(e.dress_code || '');
+      setDressChoice(e.dress_code ? (DRESS_CHIPS.includes(e.dress_code) ? e.dress_code : 'Autre') : '');
+    };
+    fill(editing);
+    // Données complètes (galerie…) depuis le détail organisateur
+    eventService.fetchEventDetail(editing.id).then((d) => fill(d.event)).catch(() => {});
+    return () => { alive = false; };
+  }, [editing?.id]);
 
   // ── Validation par étape ──────────────────────────────────────
   const validateStep = () => {
@@ -569,6 +663,8 @@ export default function CreateEventScreen({ navigation }) {
       if (!eventType)          e.eventType   = 'Choisissez un type d\'événement';
       if (eventType === 'autre' && !eventTypeLabel.trim()) e.eventTypeLabel = 'Indiquez le type de votre événement';
       if (!description.trim()) e.description = 'Ajoutez une description';
+      // Les événements créés avant le thème obligatoire restent modifiables sans lui
+      if (!theme.trim() && !editing) e.theme = 'Indiquez le thème : tout le contenu du mini-site en découle';
     }
     if (step === 2) {
       if (!startDate) e.startDate = 'Choisissez une date de début';
@@ -584,7 +680,8 @@ export default function CreateEventScreen({ navigation }) {
       if (!coverImageUrl) e.coverImage = 'La photo de couverture est obligatoire';
     }
     if (step === 4) {
-      if (!ambiance) e.ambiance = 'Choisissez une ambiance';
+      // En modification, un événement sans ambiance (ancienne version) reste modifiable
+      if (!ambiance && !editing) e.ambiance = 'Choisissez une ambiance';
       if (ambiance === 'autre' && !ambianceLabel.trim()) e.ambianceLabel = 'Décrivez l\'ambiance de votre événement';
     }
     if (step === 5) {
@@ -617,6 +714,10 @@ export default function CreateEventScreen({ navigation }) {
 
   // ── Soumission finale → création de l'événement ───────────────
   const handleSubmit = async () => {
+    if (videoProgress !== null) {
+      showAlert('Vidéo en cours d’envoi', 'Patientez quelques secondes : l’envoi de la vidéo se termine.');
+      return;
+    }
     setSubmitting(true);
     try {
       const palette = primaryColor ? {
@@ -630,7 +731,7 @@ export default function CreateEventScreen({ navigation }) {
         ambiance, palette,
       };
 
-      await eventService.createEvent({
+      const payload = {
         title,
         event_type:       eventType,
         event_type_label: eventType === 'autre' ? eventTypeLabel.trim() : '',
@@ -638,35 +739,87 @@ export default function CreateEventScreen({ navigation }) {
         start_date:       formatDateISO(startDate),
         end_date:         formatDateISO(endDate),
         location_address: locationAddress,
+        latitude:         isOnline ? null : locationCoords.lat,
+        longitude:        isOnline ? null : locationCoords.lng,
         is_online:        isOnline,
         online_link:      onlineLink || null,
+        online_link_public: isOnline && onlineLinkPublic,
         cover_image:      coverImageUrl,
         ambiance, palette, visibility, template_config,
         ambiance_label:   ambiance === 'autre' ? ambianceLabel.trim() : '',
+        theme:            theme.trim(),
+        // Fuseau du lieu : celui du téléphone de l'organisateur à la création (inchangé en modification)
+        ...(editing ? {} : { timezone: deviceTz() }),
+        // Vidéo : seulement pour un événement public ; null la retire (modification)
+        ...(visibility === 'public' && videoPublicId ? { video: { public_id: videoPublicId, caption: videoCaption.trim() } }
+          : editing && initialVideo.current && (!videoPublicId || visibility !== 'public') ? { video: null } : {}),
         // Billetterie & dress code (M23) — champs de premier niveau du modèle Event
         is_paid:          isPaid,
         price:            isPaid ? parsePrice(price).toFixed(2) : '0.00',
         currency:         'EUR',
         max_guests:       maxGuests.trim() ? parseInt(maxGuests, 10) : null,
         dress_code:       hasDressCode ? finalDressCode() : null,
-      });
+      };
+
+      if (editing) {
+        // On ne renvoie la couverture que si elle a changé (l'URL affichée est absolue)
+        payload.template_config = { ...(initial.current?.template_config || {}), ...template_config };
+        if (coverImageUrl === initial.current?.cover) {
+          delete payload.cover_image;
+          payload.template_config.cover_image = initial.current?.template_config?.cover_image;
+        }
+        await eventService.updateEvent(editing.id, payload);
+        const before = initial.current?.visibility;
+        const changed = before && before !== visibility;
+        showAlert(
+          'Modifications enregistrées',
+          changed
+            ? (visibility === 'private'
+              ? "L'événement est maintenant privé : il n'apparaît plus dans Découvrir. Vos invités et les personnes déjà inscrites y gardent accès."
+              : initial.current?.status === 'published'
+                ? "L'événement est maintenant public : il apparaît dans Découvrir et tout le monde peut le voir."
+                : "L'événement est maintenant public : une fois publié, il apparaîtra dans Découvrir.")
+            : `"${title}" a été mis à jour.`,
+          [{ text: 'OK', onPress: () => navigation?.goBack() }]
+        );
+        return;
+      }
+
+      const { event: created } = await eventService.createEvent(payload);
 
       const createdTitle = title;
       resetForm();
-      // TODO lot « mini-site IA » : remplacer par la navigation vers M05 (EventCreated)
+      // L'événement est créé en brouillon : on propose de le publier et d'inviter tout de suite, ou plus tard.
+      const openEvent = (invite) => navigation?.navigate('TabDashboard', {
+        screen: 'EventDashboard', initial: false,   // le tableau de bord reste dessous (bouton retour)
+        params: { event: created, ...(invite ? { openInvite: Date.now() } : {}) },
+      });
+      const publishThen = async (invite) => {
+        try { await eventService.publishEvent(created.id, created.visibility); created.status = 'published'; }
+        catch (err) {
+          if (isPlanLimit(err)) planLimitAlert(navigation, err, 'Publication impossible');
+          else showAlert('Publication impossible', err.response?.data?.detail || 'Vous pourrez le publier depuis la page de l\'événement.');
+        }
+        openEvent(invite);
+      };
       showAlert(
         'Événement créé',
-        `"${createdTitle}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
-        [{
-          text: 'Voir mon tableau de bord',
-          // navigate remonte jusqu'aux onglets, depuis l'onglet Créer comme depuis le tableau de bord
-          onPress: () => navigation?.navigate('TabDashboard', { screen: 'Dashboard' }),
-        }]
+        `"${createdTitle}" est prêt. Voulez-vous le publier et inviter vos proches maintenant ?`,
+        [
+          { text: 'Publier et inviter', onPress: () => publishThen(true) },
+          { text: 'Publier, inviter plus tard', onPress: () => publishThen(false) },
+          { text: 'Garder en brouillon', style: 'cancel', onPress: () => openEvent(false) },
+        ]
       );
     } catch (err) {
+      if (isPlanLimit(err)) {
+        if (err.response?.data?.quota) setQuota(err.response.data.quota);
+        planLimitAlert(navigation, err, 'Création impossible');
+        return;
+      }
       const detail = err.response?.data?.detail || 'Vérifiez votre connexion et réessayez.';
-      showAlert('Erreur', detail);
-      console.error('Erreur création:', err);
+      showAlert(editing ? 'Enregistrement impossible' : 'Création impossible', detail);
+      logDev('Erreur création:', err);
     } finally {
       setSubmitting(false);
     }
@@ -702,7 +855,7 @@ export default function CreateEventScreen({ navigation }) {
             onPress={() => { setEventType(t.value); setErrors((p) => ({ ...p, eventType: undefined })); }}
             activeOpacity={0.8}
             accessibilityRole="radio"
-            accessibilityState={{ selected: eventType === t.value }}
+            accessibilityState={{ checked: eventType === t.value }} aria-checked={eventType === t.value}
             accessibilityLabel={t.label}
           >
             <Ionicons name={t.icon} size={22} color={eventType === t.value ? C.white : C.green} />
@@ -724,6 +877,23 @@ export default function CreateEventScreen({ navigation }) {
           error={errors.eventTypeLabel}
         />
       )}
+
+      {/* Thème : fil conducteur de tout le contenu (le sujet d'une conférence, l'univers d'un mariage) */}
+      <InputField
+        label="Thème de l'événement *"
+        icon="sparkles-outline"
+        value={theme}
+        onChangeText={(t) => { setTheme(t); setErrors((p) => ({ ...p, theme: undefined })); }}
+        placeholder={THEME_EXAMPLES[eventType] || 'Ex : Nuit tropicale, Années folles, Innovation durable…'}
+        maxLength={160}
+        multiline
+        error={errors.theme}
+      />
+      <Text style={styles.paletteHint}>
+        {SUBJECT_TYPES.includes(eventType)
+          ? 'Le sujet traité : le mini-site en présente l’enjeu et les questions qu’il soulève.'
+          : 'L’univers de votre événement : le mini-site en tire son vocabulaire, ses images et ses couleurs.'}
+      </Text>
 
       <InputField
         label="Description *"
@@ -792,14 +962,15 @@ export default function CreateEventScreen({ navigation }) {
 
       {/* Adresse ou lien selon le type */}
       {!isOnline ? (
-        <InputField
-          label="Adresse du lieu *"
-          icon="location-outline"
-          value={locationAddress}
-          onChangeText={setLocationAddress}
-          placeholder="Ex: Château de Versailles, 78000 Versailles"
-          error={errors.locationAddress}
-        />
+        <View style={{ marginBottom: 16 }}>
+          <Text style={styles.addressLabel}>Adresse du lieu *</Text>
+          <AddressInput
+            value={locationAddress}
+            located={locationCoords.lat != null}
+            onChange={({ address, lat, lng }) => { setLocationAddress(address); setLocationCoords({ lat, lng }); }}
+            error={errors.locationAddress}
+          />
+        </View>
       ) : (
         <InputField
           label="Lien de la réunion"
@@ -810,8 +981,55 @@ export default function CreateEventScreen({ navigation }) {
           keyboardType="url"
         />
       )}
+      {isOnline ? (
+        <View style={{ marginTop: 6 }} accessibilityRole="radiogroup" accessibilityLabel="Qui voit le lien">
+          <Text style={styles.fieldLabel}>Qui voit le lien ?</Text>
+          {[[false, 'Réservé aux participants', "Il apparaît dans leur billet ou leur invitation, une fois générés."],
+            [true, 'Ouvert à tous', "Toute personne qui voit l'événement peut rejoindre directement."]].map(([value, label, sub]) => {
+            const on = onlineLinkPublic === value;
+            return (
+              <TouchableOpacity key={label} onPress={() => setOnlineLinkPublic(value)} activeOpacity={0.85}
+                style={[styles.linkChoice, on && styles.linkChoiceOn]}
+                accessibilityRole="radio" accessibilityState={{ checked: on }} aria-checked={on} accessibilityLabel={`${label}. ${sub}`}>
+                <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? C.green : C.textMut} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linkChoiceTitle}>{label}</Text>
+                  <Text style={styles.linkChoiceSub}>{sub}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
+
+  // ── Vidéo : choisir, vérifier la durée, envoyer (avec progression) ──
+  const pickVideo = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'], videoMaxDuration: VIDEO_MAX_SECONDS, allowsEditing: true, quality: 1,
+    });
+    if (res.canceled || !res.assets?.length) return;
+    const asset = res.assets[0];
+    const seconds = asset.duration ? asset.duration / 1000 : null;
+    if (seconds && seconds > VIDEO_MAX_SECONDS + 0.5) {
+      showAlert('Vidéo trop longue', `Elle dure ${Math.round(seconds)} s : choisissez ou coupez une vidéo de ${VIDEO_MAX_SECONDS} secondes au plus.`);
+      return;
+    }
+    setVideoUri(asset.uri);
+    setVideoMeta({ width: asset.width, height: asset.height, duration: seconds });
+    setVideoProgress(0);
+    try {
+      const { publicId } = await uploadVideo(asset, setVideoProgress);
+      setVideoPublicId(publicId);
+    } catch (err) {
+      setVideoUri(null); setVideoMeta(null); setVideoPublicId('');
+      showAlert('Envoi impossible', err.response?.data?.detail || err.message || 'Réessayez avec une connexion stable.');
+    } finally {
+      setVideoProgress(null);
+    }
+  };
+  const removeVideo = () => { setVideoUri(null); setVideoMeta(null); setVideoPublicId(''); setVideoCaption(''); };
 
   // ════════════════════════════════════════════════════════════
   // ÉTAPE 3 — Photos
@@ -820,7 +1038,7 @@ export default function CreateEventScreen({ navigation }) {
     <View>
       <Text style={styles.stepTitle}>Photos de l'événement</Text>
       <Text style={styles.stepSub}>
-        Ajoutez jusqu'à 3 photos. Elles seront utilisées pour votre mini-site et vos invitations digitales.
+        Ajoutez jusqu'à 3 photos. Elles illustrent la page de votre événement et vos invitations.
       </Text>
 
       {errors.coverImage && (
@@ -843,6 +1061,7 @@ export default function CreateEventScreen({ navigation }) {
         imageUrl={gallery1Url}
         uploading={uploadingGallery1}
         onPick={() => pickAndUploadImage('gallery_1', setGallery1Uri, setGallery1Url, setUploadingGallery1)}
+        onRemove={() => { setGallery1Uri(null); setGallery1Url(null); }}
       />
       <ImageUploadCard
         label="Photo galerie 2 (optionnelle)"
@@ -850,7 +1069,43 @@ export default function CreateEventScreen({ navigation }) {
         imageUrl={gallery2Url}
         uploading={uploadingGallery2}
         onPick={() => pickAndUploadImage('gallery_2', setGallery2Uri, setGallery2Url, setUploadingGallery2)}
+        onRemove={() => { setGallery2Uri(null); setGallery2Url(null); }}
       />
+
+      {/* Vidéo de présentation */}
+      <View style={styles.videoSection}>
+        <Text style={styles.fieldLabel}>Vidéo de présentation (facultative)</Text>
+        <Text style={styles.paletteHint}>
+          {visibility === 'public'
+            ? `${VIDEO_MAX_SECONDS} secondes au plus. Elle s'affiche en entier sur la page de l'événement, avec votre texte dessous.`
+            : 'Réservée aux événements publics : passez l’événement en public (dernière étape) pour l’ajouter.'}
+        </Text>
+        {videoUri ? (
+          <>
+            <EventVideo video={{ url: videoUri, poster: videoMeta?.poster, width: videoMeta?.width, height: videoMeta?.height,
+              duration: videoMeta?.duration }} maxWidth={240} />
+            {videoProgress !== null ? (
+              <View style={styles.progressTrack} accessibilityRole="progressbar"
+                accessibilityValue={{ min: 0, max: 100, now: Math.round(videoProgress * 100) }}>
+                <View style={[styles.progressFill, { width: `${Math.round(videoProgress * 100)}%` }]} />
+                <Text style={styles.progressTxt}>{`Envoi… ${Math.round(videoProgress * 100)} %`}</Text>
+              </View>
+            ) : null}
+            <InputField label="Texte sous la vidéo" icon="text-outline" value={videoCaption} onChangeText={setVideoCaption}
+              placeholder="Ex : Les coulisses de l'édition 2025" maxLength={220} />
+            <TouchableOpacity onPress={removeVideo} style={styles.videoRemove} accessibilityRole="button" disabled={videoProgress !== null}>
+              <Ionicons name="trash-outline" size={16} color={C.error} />
+              <Text style={styles.videoRemoveTxt}>Retirer la vidéo</Text>
+            </TouchableOpacity>
+          </>
+        ) : visibility === 'public' ? (
+          <TouchableOpacity onPress={pickVideo} style={styles.videoAdd} accessibilityRole="button"
+            accessibilityLabel={`Ajouter une vidéo de ${VIDEO_MAX_SECONDS} secondes au plus`}>
+            <Ionicons name="videocam-outline" size={22} color={C.green} />
+            <Text style={styles.videoAddTxt}>Ajouter une vidéo</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
   );
 
@@ -861,7 +1116,7 @@ export default function CreateEventScreen({ navigation }) {
     <View>
       <Text style={styles.stepTitle}>Style de votre événement</Text>
       <Text style={styles.stepSub}>
-        Ces choix définissent l'identité visuelle de votre mini-site et de vos invitations.
+        Ces choix définissent l'identité visuelle de votre événement et de vos invitations.
       </Text>
 
       <Text style={styles.fieldLabel}>Ambiance *</Text>
@@ -883,7 +1138,7 @@ export default function CreateEventScreen({ navigation }) {
             }}
             activeOpacity={0.8}
             accessibilityRole="radio"
-            accessibilityState={{ selected: ambiance === a.value }}
+            accessibilityState={{ checked: ambiance === a.value }} aria-checked={ambiance === a.value}
             accessibilityLabel={`Ambiance ${a.label}`}
           >
             <Text style={[styles.ambianceLabel, ambiance === a.value && { color: C.white, fontWeight: '800' }]}>
@@ -905,6 +1160,8 @@ export default function CreateEventScreen({ navigation }) {
         />
       )}
 
+
+
       {/* Palette libre : n'importe quelle couleur (carré, teinte, code hexadécimal) */}
       <View style={styles.paletteSection}>
         <Text style={styles.fieldLabel}>Vos couleurs</Text>
@@ -923,7 +1180,7 @@ export default function CreateEventScreen({ navigation }) {
                 style={[styles.colorSlot, active && styles.colorSlotActive]}
                 onPress={() => setEditingColor(slot.key)}
                 accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
+                accessibilityState={{ selected: active }} aria-selected={active}
                 accessibilityLabel={`Couleur ${slot.label.toLowerCase()} ${slot.value || 'non choisie'}`}
               >
                 <View style={[styles.colorSlotDot, { backgroundColor: slot.value || C.bg }]} />
@@ -999,14 +1256,14 @@ export default function CreateEventScreen({ navigation }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Événement payant</Text>
-            <Text style={styles.optionSub}>Le prix s'affiche sur chaque ticket</Text>
+            <Text style={styles.optionSub}>Le prix s'affiche sur chaque billet</Text>
           </View>
           <TouchableOpacity
             style={[styles.toggle, isPaid && styles.toggleActive]}
             onPress={() => { setIsPaid(!isPaid); setErrors((p) => ({ ...p, price: undefined })); }}
             accessibilityRole="switch"
             accessibilityLabel="Événement payant"
-            accessibilityState={{ checked: isPaid }}
+            accessibilityState={{ checked: isPaid }} aria-checked={isPaid}
             hitSlop={8}
           >
             <View style={[styles.toggleThumb, isPaid && styles.toggleThumbActive]} />
@@ -1015,7 +1272,7 @@ export default function CreateEventScreen({ navigation }) {
         {isPaid && (
           <View style={{ marginTop: 14 }}>
             <InputField
-              label="Prix du ticket"
+              label="Prix du billet"
               icon="card-outline"
               value={price}
               onChangeText={(t) => { setPrice(t.replace(/[^\d.,]/g, '')); setErrors((p) => ({ ...p, price: undefined })); }}
@@ -1028,7 +1285,7 @@ export default function CreateEventScreen({ navigation }) {
         )}
         <View style={styles.optionNote}>
           <Ionicons name="information-circle-outline" size={14} color={C.green} />
-          <Text style={styles.optionNoteTxt}>Désactivé, chaque participant reçoit quand même un ticket à 0,00 €.</Text>
+          <Text style={styles.optionNoteTxt}>Désactivé, chaque participant reçoit quand même son invitation ou son billet, gratuitement.</Text>
         </View>
         {isPaid && canCharge === false && (
           <TouchableOpacity
@@ -1053,14 +1310,14 @@ export default function CreateEventScreen({ navigation }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Dress code</Text>
-            <Text style={styles.optionSub}>Affiché sur le ticket et le mini-site</Text>
+            <Text style={styles.optionSub}>Affiché sur la page de l'événement et sur l'invitation ou le billet</Text>
           </View>
           <TouchableOpacity
             style={[styles.toggle, hasDressCode && styles.toggleActive]}
             onPress={() => { setHasDressCode(!hasDressCode); setErrors((p) => ({ ...p, dressCode: undefined })); }}
             accessibilityRole="switch"
             accessibilityLabel="Dress code"
-            accessibilityState={{ checked: hasDressCode }}
+            accessibilityState={{ checked: hasDressCode }} aria-checked={hasDressCode}
             hitSlop={8}
           >
             <View style={[styles.toggleThumb, hasDressCode && styles.toggleThumbActive]} />
@@ -1069,7 +1326,7 @@ export default function CreateEventScreen({ navigation }) {
         {hasDressCode && (
           <>
             <View style={styles.dressChips}>
-              {['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème', 'Autre'].map((label) => {
+              {DRESS_CHIPS.map((label) => {
                 const active = dressChoice === label;
                 return (
                   <TouchableOpacity
@@ -1077,7 +1334,7 @@ export default function CreateEventScreen({ navigation }) {
                     style={[styles.dressChip, active && styles.dressChipActive]}
                     onPress={() => chooseDress(label)}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{ checked: active }} aria-checked={active}
                   >
                     <Text style={[styles.dressChipTxt, active && styles.dressChipTxtActive]}>{label}</Text>
                   </TouchableOpacity>
@@ -1110,7 +1367,7 @@ export default function CreateEventScreen({ navigation }) {
           { icon: 'ticket-outline',
             value: isPaid
               ? (parsePrice(price) ? `${formatEuro(parsePrice(price))} / personne` : 'Prix à indiquer')
-              : 'Gratuit — ticket à 0,00 €' },
+              : 'Gratuit' },
           ...(hasDressCode && finalDressCode() ? [{ icon: 'shirt-outline', value: `Dress code : ${finalDressCode()}` }] : []),
         ].map((row, i) => (
           <View key={i} style={styles.summaryRow}>
@@ -1136,14 +1393,24 @@ export default function CreateEventScreen({ navigation }) {
             <Ionicons name="arrow-back-outline" size={22} color={C.text} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Créer un événement</Text>
-            <Text style={styles.headerStep}>
-              Étape {step}/{TOTAL_STEPS} — {stepLabels[step - 1]}
-            </Text>
+            <Text style={styles.headerTitle} accessibilityRole="header">{editing ? "Modifier l'événement" : 'Créer un événement'}</Text>
+            {quotaReached ? null : (
+              <Text style={styles.headerStep}>
+                Étape {step}/{TOTAL_STEPS} — {stepLabels[step - 1]}
+              </Text>
+            )}
           </View>
           <View style={{ width: 36 }} />
         </View>
 
+        {quotaReached ? (
+          <QuotaReached
+            quota={quota}
+            onPlans={() => openPlans(navigation, 'Le plan Gratuit permet 1 événement par mois. Les plans Standard et Pro sont illimités.')}
+            onMyEvents={() => navigation?.navigate('TabDashboard', { screen: 'Dashboard' })}
+            onDiscover={() => navigation?.navigate('TabDiscover')}
+          />
+        ) : (<>
         {/* Barre de progression */}
         <StepIndicator currentStep={step} total={TOTAL_STEPS} />
 
@@ -1179,7 +1446,7 @@ export default function CreateEventScreen({ navigation }) {
             ) : (
               <>
                 <Text style={styles.nextBtnTxt}>
-                  {step === TOTAL_STEPS ? 'Créer mon événement' : 'Continuer'}
+                  {step === TOTAL_STEPS ? (editing ? 'Enregistrer' : 'Créer mon événement') : 'Continuer'}
                 </Text>
                 <Ionicons
                   name={step === TOTAL_STEPS ? 'checkmark-outline' : 'arrow-forward-outline'}
@@ -1190,6 +1457,7 @@ export default function CreateEventScreen({ navigation }) {
           </TouchableOpacity>
           <Text style={styles.stepCounter}>{step} sur {TOTAL_STEPS}</Text>
         </View>
+        </>)}
 
       </SafeAreaView>
     </View>
@@ -1200,6 +1468,7 @@ export default function CreateEventScreen({ navigation }) {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  addressLabel: { fontSize: 13, fontWeight: '700', color: '#555555', marginBottom: 8 },
 
   root: { flex: 1, backgroundColor: C.bg },
   safe: { flex: 1, backgroundColor: C.white },
@@ -1353,6 +1622,18 @@ const styles = StyleSheet.create({
     borderRadius: 20, borderWidth: 2, backgroundColor: C.white,
   },
   ambianceLabel: { fontSize: 14, fontWeight: '600', color: C.text },
+  videoSection: { marginTop: 22, gap: 10 },
+  videoAdd: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.green, borderRadius: 16, paddingVertical: 18 },
+  videoAddTxt: { color: C.green, fontWeight: '700', fontSize: 15 },
+  videoRemove: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 8 },
+  videoRemoveTxt: { color: C.error, fontWeight: '700', fontSize: 14 },
+  progressTrack: { height: 28, borderRadius: 14, backgroundColor: C.bg, overflow: 'hidden', justifyContent: 'center' },
+  progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: C.greenLight },
+  progressTxt: { textAlign: 'center', fontSize: 13, fontWeight: '700', color: C.green },
+  linkChoice: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', padding: 14, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white, marginTop: 8 },
+  linkChoiceOn: { borderColor: C.green, backgroundColor: C.greenLight },
+  linkChoiceTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+  linkChoiceSub: { fontSize: 13, color: C.textSub, marginTop: 2, lineHeight: 18 },
 
   // Couleurs
   paletteSection: { marginBottom: 16 },

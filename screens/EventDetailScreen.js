@@ -31,12 +31,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Pressable,
   StatusBar,
   Animated,
   Platform,
   Linking,
   Dimensions,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 
 // SafeAreaView de react-native-safe-area-context est plus fiable
@@ -47,10 +49,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../services/apiClient';
 import { useAuth } from '../context/AuthContext';
 import ticketService from '../services/ticketService';
+import basketService from '../services/basketService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
+import { seedLikes } from '../utils/likes';
+import { eventTime } from '../utils/timezone';
+import EventMap, { openInMaps } from '../components/maps/EventMap';
+import LikeButton from '../components/events/LikeButton';
+import ShareSheet from '../components/events/ShareSheet';
+import Price from '../components/ui/Price';
+import EventVideo from '../components/events/EventVideo';
 import { formatPrice } from '../utils/format';
 import { useTicketBadge } from '../context/TicketBadgeContext';
+import { isRsvpCancel } from '../utils/rsvp';
+import SafeImage from '../components/ui/SafeImage';
+import ImageViewer from '../components/ui/ImageViewer';
+import { Bone, SkeletonGroup } from '../components/ui/Skeleton';
+import { passWord } from '../utils/wording';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -76,25 +91,17 @@ const C = {
 // LIEN APP STORE / PLAY STORE
 // À remplacer par les vrais liens quand l'app sera publiée
 // ─────────────────────────────────────────────────────────────────
-const STORE_URL = Platform.OS === 'ios'
-  ? 'https://apps.apple.com/app/easevent'
-  : 'https://play.google.com/store/apps/details?id=com.easevent';
+const STORE_URL = 'https://play.google.com/store/apps/details?id=com.eranis.easevent';
 
 // ─────────────────────────────────────────────────────────────────
 // FONCTION : ouvrir Google Maps
 // Même logique que dans HomeScreen — réutilisable
 // ─────────────────────────────────────────────────────────────────
-const openGoogleMaps = async (address) => {
+// Le lien https Google Maps ouvre l'application Maps quand elle est installée
+// (Android et iOS), sinon le navigateur — et fonctionne aussi sur le web.
+const openGoogleMaps = (address) => {
   if (!address) return;
-  const query = encodeURIComponent(address);
-  const appUrl = `comgooglemaps://?q=${query}`;
-  const webUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
-  try {
-    const canOpen = await Linking.canOpenURL(appUrl);
-    await Linking.openURL(canOpen ? appUrl : webUrl);
-  } catch {
-    await Linking.openURL(webUrl);
-  }
+  openInMaps(null, address);
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -153,7 +160,7 @@ const typeLabel = (type) => {
 // - value   : valeur affichée (ex: "Samedi 13 juin 2026")
 // - onPress : optionnel — rend la ligne cliquable
 // ════════════════════════════════════════════════════════════════
-const InfoRow = ({ icon, label, value, onPress }) => {
+const InfoRow = ({ icon, label, value, onPress, extra }) => {
   const Wrapper = onPress ? TouchableOpacity : View;
   return (
     <Wrapper
@@ -172,6 +179,7 @@ const InfoRow = ({ icon, label, value, onPress }) => {
         <Text style={styles.infoValue} numberOfLines={onPress ? 1 : 3}>
           {value}
         </Text>
+        {extra}
       </View>
 
       {/* Flèche si cliquable */}
@@ -192,8 +200,9 @@ const InfoRow = ({ icon, label, value, onPress }) => {
 // ════════════════════════════════════════════════════════════════
 export default function EventDetailScreen({ route, navigation }) {
 
-  // On récupère l'événement passé depuis HomeScreen
-  const { event } = route?.params || {};
+  // Événement passé depuis une liste, ou seulement son identifiant (lien partagé, notification)
+  const params = route?.params || {};
+  const event = params.event || (params.id ? { id: params.id } : null);
 
   // insets : zones non sûres de l'écran (encoche, barre de statut)
   // useSafeAreaInsets() nous donne les valeurs exactes pour chaque bord
@@ -205,6 +214,27 @@ export default function EventDetailScreen({ route, navigation }) {
   const [fullEvent, setFullEvent] = useState(event);
   const [loading, setLoading]   = useState(!event?.description);
   const [error, setError]       = useState(null);
+  const [viewer, setViewer]     = useState(null);     // photo affichée en plein écran
+  const [sharing, setSharing]   = useState(false);    // feuille de partage
+  const [chooser, setChooser]   = useState(false);    // « Pour moi » ou « Pour un proche »
+  const [basket, setBasket]     = useState(null);     // panier en cours (invités et équipe)
+
+  // « Je participe » touché dans le mini-site : même parcours que le bouton de cette page
+  const participateRef = useRef(null);
+  const participateToken = params.participate;
+  useEffect(() => {
+    if (!participateToken || !fullEvent?.title || loading || !participateRef.current) return;
+    navigation.setParams({ participate: undefined });
+    participateRef.current();
+  }, [participateToken, fullEvent?.title, loading]);
+
+  // Panier en cours : visible des invités et de l'équipe (sinon 404, ignoré)
+  useEffect(() => {
+    if (!isAuthenticated || !fullEvent?.id) return undefined;
+    let on = true;
+    basketService.ofEvent(fullEvent.id).then((d) => { if (on) setBasket(d.basket); }).catch(() => {});
+    return () => { on = false; };
+  }, [isAuthenticated, fullEvent?.id]);
 
   // Animations d'entrée du contenu
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -234,14 +264,20 @@ export default function EventDetailScreen({ route, navigation }) {
     try {
       setLoading(true);
       const response = await apiClient.get(`/api/events/publics/${id}/`);
+      seedLikes([response.data]);
       setFullEvent(response.data);
       setError(null);
     } catch (err) {
-      console.error("Erreur chargement détail événement:", err);
-      // If we already have some data, don't show a hard error
-      if (!fullEvent) {
-          setError("Impossible de charger l'événement.");
+      const code = err.response?.status;
+      // L'organisateur qui ouvre son brouillon : écran de gestion
+      if (code === 404 && isAuthenticated) {
+        try {
+          const own = await apiClient.get(`/api/events/${id}/detail/`);
+          navigation.replace('EventDashboard', { event: own.data.event });
+          return;
+        } catch { /* pas son événement */ }
       }
+      setError(code === 403 ? 'private' : code === 404 ? 'missing' : 'network');
     } finally {
       setLoading(false);
     }
@@ -264,18 +300,47 @@ export default function EventDetailScreen({ route, navigation }) {
     extrapolate: 'clamp',
   });
 
-  // Fallback si pas d'événement passé
-  if (!event) {
+  const goBack = () => (navigation.canGoBack() ? navigation.goBack()
+    : navigation.navigate(isAuthenticated ? 'TabDiscover' : 'Home'));
+
+  // Pas d'événement, ou chargement impossible sans données à afficher
+  if (!event || (error && !fullEvent?.title)) {
+    const texts = {
+      private: ['Événement privé', "Seules les personnes invitées peuvent voir cet événement. Si vous avez reçu une invitation, connectez-vous avec le compte invité."],
+      missing: ['Événement introuvable', "Cet événement n'existe plus ou a été annulé par son organisateur."],
+      network: ['Connexion impossible', 'Vérifiez votre connexion internet puis réessayez.'],
+    };
+    const [title, sub] = texts[error] || texts.missing;
     return (
       <View style={styles.errorFull}>
-        <Ionicons name="alert-circle-outline" size={48} color={C.textMut} />
-        <Text style={styles.errorFullTitle}>Événement introuvable</Text>
-        <TouchableOpacity
-          style={styles.errorBackBtn}
-          onPress={() => navigation?.goBack()}
-        >
+        <Ionicons name={error === 'private' ? 'lock-closed-outline' : error === 'network' ? 'wifi-outline' : 'alert-circle-outline'} size={48} color={C.textMut} />
+        <Text style={styles.errorFullTitle} accessibilityRole="header">{title}</Text>
+        <Text style={{ fontSize: 14, color: C.textSub, textAlign: 'center', lineHeight: 20, maxWidth: 360 }}>{sub}</Text>
+        {error === 'network' && event?.id ? (
+          <TouchableOpacity style={styles.errorBackBtn} onPress={() => { setError(null); loadEventDetail(event.id); }} accessibilityRole="button">
+            <Text style={styles.errorBackTxt}>Réessayer</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity style={styles.errorBackBtn} onPress={goBack} accessibilityRole="button">
           <Text style={styles.errorBackTxt}>Retour</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Ouvert depuis un lien ou une notification : squelette le temps du chargement
+  if (!fullEvent?.title) {
+    return (
+      <View style={[styles.root, { backgroundColor: C.white }]}>
+        <SkeletonGroup label="Chargement de l'événement">
+          <Bone height={320} radius={0} />
+          <View style={{ padding: 20, gap: 12 }}>
+            <Bone width="70%" height={24} />
+            <Bone width="45%" height={16} />
+            <Bone height={140} radius={18} />
+            <Bone height={90} radius={18} />
+          </View>
+        </SkeletonGroup>
       </View>
     );
   }
@@ -286,14 +351,23 @@ export default function EventDetailScreen({ route, navigation }) {
   const myTicket  = fullEvent.my_ticket;
   const isOrganizer = !!user && fullEvent.organizer?.id === user.id;
   const soldOut   = fullEvent.spots_left === 0 && !myTicket;
+  const pw        = passWord(fullEvent);
 
   const openTicket = (ticketId) => navigation.navigate('TabTickets', {
     screen: 'Tickets', params: { tab: 'generated', openTicketId: ticketId },
   });
 
-  const ticketAction = async () => {
+  // « Payer pour un proche » : événements publics publiés, à venir, non complets
+  const giftable = isAuthenticated && !isOrganizer && fullEvent.visibility === 'public' && !soldOut
+    && (!fullEvent.status || fullEvent.status === 'published') && (!fullEvent.end_date || new Date(fullEvent.end_date) > new Date());
+  const openGift = () => { setChooser(false); navigation.navigate('Gift', { event: fullEvent }); };
+
+  const ticketAction = async (forMe = false) => {
+    // Première participation : pour soi, ou pour un proche ?
+    if (!forMe && giftable && !myTicket) { setChooser(true); return; }
+    setChooser(false);
     if (isOrganizer) {
-      navigation.navigate('TabDashboard', { screen: 'EventDashboard', params: { event: fullEvent } });
+      navigation.navigate('TabDashboard', { screen: 'EventDashboard', initial: false, params: { event: fullEvent } });
       return;
     }
     if (myTicket?.status === 'generated') { openTicket(myTicket.id); return; }
@@ -309,6 +383,7 @@ export default function EventDetailScreen({ route, navigation }) {
       if (ticket.status === 'generated') openTicket(ticket.id);
       else navigation.navigate('TicketCheckout', { ticketId: ticket.id });
     } catch (err) {
+      if (isRsvpCancel(err)) return;
       showAlert('Impossible de continuer', apiErrorMessage(err));
     } finally {
       setTicketBusy(false);
@@ -317,11 +392,13 @@ export default function EventDetailScreen({ route, navigation }) {
   };
 
   const ticketLabel = isOrganizer ? 'Gérer mon événement'
-    : myTicket?.status === 'generated' ? 'Voir mon ticket'
-    : myTicket?.status === 'pending' ? 'Finaliser mon ticket'
+    : myTicket?.status === 'generated' ? `Voir ${pw.my}`
+    : myTicket?.status === 'pending' ? `Finaliser ${pw.my}`
     : soldOut ? 'Complet'
-    : isPaid ? 'Payer et générer mon ticket'
-    : 'Participer — ticket gratuit';
+    : isPaid ? `Payer et recevoir ${pw.my}`
+    : pw.kind === 'invitation' ? 'Je participe' : 'Participer — billet gratuit';
+
+  participateRef.current = () => (isAuthenticated ? ticketAction() : handleParticipate());
 
   const contactOrganizer = () => navigation.navigate('Chat', {
     eventId: fullEvent.id, organizerName: fullEvent.organizer?.name,
@@ -331,17 +408,23 @@ export default function EventDetailScreen({ route, navigation }) {
     // Ouvre le store pour télécharger l'app
     // En production : si l'utilisateur est connecté, on l'amène
     // directement à la page de confirmation RSVP
-    try {
-      await Linking.openURL(STORE_URL);
-    } catch {
-      // Fallback si le store n'est pas accessible
-      await Linking.openURL('https://easevent.app');
+    // Dans l'application : se connecter pour participer ; sur le site : télécharger l'application
+    if (Platform.OS !== 'web') {
+      navigation.navigate('Login', { mode: 'register' });
+      return;
     }
+    Linking.openURL(STORE_URL).catch(() => {});
   };
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <ImageViewer uri={viewer} onClose={() => setViewer(null)} />
+      {fullEvent?.share_url ? (
+        <ShareSheet event={fullEvent} visible={sharing} onClose={() => setSharing(false)} isAuthenticated={isAuthenticated}
+          onAddFriends={() => navigation.navigate('TabProfile', { screen: 'Friends', initial: false, params: { tab: 'add' } })}
+          onSent={(res) => showAlert('Partagé', res.message || 'Envoyé.')} />
+      ) : null}
 
       {/* ══ HEADER FLOTTANT ═══════════════════════════════════
           Position absolute — flotte au-dessus du scroll.
@@ -386,14 +469,13 @@ export default function EventDetailScreen({ route, navigation }) {
       >
         {/* ── IMAGE HERO ──────────────────────────────────── */}
         <View style={styles.heroBox}>
-          <Image
-            source={{ uri: fullEvent.cover_image }}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
+          <Pressable onPress={() => fullEvent.cover_image && setViewer(fullEvent.cover_image)} style={StyleSheet.absoluteFill}
+            accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de l'événement">
+            <SafeImage uri={fullEvent.cover_image} style={styles.heroImage} icon="calendar-outline" iconSize={56} />
+          </Pressable>
 
           {/* Overlay sombre pour lisibilité du texte */}
-          <View style={styles.heroOverlay} />
+          <View style={styles.heroOverlay} pointerEvents="none" />
 
           {/* Texte sur l'image */}
           <View style={[styles.heroContent, { paddingBottom: insets.bottom + 24 }]}>
@@ -440,6 +522,19 @@ export default function EventDetailScreen({ route, navigation }) {
                 </Text>
               </View>
             </View>
+
+            {/* J'aime et partage (événements publics publiés) */}
+            {fullEvent.share_url ? (
+              <View style={styles.heroEngage}>
+                <LikeButton event={fullEvent} light isAuthenticated={isAuthenticated}
+                  onRequireLogin={() => navigation.navigate('Login', { mode: 'login' })} />
+                <Pressable onPress={() => setSharing(true)} style={styles.heroShare} accessibilityRole="button"
+                  accessibilityLabel={`Partager « ${fullEvent.title} »`}>
+                  <Ionicons name="paper-plane-outline" size={18} color={C.white} />
+                  <Text style={styles.heroShareTxt}>Partager</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -460,7 +555,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon="calendar-outline"
               label="Date"
-              value={formatDateComplete(fullEvent.start_date)}
+              value={(() => { const t = eventTime(fullEvent.start_date, fullEvent.timezone); return t ? t.date.charAt(0).toUpperCase() + t.date.slice(1) : formatDateComplete(fullEvent.start_date); })()}
             />
             <View style={styles.divider} />
 
@@ -468,25 +563,56 @@ export default function EventDetailScreen({ route, navigation }) {
             <InfoRow
               icon="time-outline"
               label="Horaires"
-              value={`${formatHeure(fullEvent.start_date)} — ${formatHeure(fullEvent.end_date)}`}
+              value={(() => {
+                const a = eventTime(fullEvent.start_date, fullEvent.timezone);
+                const b = eventTime(fullEvent.end_date, fullEvent.timezone);
+                if (!a) return `${formatHeure(fullEvent.start_date)} — ${formatHeure(fullEvent.end_date)}`;
+                // « 12h00 — 18h00 (heure de Paris) · 11h00 chez vous »
+                return `${a.time}${b ? ` — ${b.time}` : ''}${a.zone ? ` (${a.zone})` : ''}${a.local ? `\n${a.local}` : ''}`;
+              })()}
             />
             <View style={styles.divider} />
 
-            {/* Lieu — cliquable */}
+            {/* Lieu : carte détaillée juste en dessous */}
             <InfoRow
-              icon="location-outline"
+              icon={fullEvent.is_online ? 'videocam-outline' : 'location-outline'}
               label="Lieu"
-              value={fullEvent.location_address}
-              onPress={() => openGoogleMaps(fullEvent.location_address)}
+              value={fullEvent.is_online ? (fullEvent.online_link ? 'En ligne · rejoindre' : `En ligne (lien donné avec ${pw.the})`) : fullEvent.location_address}
+              onPress={fullEvent.is_online
+                ? (fullEvent.online_link ? () => Linking.openURL(fullEvent.online_link).catch(() => {}) : undefined)
+                : () => openInMaps(fullEvent.map, fullEvent.location_address)}
             />
 
             {/* Prix du ticket + places restantes (M24) */}
             <View style={styles.divider} />
             <InfoRow
               icon="ticket-outline"
-              label="Prix du ticket"
+              label={`Prix ${pw.kind === 'invitation' ? "de l'invitation" : 'du billet'}`}
+              extra={isPaid ? <Price amount={fullEvent.price} currency={fullEvent.currency || 'EUR'} text={null} /> : null}
               value={`${isPaid ? priceTxt : '0,00 € · gratuit'}${fullEvent.spots_left != null ? ` · ${fullEvent.spots_left} place${fullEvent.spots_left > 1 ? 's' : ''} restante${fullEvent.spots_left > 1 ? 's' : ''}` : ''}`}
             />
+            {giftable ? (
+              <>
+                <View style={styles.divider} />
+                <InfoRow icon="gift-outline" label="Faire plaisir" value={`Offrir ${pw.a} à un proche`} onPress={openGift} />
+              </>
+            ) : null}
+            {basket && basket.status === 'open' ? (
+              <>
+                <View style={styles.divider} />
+                <InfoRow icon="basket-outline" label="Le panier"
+                  value={`${basket.title} · ${basket.contributions.length} contribution${basket.contributions.length > 1 ? 's' : ''}`}
+                  onPress={() => navigation.navigate('Basket', { event: fullEvent })} />
+              </>
+            ) : null}
+            {/* Espace souvenirs : photos de l'équipe et commentaires, dès le début de l'événement */}
+            {isAuthenticated && fullEvent.start_date && new Date(fullEvent.start_date) <= new Date() ? (
+              <>
+                <View style={styles.divider} />
+                <InfoRow icon="images-outline" label="Souvenirs" value="Photos et commentaires"
+                  onPress={() => navigation.navigate('Memories', { event: fullEvent })} />
+              </>
+            ) : null}
             {fullEvent.dress_code ? (
               <>
                 <View style={styles.divider} />
@@ -509,6 +635,50 @@ export default function EventDetailScreen({ route, navigation }) {
             ) : null}
           </View>
 
+          {/* ── Mini-site de l'événement (dans l'application) ─── */}
+          {fullEvent.has_minisite ? (
+            <Pressable style={styles.minisiteBtn} onPress={() => navigation.navigate('MiniSiteView', { eventId: fullEvent.id })}
+              accessibilityRole="button" accessibilityLabel="Voir le mini-site de l'événement">
+              <View style={styles.minisiteIcon}><Ionicons name="sparkles" size={20} color={C.white} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.minisiteTitle}>Voir le mini-site</Text>
+                <Text style={styles.minisiteSub}>Toutes les infos de l'événement, mises en page par l'organisateur</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.green} />
+            </Pressable>
+          ) : null}
+
+          {/* ── Vidéo de présentation (entière, légende dessous) ── */}
+          {fullEvent.video ? (
+            <View style={styles.descCard}>
+              <Text style={styles.cardSectionTitle}>En vidéo</Text>
+              <EventVideo video={fullEvent.video} />
+            </View>
+          ) : null}
+
+          {/* ── Lieu sur la carte + itinéraire ─────────────── */}
+          {!fullEvent.is_online && fullEvent.location_address ? (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.cardSectionTitle}>Comment y aller</Text>
+              <EventMap map={fullEvent.map} address={fullEvent.location_address} />
+            </View>
+          ) : null}
+
+          {/* ── Galerie : photos en plein écran au toucher ─────── */}
+          {fullEvent.gallery?.length ? (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.cardSectionTitle}>Photos</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                {fullEvent.gallery.map((uri, i) => (
+                  <Pressable key={uri} onPress={() => setViewer(uri)} accessibilityRole="imagebutton"
+                    accessibilityLabel={`Photo ${i + 1} sur ${fullEvent.gallery.length}, agrandir`}>
+                    <SafeImage uri={uri} style={styles.galleryImg} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
           {/* ── Description ────────────────────────────────── */}
           {fullEvent.description ? (
             <View style={styles.descCard}>
@@ -522,7 +692,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <View style={styles.orgCard}>
               <View style={styles.orgAvatar}>
                 <Text style={styles.orgAvatarTxt}>
-                  {fullEvent.organizer.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+                  {(fullEvent.organizer.name || '?').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
                 </Text>
               </View>
               <View style={{ flex: 1 }}>
@@ -547,7 +717,7 @@ export default function EventDetailScreen({ route, navigation }) {
                 Participer à cet événement
               </Text>
               <Text style={styles.participateBannerSub}>
-                Télécharge l'application Easevent pour confirmer ta présence,
+                Téléchargez l'application Easevent pour confirmer votre présence,
                 recevoir les mises à jour et rejoindre la communauté.
               </Text>
             </View>
@@ -602,20 +772,43 @@ export default function EventDetailScreen({ route, navigation }) {
         </Animated.View>
       </Animated.ScrollView>
 
+      {/* ══ Pour moi / pour un proche ══════════════════════════ */}
+      <Modal visible={chooser} transparent animationType="slide" onRequestClose={() => setChooser(false)} statusBarTranslucent>
+        <Pressable style={styles.chooserBackdrop} onPress={() => setChooser(false)} accessibilityRole="button" accessibilityLabel="Fermer" />
+        <View style={styles.chooser} accessibilityViewIsModal>
+          <View style={styles.chooserHandle} />
+          <Text style={styles.chooserTitle} accessibilityRole="header">{`${isPaid ? 'Payer' : 'Réserver'} pour qui ?`}</Text>
+          {[
+            ['person-outline', 'Pour moi', `${pw.My} à mon nom`, () => ticketAction(true)],
+            ['gift-outline', 'Pour un proche', 'Un ami, un membre, ou quelqu’un à inviter', openGift],
+          ].map(([icon, label, sub, onPress]) => (
+            <Pressable key={label} onPress={onPress} style={styles.chooserRow} accessibilityRole="button" accessibilityLabel={`${label} : ${sub}`}>
+              <View style={styles.chooserIcon}><Ionicons name={icon} size={22} color={C.green} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.chooserLabel}>{label}</Text>
+                <Text style={styles.chooserSub}>{sub}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.textMut} />
+            </Pressable>
+          ))}
+        </View>
+      </Modal>
+
       {/* ══ BARRE FIXE (connecté, M24) ══════════════════════════ */}
       {isAuthenticated && (
         <View style={[styles.ticketBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View>
-            <Text style={styles.ticketBarLabel}>Ticket</Text>
+            <Text style={styles.ticketBarLabel}>{pw.One}</Text>
             <Text style={styles.ticketBarPrice}>{isPaid ? priceTxt : '0,00 €'}</Text>
+            {isPaid ? <Price amount={fullEvent.price} currency={fullEvent.currency || 'EUR'} text={null} compact /> : null}
           </View>
           <TouchableOpacity
             style={[styles.ticketBarBtn, soldOut && !isOrganizer && styles.ticketBarBtnOff]}
-            onPress={ticketAction}
+            onPress={() => ticketAction()}
             disabled={ticketBusy || (soldOut && !isOrganizer)}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityState={{ disabled: soldOut && !isOrganizer, busy: ticketBusy }}
+            accessibilityState={{ disabled: soldOut && !isOrganizer, busy: ticketBusy }} aria-disabled={soldOut && !isOrganizer} aria-busy={ticketBusy}
           >
             {ticketBusy ? <ActivityIndicator color={C.white} /> : (
               <>
@@ -634,6 +827,16 @@ export default function EventDetailScreen({ route, navigation }) {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  chooserBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  chooser: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: C.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, paddingBottom: 34, gap: 10, maxWidth: 560, alignSelf: 'center', width: '100%' },
+  chooserHandle: { width: 44, height: 5, borderRadius: 3, backgroundColor: C.border, alignSelf: 'center', marginBottom: 6 },
+  chooserTitle: { fontSize: 19, fontWeight: '900', color: C.text, marginBottom: 6 },
+  chooserRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16, borderWidth: 1.5, borderColor: C.border, minHeight: 64 },
+  chooserIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  chooserLabel: { fontSize: 16, fontWeight: '800', color: C.text },
+  chooserSub: { fontSize: 13, color: C.textSub, marginTop: 2 },
+  galleryImg: { width: 150, height: 110, borderRadius: 14, backgroundColor: '#EEE' },
   // ── M24 : badges, organisateur, barre fixe
   heroBadges: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   heroPriceBadge: {
@@ -797,6 +1000,13 @@ const styles = StyleSheet.create({
   },
 
   // ── Card description
+  heroEngage: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  heroShare: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.32)' },
+  heroShareTxt: { color: C.white, fontWeight: '700', fontSize: 14 },
+  minisiteBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.greenLight, borderRadius: 16, padding: 14, marginBottom: 14 },
+  minisiteIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
+  minisiteTitle: { fontSize: 16, fontWeight: '800', color: C.green },
+  minisiteSub: { fontSize: 13, color: C.textSub, marginTop: 2 },
   descCard: {
     backgroundColor: C.white,
     borderRadius: 18, padding: 18,

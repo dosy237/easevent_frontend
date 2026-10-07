@@ -39,7 +39,7 @@ const FILTERS = [
 
 const STATUS = {
   confirmed:   { label: 'Confirmé',         color: '#155C3C', bg: '#E8F5EE' },
-  to_validate: { label: 'Ticket à valider', color: '#155C3C', bg: '#F1F8F4' },
+  to_validate: { label: 'À valider', color: '#155C3C', bg: '#F1F8F4' },
   opened:      { label: 'Vu',               color: '#3B4BA8', bg: '#EEF1FD' },
   sent:        { label: 'En attente',       color: '#B4492E', bg: '#FFF0EB' },
   declined:    { label: 'Décliné',          color: '#C53030', bg: '#FFF5F5' },
@@ -50,11 +50,21 @@ const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août'
 const shortDate = (iso) => { const d = new Date(iso); return `${d.getDate()} ${MOIS[d.getMonth()]}`; };
 
 function subtitle(g) {
-  if (['failed', 'not_configured'].includes(g.delivery_status)) {
+  if (g.source === 'ticket' && !g.checked_in_at) {
+    return g.display_status === 'confirmed' ? 'Inscrit depuis Découvrir' : 'Inscription en attente de validation';
+  }
+  // L'état de l'envoi n'a d'intérêt que tant que l'invité n'a pas répondu
+  const waiting = ['sent', 'opened'].includes(g.status);
+  if (waiting && ['failed', 'not_configured'].includes(g.delivery_status)) {
     return g.kind === 'phone' ? 'SMS non envoyé' : 'Email non envoyé';
   }
-  if (g.delivery_status === 'pending') return `${KIND[g.kind]} · envoi en cours…`;
+  if (waiting && g.delivery_status === 'pending') return `${KIND[g.kind]} · envoi en cours…`;
   const parts = [KIND[g.kind]];
+  if (g.checked_in_at) {
+    const d = new Date(g.checked_in_at);
+    parts.push(`entré à ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+    return parts.join(' · ');
+  }
   if (g.responded_at && ['confirmed', 'to_validate', 'declined'].includes(g.display_status)) {
     parts.push(`répondu le ${shortDate(g.responded_at)}`);
   } else if (g.opened_at) {
@@ -103,7 +113,7 @@ export default function GuestListScreen({ navigation, route }) {
   }, [guests, filter, q]);
 
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard'));
-  const goPlans = () => navigation.navigate('TabProfile', { screen: 'Plans' });
+  const goPlans = () => navigation.navigate('TabProfile', { screen: 'Plans', initial: false, params: { reason: "L'export de la liste des invités est inclus dans les plans Standard et Pro." } });
 
   const run = async (key, fn, success) => {
     setBusy(key);
@@ -180,7 +190,7 @@ export default function GuestListScreen({ navigation, route }) {
           ['declined', counts.declined, 'déclinés', styles.cGrey, '#444444'],
         ].map(([id, n, label, bg, color]) => (
           <Pressable key={id} onPress={() => setFilter(filter === id ? 'all' : id)} style={[styles.counter, bg, filter === id && styles.counterOn]}
-            accessibilityRole="button" accessibilityLabel={`${n} ${label}. Filtrer`} accessibilityState={{ selected: filter === id }}>
+            accessibilityRole="button" accessibilityLabel={`${n} ${label}. Filtrer`} accessibilityState={{ selected: filter === id }} aria-selected={filter === id}>
             <Text style={[styles.counterN, { color }]}>{n}</Text>
             <Text style={[styles.counterL, { color }]}>{label}</Text>
           </Pressable>
@@ -207,7 +217,7 @@ export default function GuestListScreen({ navigation, route }) {
           const n = f.id === 'all' ? counts.total : counts[f.id];
           return (
             <Pressable key={f.id} onPress={() => setFilter(f.id)} style={[styles.filter, on && styles.filterOn]}
-              accessibilityRole="tab" accessibilityState={{ selected: on }}>
+              accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on}>
               <Text style={[styles.filterTxt, on && styles.filterTxtOn]}>{f.label}{f.id === 'all' ? ` ${n}` : ''}</Text>
             </Pressable>
           );
@@ -254,7 +264,7 @@ export default function GuestListScreen({ navigation, route }) {
                   onPress={() => setSelected(g)}
                   style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
                   accessibilityRole="button"
-                  accessibilityLabel={`${g.name}, ${st.label}, ${subtitle(g)}`}
+                  accessibilityLabel={`${g.name}, ${st.label}, ${subtitle(g)}${g.rsvp?.length ? ', a répondu aux questions' : ''}`}
                   accessibilityHint="Ouvre les actions : relancer, message, révoquer"
                 >
                   <View style={[styles.avatar, g.bucket === 'pending' ? { backgroundColor: C.orangeL } : g.bucket === 'confirmed' ? null : { backgroundColor: '#F1F1F1' }]}>
@@ -268,6 +278,7 @@ export default function GuestListScreen({ navigation, route }) {
                     <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
                     <Text style={[styles.sub, ['failed', 'not_configured'].includes(g.delivery_status) && { color: C.errorText }]} numberOfLines={1}>{subtitle(g)}</Text>
                   </View>
+                  {g.rsvp?.length ? <Ionicons name="document-text-outline" size={16} color={C.green} style={{ marginRight: 6 }} /> : null}
                   {rowBusy ? <ActivityIndicator size="small" color={C.green} /> : (
                     <View style={[styles.badge, { backgroundColor: st.bg }]}><Text style={[styles.badgeTxt, { color: st.color }]}>{st.label}</Text></View>
                   )}
@@ -283,7 +294,7 @@ export default function GuestListScreen({ navigation, route }) {
             disabled={!data?.remindable || busy === 'remind-all'}
             style={[styles.footBtn, styles.footGhost, (!data?.remindable) && { opacity: 0.5 }]}
             accessibilityRole="button"
-            accessibilityState={{ disabled: !data?.remindable }}
+            accessibilityState={{ disabled: !data?.remindable }} aria-disabled={!data?.remindable}
           >
             {busy === 'remind-all' ? <ActivityIndicator size="small" color={C.text} /> : null}
             <Text style={styles.footGhostTxt}>{data?.remindable ? `Relancer les ${data.remindable}` : 'Personne à relancer'}</Text>
@@ -301,14 +312,28 @@ export default function GuestListScreen({ navigation, route }) {
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle} accessibilityRole="header">{selected.name}</Text>
             <Text style={styles.sheetSub}>{subtitle(selected)} · {(STATUS[selected.display_status] || STATUS.sent).label}</Text>
+            {selected.rsvp?.length ? (
+              <View style={styles.rsvpBox} accessibilityLabel="Réponses aux questions">
+                {selected.rsvp.map((a) => (
+                  <View key={a.question_id} style={styles.rsvpRow}>
+                    <Text style={styles.rsvpQ}>{a.label}</Text>
+                    <Text style={styles.rsvpA}>{a.display}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {selected.source !== 'ticket' && (
             <SheetAction icon="refresh-outline" label="Relancer" color={C.green}
               note={selected.can_remind ? 'Un nouveau lien est envoyé.' : (['sent', 'opened'].includes(selected.status) ? 'Déjà relancé il y a moins de 24 h.' : 'Cet invité a déjà répondu.')}
               disabled={!selected.can_remind} onPress={() => remindOne(selected)} />
+            )}
             <SheetAction icon="chatbubble-ellipses-outline" label="Message" color={C.orange}
               note={selected.user_id ? 'Ouvrir la conversation.' : 'Disponible quand l’invité a un compte Easevent.'}
               disabled={!selected.user_id} onPress={() => message(selected)} />
+            {selected.source !== 'ticket' && (
             <SheetAction icon="close-circle-outline" label="Révoquer l'invitation" color="#C0392B"
-              note="Son lien ne fonctionnera plus." onPress={() => revoke(selected)} />
+              note="Son invitation ou son billet est annulé (et remboursé s'il a payé). Il est prévenu." onPress={() => revoke(selected)} />
+            )}
             <Pressable onPress={() => setSelected(null)} style={styles.sheetClose} accessibilityRole="button">
               <Text style={styles.sheetCloseTxt}>Fermer</Text>
             </Pressable>
@@ -322,7 +347,7 @@ export default function GuestListScreen({ navigation, route }) {
 function SheetAction({ icon, label, note, color, onPress, disabled }) {
   return (
     <Pressable onPress={onPress} disabled={disabled} style={[styles.action, disabled && { opacity: 0.45 }]}
-      accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} accessibilityHint={note}>
+      accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} aria-disabled={!!disabled} accessibilityHint={note}>
       <View style={[styles.actionIcon, { backgroundColor: `${color}1A` }]}><Ionicons name={icon} size={20} color={color} /></View>
       <View style={{ flex: 1 }}>
         <Text style={styles.actionLabel}>{label}</Text>
@@ -379,6 +404,10 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: C.white, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 28, gap: 6 },
   sheetTitle: { fontSize: 17, fontWeight: '800', color: C.text },
   sheetSub: { fontSize: 13, color: C.textSub, marginBottom: 8 },
+  rsvpBox: { backgroundColor: C.bg, borderRadius: 14, padding: 12, gap: 8, marginBottom: 6 },
+  rsvpRow: { gap: 2 },
+  rsvpQ: { fontSize: 12, color: C.textMut, fontWeight: '700' },
+  rsvpA: { fontSize: 14, color: C.text, fontWeight: '600' },
   action: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingVertical: 6 },
   actionIcon: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { fontSize: 15, fontWeight: '700', color: C.text },

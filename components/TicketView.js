@@ -21,16 +21,24 @@ import { formatDateLong, formatPrice } from '../utils/format';
 import ticketService from '../services/ticketService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
+import { openDirections } from './maps/EventMap';
+import rsvpService from '../services/rsvpService';
+import { askRsvp } from '../utils/rsvp';
+import { passWord } from '../utils/wording';
+import { eventTime } from '../utils/timezone';
 
 // Lien « Ajouter à Google Agenda » : fonctionne sur tous les appareils, sans permission
 const calendarUrl = (ticket) => {
   const e = ticket.event || {};
-  const fmt = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const fmt = (iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  };
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     text: e.title || 'Événement Easevent',
-    dates: `${fmt(e.start_date)}/${fmt(e.end_date || e.start_date)}`,
-    details: `Ticket ${ticket.number} — Easevent`,
+    ...(e.start_date ? { dates: `${fmt(e.start_date)}/${fmt(e.end_date || e.start_date)}` } : {}),
+    details: `${passWord(e).One} ${ticket.number} — Easevent`,
     location: e.is_online ? 'En ligne' : (e.location_address || ''),
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
@@ -58,16 +66,38 @@ export default function TicketView({ ticket, justPaid = false }) {
     }
   };
 
+  // Questions de l'organisateur : revoir et modifier ses réponses (M19)
+  const [rsvpBusy, setRsvpBusy] = useState(false);
+  const editAnswers = async () => {
+    setRsvpBusy(true);
+    try {
+      const data = await rsvpService.mine(e.id);
+      setRsvpBusy(false);
+      const answers = await askRsvp({ ...data, submitLabel: 'Enregistrer mes réponses' });
+      if (answers === null) return;
+      await rsvpService.saveMine(e.id, answers);
+      showAlert('Réponses enregistrées', "L'organisateur voit vos nouvelles réponses.");
+    } catch (err) {
+      showAlert('Action impossible', apiErrorMessage(err));
+    } finally {
+      setRsvpBusy(false);
+    }
+  };
+
   const shareTicket = () => Share.share({
-    message: `Mon ticket ${ticket.number} pour « ${e.title} » — ${formatDateLong(e.start_date)}`
+    message: `${passWord(e).My} ${ticket.number} pour « ${e.title} » — ${formatDateLong(e.start_date)}`
       + `${e.location_address ? ` · ${e.location_address}` : ''}. Présentez le QR code dans l'application Easevent.`,
   }).catch(() => {});
 
   const rows = [
-    { label: 'Date', value: formatDateLong(e.start_date) },
+    { label: 'Date', value: (() => {
+      const t = eventTime(e.start_date, e.timezone);
+      return t ? `${t.date} · ${t.time}${t.zone ? ` (${t.zone})` : ''}${t.local ? `\n${t.local}` : ''}` : formatDateLong(e.start_date);
+    })() },
     { label: 'Lieu', value: e.is_online ? 'En ligne' : (e.location_address || '—') },
     { label: 'Participant', value: ticket.participant },
     { label: 'Prix', value: formatPrice(ticket.price, ticket.currency), strong: true },
+    ...(ticket.checked_in_at ? [{ label: 'Entrée', value: `Contrôlé le ${formatDateLong(ticket.checked_in_at)}` }] : []),
   ];
 
   return (
@@ -75,9 +105,19 @@ export default function TicketView({ ticket, justPaid = false }) {
       {justPaid && (
         <View style={styles.paidBanner} accessibilityRole="alert">
           <Ionicons name="checkmark-circle" size={16} color={C.green} />
-          <Text style={styles.paidBannerTxt}>Paiement reçu — votre ticket est généré.</Text>
+          <Text style={styles.paidBannerTxt}>{`Paiement reçu — ${passWord(e).your} est prêt${passWord(e).e}.`}</Text>
         </View>
       )}
+
+      {ticket.offered_by ? (
+        <View style={[styles.paidBanner, styles.giftBanner]} accessible accessibilityLabel={`Offert par ${ticket.offered_by.name}`}>
+          <Ionicons name="gift" size={18} color={C.green} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.paidBannerTxt}>{`Offert${passWord(e).e} par ${ticket.offered_by.name}`}</Text>
+            {ticket.offered_by.message ? <Text style={styles.giftMsg}>{`« ${ticket.offered_by.message} »`}</Text> : null}
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.ticket}>
         <View style={styles.head}>
@@ -121,20 +161,20 @@ export default function TicketView({ ticket, justPaid = false }) {
 
           <View style={styles.qrSection}>
             <Text style={styles.qrLabel}>Présentez ce QR code à l'entrée</Text>
-            <View style={styles.qrBox} accessible accessibilityRole="image" accessibilityLabel={`QR code du ticket ${ticket.number}`}>
+            <View style={styles.qrBox} accessible accessibilityRole="image" accessibilityLabel={`QR code ${passWord(e).of} ${ticket.number}`}>
               {ticket.qr_payload ? (
                 <QRCode value={ticket.qr_payload} size={168} color={C.text} backgroundColor={C.white} ecl="M" />
               ) : (
                 <View style={styles.qrMissing}><Ionicons name="qr-code-outline" size={64} color={C.textMut} /></View>
               )}
             </View>
-            <Text style={styles.number} selectable>TICKET N° {ticket.number}</Text>
+            <Text style={styles.number} selectable>{`${passWord(ticket.event || {}).One.toUpperCase()} N° ${ticket.number}`}</Text>
           </View>
 
           <View style={styles.warning}>
             <Ionicons name="information-circle-outline" size={14} color={C.textMut} />
             <Text style={styles.warningTxt}>
-              Ce ticket est personnel et non transférable. Valable uniquement pour {ticket.participant}.
+              {`${passWord(e).One} personnel${passWord(e).e}, non transférable. Valable uniquement pour ${ticket.participant}.`}
             </Text>
           </View>
         </View>
@@ -155,8 +195,8 @@ export default function TicketView({ ticket, justPaid = false }) {
           onPress={downloadPdf}
           disabled={downloading}
           accessibilityRole="button"
-          accessibilityLabel="Télécharger mon ticket en PDF"
-          accessibilityState={{ busy: downloading }}
+          accessibilityLabel={`Télécharger ${passWord(e).my} en PDF`}
+          accessibilityState={{ busy: downloading }} aria-busy={downloading}
         >
           {downloading
             ? <ActivityIndicator size="small" color={C.text} />
@@ -164,9 +204,30 @@ export default function TicketView({ ticket, justPaid = false }) {
           <Text style={styles.actionTxt}>Télécharger</Text>
         </Pressable>
       </View>
+      {e.online_link ? (
+        <Pressable onPress={() => Linking.openURL(e.online_link).catch(() => {})} style={styles.routeBtn} accessibilityRole="button"
+          accessibilityHint="Ouvre le lien de connexion de l'événement en ligne">
+          <Ionicons name="videocam" size={16} color={C.white} />
+          <Text style={styles.routeTxt}>Rejoindre l'événement en ligne</Text>
+        </Pressable>
+      ) : null}
+      {!e.is_online && e.location_address ? (
+        <Pressable onPress={() => openDirections(e.map, e.location_address)} style={styles.routeBtn} accessibilityRole="button"
+          accessibilityHint="Ouvre Google Maps avec le trajet depuis votre position">
+          <Ionicons name="navigate" size={16} color={C.white} />
+          <Text style={styles.routeTxt}>Itinéraire jusqu'au lieu</Text>
+        </Pressable>
+      ) : null}
+      {e.has_rsvp ? (
+        <Pressable onPress={editAnswers} disabled={rsvpBusy} style={styles.shareLink} accessibilityRole="button"
+          accessibilityHint="Revoir et modifier vos réponses aux questions de l'organisateur">
+          {rsvpBusy ? <ActivityIndicator size="small" color={C.green} /> : <Ionicons name="document-text-outline" size={14} color={C.green} />}
+          <Text style={styles.shareLinkTxt}>Mes réponses aux questions</Text>
+        </Pressable>
+      ) : null}
       <Pressable onPress={shareTicket} accessibilityRole="button" style={styles.shareLink}>
         <Ionicons name="share-social-outline" size={14} color={C.green} />
-        <Text style={styles.shareLinkTxt}>Partager mon ticket</Text>
+        <Text style={styles.shareLinkTxt}>{`Partager ${passWord(e).my}`}</Text>
       </Pressable>
     </View>
   );
@@ -178,6 +239,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.greenSoft, borderRadius: 12, padding: 12, marginBottom: 14,
   },
   paidBannerTxt: { fontSize: 13, fontWeight: '600', color: C.greenDark, flex: 1 },
+  giftBanner: { alignItems: 'flex-start' },
+  giftMsg: { fontSize: 14, color: C.text, fontStyle: 'italic', marginTop: 4, lineHeight: 20 },
   ticket: {
     backgroundColor: C.white, borderRadius: 20, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 8,
@@ -214,6 +277,8 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white,
   },
   actionTxt: { fontSize: 14, fontWeight: '700', color: C.text },
+  routeBtn: { minHeight: 48, marginTop: 10, borderRadius: 14, backgroundColor: C.green, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  routeTxt: { fontSize: 14, fontWeight: '800', color: C.white },
   shareLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
   shareLinkTxt: { fontSize: 13, fontWeight: '700', color: C.green },
 });

@@ -18,7 +18,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, StatusBar, Animated, Platform, Alert,
-  ActivityIndicator, Modal,
+  ActivityIndicator, Modal, Image,
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +29,11 @@ import { authService }   from '../services/authService';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert }     from '../utils/dialog';
 import { downloadJson }  from '../utils/files';
+import * as ImagePicker from 'expo-image-picker';
+import * as Application from 'expo-application';
+import eventService from '../services/eventService';
+import { apiErrorMessage } from '../services/authService';
+import { LEGAL } from '../constants/theme';
 import { Bone, SkeletonGroup } from '../components/ui/Skeleton';
 const C = {
   green:      '#1B6B4A',
@@ -56,8 +61,13 @@ const PLAN_CONFIG = {
 // COMPOSANT : AvatarPlaceholder
 // Affiche les initiales si pas de photo de profil
 // ════════════════════════════════════════════════════════════════
-const AvatarPlaceholder = ({ firstName, lastName, size = 80 }) => {
+const AvatarPlaceholder = ({ firstName, lastName, size = 80, uri }) => {
   const initials = `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
+  const [broken, setBroken] = useState(false);
+  if (uri && !broken) {
+    return <Image source={{ uri }} onError={() => setBroken(true)} accessibilityLabel="Photo de profil"
+      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: C.greenLight }} />;
+  }
   return (
     <View style={[styles.avatarPlaceholder, { width: size, height: size, borderRadius: size / 2 }]}>
       <Text style={[styles.avatarInitials, { fontSize: size * 0.35 }]}>{initials}</Text>
@@ -68,17 +78,21 @@ const AvatarPlaceholder = ({ firstName, lastName, size = 80 }) => {
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : StatCard
 // ════════════════════════════════════════════════════════════════
-const StatCard = ({ icon, value, label, loading }) => (
-  <View style={styles.statCard} accessible accessibilityLabel={loading ? `${label} : chargement` : `${label} : ${value}`}>
-    <Ionicons name={icon} size={20} color={C.green} />
-    {loading ? (
-      <SkeletonGroup label={`Chargement : ${label}`}><Bone width={28} height={22} /></SkeletonGroup>
-    ) : (
-      <Text style={styles.statValue}>{value}</Text>
-    )}
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
+const StatCard = ({ icon, value, label, loading, onPress }) => {
+  const Box = onPress ? TouchableOpacity : View;
+  return (
+    <Box style={styles.statCard} accessible onPress={onPress} accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={loading ? `${label} : chargement` : `${label} : ${value}`}>
+      <Ionicons name={icon} size={20} color={C.green} />
+      {loading ? (
+        <SkeletonGroup label={`Chargement : ${label}`}><Bone width={28} height={22} /></SkeletonGroup>
+      ) : (
+        <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+      )}
+      <Text style={styles.statLabel}>{label}</Text>
+    </Box>
+  );
+};
 
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : EditableField
@@ -441,6 +455,32 @@ export default function ProfileScreen({ navigation }) {
    );
 };
 
+  // ── Photo de profil ───────────────────────────────────────────
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const changeAvatar = async () => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Accès aux photos', 'Autorisez Easevent à accéder à vos photos pour choisir une photo de profil.');
+        return;
+      }
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true });
+    if (res.canceled || !res.assets?.[0]?.base64) return;
+    setAvatarBusy(true);
+    try {
+      const mime = res.assets[0].mimeType || 'image/jpeg';
+      const { url } = await eventService.uploadImage(`data:${mime};base64,${res.assets[0].base64}`, 'avatar');
+      const updated = await authService.updateProfile({ avatar_url: url });
+      await updateUser(updated.user || { avatar_url: url });
+      showSuccess('Photo de profil mise à jour');
+    } catch (err) {
+      showAlert('Envoi impossible', apiErrorMessage(err, "La photo n'a pas pu être envoyée. Réessayez."));
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
   // ── Export RGPD (Art. 20) ─────────────────────────────────────
   const handleExport = async () => {
     setExporting(true);
@@ -500,14 +540,15 @@ export default function ProfileScreen({ navigation }) {
             {/* ── Avatar + infos principales ───────────────── */}
             <View style={styles.heroSection}>
               <View style={styles.avatarWrap}>
-                <AvatarPlaceholder firstName={user.first_name} lastName={user.last_name} size={88} />
+                <AvatarPlaceholder firstName={user.first_name} lastName={user.last_name} size={88} uri={user.avatar_url} />
                 <TouchableOpacity
                   style={styles.avatarEditBtn}
                   accessibilityRole="button"
-                  accessibilityLabel="Changer la photo"
-                  onPress={() => showAlert('Photo de profil', 'L’ajout d’une photo arrive dans une prochaine mise à jour.')}
+                  accessibilityLabel="Changer la photo de profil"
+                  onPress={changeAvatar}
+                  disabled={avatarBusy}
                 >
-                  <Ionicons name="camera-outline" size={14} color={C.white} />
+                  {avatarBusy ? <ActivityIndicator size="small" color={C.white} /> : <Ionicons name="camera-outline" size={14} color={C.white} />}
                 </TouchableOpacity>
               </View>
               <Text style={styles.heroName}>{user.first_name} {user.last_name}</Text>
@@ -532,8 +573,9 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.statDivider} />
               <StatCard
                 icon="star-outline"
-                value={user.subscription_plan === 'pro' ? 'Pro' : user.subscription_plan === 'standard' ? 'Std' : 'Free'}
+                value={plan.label}
                 label="Abonnement"
+                onPress={() => navigation?.navigate('Plans')}
               />
             </View>
 
@@ -584,6 +626,48 @@ export default function ProfileScreen({ navigation }) {
 
               <View style={styles.menuDivider} />
 
+              {/* Amis : inviter en un geste */}
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation?.navigate('Friends')}
+                accessibilityRole="button"
+              >
+                <View style={styles.menuItemLeft}>
+                  <View style={[styles.menuIconBox, { backgroundColor: C.greenLight }]}>
+                    <Ionicons name="people-outline" size={18} color={C.green} />
+                  </View>
+                  <View>
+                    <Text style={styles.menuItemTitle}>Mes amis</Text>
+                    <Text style={styles.menuItemSub}>Demandes et invitations en un geste</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
+              {/* Téléphone : retrouver les invitations reçues par SMS */}
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation?.navigate('VerifyPhone')}
+                accessibilityRole="button"
+              >
+                <View style={styles.menuItemLeft}>
+                  <View style={[styles.menuIconBox, { backgroundColor: C.greenLight }]}>
+                    <Ionicons name="call-outline" size={18} color={C.green} />
+                  </View>
+                  <View>
+                    <Text style={styles.menuItemTitle}>Téléphone</Text>
+                    <Text style={styles.menuItemSub}>
+                      {user?.phone_verified ? `${user.phone} · vérifié` : user?.phone ? `${user.phone} · à confirmer` : 'Retrouver vos invitations SMS'}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
               {/* Notifications */}
               <TouchableOpacity
                 style={styles.menuItem}
@@ -610,7 +694,7 @@ export default function ProfileScreen({ navigation }) {
                 onPress={handleExport}
                 disabled={exporting}
                 accessibilityRole="button"
-                accessibilityState={{ busy: exporting }}
+                accessibilityState={{ busy: exporting }} aria-busy={exporting}
               >
                 <View style={styles.menuItemLeft}>
                   <View style={[styles.menuIconBox, { backgroundColor: C.orangeL }]}>
@@ -628,6 +712,25 @@ export default function ProfileScreen({ navigation }) {
 
               <View style={styles.menuDivider} />
 
+              {/* Administration : équipe Easevent uniquement */}
+              {user?.is_staff ? (
+                <>
+                  <TouchableOpacity style={styles.menuItem} onPress={() => navigation?.navigate('Admin')} accessibilityRole="button">
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconBox, { backgroundColor: C.greenLight }]}>
+                        <Ionicons name="shield-checkmark-outline" size={18} color={C.green} />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>Administration</Text>
+                        <Text style={styles.menuItemSub}>Comptes, événements, annonces</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
+                  </TouchableOpacity>
+                  <View style={styles.menuDivider} />
+                </>
+              ) : null}
+
               {/* Paiements & virements (Stripe Connect, organisateur) */}
               <TouchableOpacity
                 style={styles.menuItem}
@@ -640,7 +743,7 @@ export default function ProfileScreen({ navigation }) {
                   </View>
                   <View>
                     <Text style={styles.menuItemTitle}>Paiements & virements</Text>
-                    <Text style={styles.menuItemSub}>Recevoir l'argent de vos tickets</Text>
+                    <Text style={styles.menuItemSub}>Recevoir l'argent de vos billets</Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
@@ -667,6 +770,31 @@ export default function ProfileScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
+            {/* ── Abonnement, aide, conditions ─────────────── */}
+            <View style={styles.card}>
+              {[
+                ['Plans', 'star-outline', C.orangeL, C.orangeDark, 'Abonnement', `Plan ${plan.label}${user.subscription_plan === 'free' ? ' · voir les plans' : ' · gérer'}`],
+                ['Help', 'help-buoy-outline', C.greenLight, C.green, 'Aide', 'Questions fréquentes et support'],
+                ['Terms', 'document-text-outline', C.greenLight, C.green, "Conditions d'utilisation", 'Les règles du service'],
+              ].map(([route, icon, bg, fg, title, sub], i) => (
+                <React.Fragment key={route}>
+                  {i > 0 ? <View style={styles.menuDivider} /> : null}
+                  <TouchableOpacity style={styles.menuItem} onPress={() => navigation?.navigate(route)} accessibilityRole="button">
+                    <View style={styles.menuItemLeft}>
+                      <View style={[styles.menuIconBox, { backgroundColor: bg }]}>
+                        <Ionicons name={icon} size={18} color={fg} />
+                      </View>
+                      <View>
+                        <Text style={styles.menuItemTitle}>{title}</Text>
+                        <Text style={styles.menuItemSub}>{sub}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward-outline" size={16} color={C.textMut} />
+                  </TouchableOpacity>
+                </React.Fragment>
+              ))}
+            </View>
+
             {/* ── Upgrade Plan ─────────────────────────────── */}
             {user.subscription_plan === 'free' && (
               <TouchableOpacity
@@ -679,7 +807,7 @@ export default function ProfileScreen({ navigation }) {
                 <View style={styles.upgradeLeft}>
                   <Text style={styles.upgradeTitle}>Passer au Plan Standard</Text>
                   <Text style={styles.upgradeSub}>
-                    Événements illimités, analytics NLP, export PDF
+                    Jusqu'à 500 invités par événement, export de la liste des invités
                   </Text>
                 </View>
                 <View style={styles.upgradeBtn}>
@@ -702,7 +830,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.deleteTxt}>Supprimer mon compte</Text>
             </TouchableOpacity>
 
-            <Text style={styles.version}>Easevent v1.0.0 — © 2026</Text>
+            <Text style={styles.version}>Easevent v{Application.nativeApplicationVersion || '1.0.0'} — © 2026 {LEGAL.company}</Text>
 
           </Animated.View>
         </ScrollView>

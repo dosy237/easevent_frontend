@@ -26,6 +26,7 @@
  */
 import { useAuth } from '../context/AuthContext';
 import { KEYS, setItem } from '../services/storage';
+import { toE164 } from '../utils/contacts';
 import { authService } from '../services/authService';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -50,6 +51,7 @@ import Checkbox from '../components/ui/Checkbox';
 import { LogoMark } from '../components/illustrations';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
+import { deviceDialCode } from '../utils/region';
 
 const { height: H } = Dimensions.get('window');
 
@@ -172,6 +174,9 @@ const ProgressBar = ({ step, total }) => (
   </View>
 );
 
+// Connexion Google / Apple : masquée tant qu'elle n'est pas branchée (aucun bouton « bientôt »)
+const OAUTH_ENABLED = process.env.EXPO_PUBLIC_OAUTH_ENABLED === 'true';
+
 export default function LoginScreen({ navigation, route }) {
   const { login } = useAuth();
   const params = route?.params || {};
@@ -183,6 +188,8 @@ export default function LoginScreen({ navigation, route }) {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [codeChannel, setCodeChannel] = useState('email');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -265,6 +272,8 @@ export default function LoginScreen({ navigation, route }) {
     const errors = {};
     if (!firstName.trim()) errors.firstName = 'Le prénom est requis';
     if (!lastName.trim())  errors.lastName  = 'Le nom est requis';
+    if (!phone.trim()) errors.phone = 'Le numéro de téléphone est requis';
+    else if (!toE164(phone, deviceDialCode())) errors.phone = `Numéro invalide (ex. ${deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'})`;
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -307,6 +316,8 @@ export default function LoginScreen({ navigation, route }) {
         password,
         first_name:       firstName.trim(),
         last_name:        lastName.trim(),
+        phone_number:     toE164(phone, deviceDialCode()),
+        verification_channel: codeChannel,
         accepted_privacy: true,
         marketing_opt_in: marketingOptIn,
         ...(invitationToken ? { invitation_token: invitationToken } : {}),
@@ -315,7 +326,7 @@ export default function LoginScreen({ navigation, route }) {
         // Compte déjà vérifié (ex. invitation reçue sur cette adresse)
         await login({ userData: data.user, access: data.access, refresh: data.refresh });
       } else {
-        navigation?.navigate('VerifyEmail', { email: data.email || email.trim() });
+        navigation?.navigate('VerifyEmail', { email: data.email || email.trim(), channel: data.channel || codeChannel, phone: data.phone });
       }
     } catch (err) {
       const body = err.response?.data || {};
@@ -367,34 +378,46 @@ export default function LoginScreen({ navigation, route }) {
           <Text style={styles.btnSecondaryTxt}>Se connecter</Text>
         </TouchableOpacity>
 
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerTxt}>OU CONTINUER AVEC</Text>
-          <View style={styles.dividerLine} />
-        </View>
+        {/* Google / Apple : affichés quand les clés sont configurées (EXPO_PUBLIC_OAUTH_ENABLED=true) */}
+        {OAUTH_ENABLED && (
+          <>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerTxt}>OU CONTINUER AVEC</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
-        <View style={styles.oauthRow}>
-          <TouchableOpacity
-          accessibilityRole="button"
-            style={styles.oauthBtn}
-            activeOpacity={0.8}
-            onPress={() => showOAuthSoon('Google')}
+          <View style={styles.oauthRow}>
+            <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Continuer avec Google"
-          >
-            <Ionicons name="logo-google" size={22} color="#4285F4" />
-          </TouchableOpacity>
-          <TouchableOpacity
-          accessibilityRole="button"
-            style={styles.oauthBtn}
-            activeOpacity={0.8}
-            onPress={() => showOAuthSoon('Apple')}
+              style={styles.oauthBtn}
+              activeOpacity={0.8}
+              onPress={() => showOAuthSoon('Google')}
+              accessibilityRole="button"
+              accessibilityLabel="Continuer avec Google"
+            >
+              <Ionicons name="logo-google" size={22} color="#4285F4" />
+            </TouchableOpacity>
+            <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Continuer avec Apple"
-          >
-            <Ionicons name="logo-apple" size={22} color={C.text} />
-          </TouchableOpacity>
-        </View>
+              style={styles.oauthBtn}
+              activeOpacity={0.8}
+              onPress={() => showOAuthSoon('Apple')}
+              accessibilityRole="button"
+              accessibilityLabel="Continuer avec Apple"
+            >
+              <Ionicons name="logo-apple" size={22} color={C.text} />
+            </TouchableOpacity>
+          </View>
+          </>
+        )}
+
+        {/* L'inscription n'est pas obligatoire : on peut découvrir les événements publics sans compte */}
+        <TouchableOpacity style={styles.laterBtn} accessibilityRole="button"
+          accessibilityHint="Voir les événements publics sans créer de compte"
+          onPress={() => (navigation?.canGoBack() ? navigation.goBack() : navigation?.navigate('Home'))}>
+          <Text style={styles.laterTxt}>Plus tard — découvrir les événements publics</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
@@ -535,7 +558,7 @@ export default function LoginScreen({ navigation, route }) {
       <Text style={styles.formSubtitle}>
         {registerStep === 1
           ? 'Étape 1 sur 2 — Vos identifiants de connexion'
-          : 'Étape 2 sur 2 — Comment vous appelle-t-on ?'
+          : 'Étape 2 sur 2 — Vos informations'
         }
       </Text>
 
@@ -597,6 +620,30 @@ export default function LoginScreen({ navigation, route }) {
             autoCapitalize="words"
             error={fieldErrors.lastName}
           />
+          <InputField
+            icon="call-outline"
+            placeholder={`Téléphone · ${deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'}`}
+            value={phone}
+            onChangeText={(t) => { setPhone(t); setFieldErrors(p => ({ ...p, phone: '' })); }}
+            keyboardType="phone-pad"
+            error={fieldErrors.phone}
+          />
+          <Text style={styles.phoneHint}>
+            Vos invitations reçues par SMS vous attendront directement dans l'application.
+          </Text>
+          <Text style={styles.channelLabel} nativeID="channelLabel">Recevoir mon code de validation par</Text>
+          <View style={styles.channelRow} accessibilityRole="radiogroup" aria-labelledby="channelLabel">
+            {[['email', 'mail-outline', 'Email'], ['sms', 'chatbubble-ellipses-outline', 'SMS']].map(([id, icon, label]) => {
+              const on = codeChannel === id;
+              return (
+                <TouchableOpacity key={id} style={[styles.channelBtn, on && styles.channelBtnOn]} onPress={() => setCodeChannel(id)}
+                  accessibilityRole="radio" accessibilityState={{ checked: on }} aria-checked={on} activeOpacity={0.85}>
+                  <Ionicons name={icon} size={18} color={on ? C.white : C.green} />
+                  <Text style={[styles.channelTxt, on && { color: C.white }]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           {/* ── Consentement RGPD (M01) ─────────────────────── */}
           <View style={styles.consentBox}>
@@ -632,7 +679,7 @@ export default function LoginScreen({ navigation, route }) {
             disabled={loading || !acceptedPrivacy}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityState={{ disabled: loading || !acceptedPrivacy, busy: loading }}
+            accessibilityState={{ disabled: loading || !acceptedPrivacy, busy: loading }} aria-disabled={loading || !acceptedPrivacy} aria-busy={loading}
           >
             {loading ? (
               <ActivityIndicator size="small" color={C.white} />
@@ -687,6 +734,17 @@ export default function LoginScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
+  laterBtn: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+  laterTxt: { fontSize: 14, fontWeight: '700', color: C.textSub, textDecorationLine: 'underline' },
+  phoneHint: { fontSize: 12, color: '#555555', lineHeight: 17, marginTop: -6, marginBottom: 14 },
+  channelLabel: { fontSize: 13, fontWeight: '700', color: '#555555', marginBottom: 8 },
+  channelRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+  channelBtn: {
+    flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1.5, borderColor: '#C5E8D3', backgroundColor: '#F6FBF8',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  channelBtnOn: { backgroundColor: '#1B6B4A', borderColor: '#1B6B4A' },
+  channelTxt: { fontSize: 15, fontWeight: '700', color: '#1B6B4A' },
   root:  { flex: 1, backgroundColor: C.white },
   safe:  { flex: 1 },
   kav:   { flex: 1 },

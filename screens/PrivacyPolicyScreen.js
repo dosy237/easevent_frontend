@@ -44,7 +44,7 @@ const SECTIONS = [
   },
   {
     title: '2. Pourquoi nous les utilisons',
-    body: "Pour faire fonctionner le service que vous utilisez (exécution du contrat) : créer vos événements, envoyer vos invitations, générer vos tickets et traiter vos paiements. Les emails de nouveautés ne vous sont envoyés que si vous l'avez accepté (consentement), et vous pouvez retirer ce consentement à tout moment depuis votre profil.",
+    body: "Pour faire fonctionner le service que vous utilisez (exécution du contrat) : créer vos événements, envoyer vos invitations, générer vos invitations et billets et traiter vos paiements. Les emails de nouveautés ne vous sont envoyés que si vous l'avez accepté (consentement), et vous pouvez retirer ce consentement à tout moment depuis votre profil.",
   },
   {
     title: '3. Durées de conservation',
@@ -52,7 +52,7 @@ const SECTIONS = [
   },
   {
     title: '4. Prestataires (paiement, emails, SMS)',
-    body: "Nous faisons appel à des prestataires reconnus : Stripe (paiements — nous ne voyons jamais votre carte), SendGrid (emails), Twilio (SMS), Cloudinary (photos). Certains sont situés hors de l'Union européenne ; ces transferts sont encadrés par les clauses contractuelles types de la Commission européenne.",
+    body: "Nous faisons appel à des prestataires reconnus : Stripe (paiements et abonnements — nous ne voyons jamais votre carte), SendGrid (emails), Twilio (SMS), Cloudinary (photos), Expo, Google Firebase et Apple (notifications sur le téléphone, avec un simple identifiant d'appareil). Les adresses saisies peuvent être complétées par OpenStreetMap ou Google Maps. Certains sont situés hors de l'Union européenne ; ces transferts sont encadrés par les clauses contractuelles types de la Commission européenne.",
   },
   {
     title: '5. Vos droits (RGPD)',
@@ -181,7 +181,7 @@ export default function PrivacyPolicyScreen({ navigation }) {
               onPress={handleMyData}
               disabled={exporting}
               accessibilityRole="button"
-              accessibilityState={{ busy: exporting }}
+              accessibilityState={{ busy: exporting }} aria-busy={exporting}
               style={({ pressed }) => [styles.actionGhost, pressed && { opacity: 0.85 }]}
             >
               <Ionicons name="download-outline" size={16} color={C.text} />

@@ -20,7 +20,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, StatusBar, Animated, Alert, ActivityIndicator,
-  RefreshControl,
+  RefreshControl, Switch,
 } from 'react-native';
 
 import { SafeAreaView }    from 'react-native-safe-area-context';
@@ -28,7 +28,9 @@ import { Ionicons }        from '@expo/vector-icons';
 import { useFocusEffect }  from '@react-navigation/native';
 import { useAuth }         from '../context/AuthContext';
 import eventService    from '../services/eventService';
+import { isPlanLimit, planLimitAlert } from '../utils/plans';
 import { showAlert } from '../utils/dialog';
+import { logDev } from '../utils/log';
 
 // ─────────────────────────────────────────────────────────────────
 // API
@@ -124,6 +126,17 @@ export default function EventDashboardScreen({ route, navigation }) {
   const [loading,       setLoading]       = useState(true);
   const [refreshing,    setRefreshing]    = useState(false);
   const [publishing,    setPublishing]    = useState(false);
+  // Rôle : organisateur (tout), co-organisateur (tout sauf équipe, finances, suppression)
+  const [role,          setRole]          = useState(initialEvent?.my_role || 'organizer');
+
+  // Nouvel événement passé en paramètre (écran déjà monté) et « Publier et inviter »
+  const openInvite = route.params?.openInvite;
+  useEffect(() => {
+    if (initialEvent?.id && initialEvent.id !== event?.id) setEvent(initialEvent);
+  }, [initialEvent?.id]);
+  useEffect(() => {
+    if (openInvite && initialEvent) navigation.navigate('InviteGuests', { event: initialEvent });
+  }, [openInvite]);
 
   // Animation d'entrée
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -147,10 +160,11 @@ export default function EventDashboardScreen({ route, navigation }) {
 
       setEvent(detailData.event);
       setStats(detailData.invitations);
+      if (detailData.my_role) setRole(detailData.my_role);
       setCounts(participantsData.counts || { confirmed: 0, pending: 0, declined: 0, total: 0 });
 
     } catch (err) {
-      console.error('Erreur chargement event dashboard:', err);
+      logDev('Erreur chargement event dashboard:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -163,6 +177,16 @@ export default function EventDashboardScreen({ route, navigation }) {
   );
 
   const onRefresh = () => { setRefreshing(true); loadData(); };
+
+  // ── Mini-site ────────────────────────────────────────────────
+  const openMiniSite = () => {
+    if (!event.has_minisite) { navigation.navigate('MiniSiteGenerating', { event }); return; }
+    showAlert('Mon mini-site', 'Que voulez-vous faire ?', [
+      { text: 'Voir', onPress: () => navigation.navigate('MiniSiteView', { eventId: event.id }) },
+      { text: 'Retoucher', onPress: () => navigation.navigate('MiniSiteEditor', { eventId: event.id }) },
+      { text: 'Nouvelles propositions', onPress: () => navigation.navigate('MiniSiteGenerating', { event, regenerate: true }) },
+    ]);
+  };
 
   // ── Publier / Dépublier ──────────────────────────────────────
 const handlePublish = async () => {
@@ -199,8 +223,9 @@ const handlePublish = async () => {
                   : 'Votre événement est maintenant visible dans le fil de découverte.',
             );
           } catch (err) {
+            if (isPlanLimit(err)) { planLimitAlert(navigation, err, 'Publication impossible'); return; }
             const detail = err.response?.data?.detail || 'Impossible de modifier le statut.';
-            showAlert('Erreur', detail);
+            showAlert('Action impossible', detail);
           } finally {
             setPublishing(false);
           }
@@ -210,11 +235,46 @@ const handlePublish = async () => {
   );
 };
 
+  // ── Public ↔ Privé (modifiable à tout moment) ─────────────────
+  const [savingVisibility, setSavingVisibility] = useState(false);
+  const changeVisibility = (next) => {
+    if (next === event.visibility || savingVisibility) return;
+    const toPrivate = next === 'private';
+    showAlert(
+      toPrivate ? 'Passer en privé ?' : 'Passer en public ?',
+      toPrivate
+        ? "L'événement n'apparaîtra plus dans Découvrir. Seuls vos invités et les personnes déjà inscrites pourront le voir."
+        : (event.status === 'published'
+          ? "L'événement apparaîtra dans Découvrir : tout le monde pourra le voir et s'inscrire."
+          : "Une fois publié, l'événement apparaîtra dans Découvrir et tout le monde pourra le voir."),
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: toPrivate ? 'Passer en privé' : 'Passer en public',
+          onPress: async () => {
+            setSavingVisibility(true);
+            try {
+              const data = await eventService.updateEvent(event.id, { visibility: next });
+              setEvent((prev) => ({ ...prev, visibility: data.event?.visibility || next }));
+            } catch (err) {
+              showAlert('Action impossible', err.response?.data?.detail || 'Impossible de changer la visibilité.');
+            } finally {
+              setSavingVisibility(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // ── Supprimer l'événement ────────────────────────────────────
   const handleDelete = () => {
+    const n = counts.confirmed + counts.pending;
     showAlert(
       'Supprimer cet événement',
-      `Voulez-vous vraiment supprimer "${event.title}" ? Cette action est irréversible.`,
+      n
+        ? `« ${event.title} » sera annulé. ${n} participant${n > 1 ? 's' : ''} ${n > 1 ? 'seront prévenus' : 'sera prévenu'} et les paiements seront remboursés automatiquement. Cette action est irréversible.`
+        : `Voulez-vous vraiment supprimer « ${event.title} » ? Cette action est irréversible.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -222,13 +282,13 @@ const handlePublish = async () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await eventService.deleteEvent(event.id);
-              showAlert('Supprimé', 'L\'événement a été supprimé.', [{
+              const res = await eventService.deleteEvent(event.id);
+              showAlert('Événement supprimé', res?.message || "L'événement a été supprimé.", [{
                 text: 'OK',
-                onPress: () => navigation?.goBack(),
+                onPress: () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard')),
               }]);
             } catch {
-              showAlert('Erreur', 'Impossible de supprimer cet événement.');
+              showAlert('Suppression impossible', 'Vérifiez votre connexion et réessayez.');
             }
           },
         },
@@ -237,8 +297,33 @@ const handlePublish = async () => {
   };
 
   // ── Invités (M12, M13) ────────────────────────────────────────
-  const goInvite = () => navigation.navigate('InviteGuests', { event });
+  // Inviter ouvre l'événement aux invités : il doit être publié d'abord
+  const goInvite = () => {
+    if (event.status !== 'published') {
+      showAlert("Publiez d'abord l'événement",
+        event.visibility === 'private'
+          ? "Il restera privé : seules les personnes invitées pourront le voir."
+          : 'Il apparaîtra dans Découvrir, puis vous pourrez inviter vos proches.',
+        [{ text: 'Plus tard', style: 'cancel' }, {
+          text: 'Publier et inviter', onPress: async () => {
+            try {
+              await eventService.publishEvent(event.id, event.visibility);
+              const published = { ...event, status: 'published' };
+              setEvent(published);
+              navigation.navigate('InviteGuests', { event: published });
+            } catch (err) {
+              if (isPlanLimit(err)) planLimitAlert(navigation, err, 'Publication impossible');
+              else showAlert('Publication impossible', err.response?.data?.detail || 'Réessayez.');
+            }
+          },
+        }]);
+      return;
+    }
+    navigation.navigate('InviteGuests', { event });
+  };
   const goGuests = (filter = 'all') => navigation.navigate('GuestList', { event, filter });
+  const isOrganizer = role === 'organizer';
+  const started = event?.start_date && new Date(event.start_date) <= new Date();
 
   // ── Badge de statut de l'événement ───────────────────────────
   const statusConfig = {
@@ -272,14 +357,14 @@ const handlePublish = async () => {
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity
+            {isOrganizer ? <TouchableOpacity
               style={styles.editBtn}
-              onPress={() => navigation?.navigate('Conversations', { eventId: event.id })}
+              onPress={() => navigation?.navigate('Conversations', { eventId: event.id, eventTitle: event.title })}
               accessibilityRole="button"
               accessibilityLabel="Messages des invités"
             >
               <Ionicons name="chatbubble-ellipses-outline" size={20} color={C.green} />
-            </TouchableOpacity>
+            </TouchableOpacity> : null}
             <TouchableOpacity
               style={styles.editBtn}
               onPress={() => navigation?.navigate('EditEvent', { event })}
@@ -303,7 +388,7 @@ const handlePublish = async () => {
               style={[styles.sectionTab, tab.id === 'overview' && styles.sectionTabActive]}
               onPress={tab.onPress || undefined}
               accessibilityRole="tab"
-              accessibilityState={{ selected: tab.id === 'overview' }}
+              accessibilityState={{ selected: tab.id === 'overview' }} aria-selected={tab.id === 'overview'}
             >
               <Text style={[styles.sectionTabTxt, tab.id === 'overview' && styles.sectionTabTxtActive]}>
                 {tab.label}
@@ -383,18 +468,20 @@ const handlePublish = async () => {
                     />
                   </View>
 
-                  {/* Mini-site (lot IA) */}
+                  {/* Mini-site IA (M06–M08) : uniquement dans l'application */}
                   <TouchableOpacity
                     style={styles.minisiteCard}
-                    onPress={() => navigation.navigate('MiniSiteGenerating', { event })}
+                    onPress={openMiniSite}
                     activeOpacity={0.85}
                     accessibilityRole="button"
-                    accessibilityLabel="Générer le mini-site avec l'IA"
+                    accessibilityLabel={event.has_minisite ? 'Mon mini-site : voir, retoucher ou régénérer' : "Créer le mini-site avec l'IA"}
                   >
                     <View style={styles.actionRowIcon}><Ionicons name="sparkles-outline" size={20} color={C.green} /></View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.actionRowTitle}>Pas encore de mini-site</Text>
-                      <Text style={styles.actionRowSub}>Générez-le avec l'IA à partir de vos photos.</Text>
+                      <Text style={styles.actionRowTitle}>{event.has_minisite ? 'Mon mini-site' : 'Créer mon mini-site'}</Text>
+                      <Text style={styles.actionRowSub}>{event.has_minisite
+                        ? 'Voir, retoucher ou demander de nouvelles propositions.'
+                        : "6 propositions uniques composées par l'IA, à vos couleurs."}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={C.textMut} />
                   </TouchableOpacity>
@@ -406,15 +493,82 @@ const handlePublish = async () => {
                     <ActionRow icon="people-outline" title="Invités & réponses"
                       subtitle={counts.total ? `${counts.total} invité${counts.total > 1 ? 's' : ''} · ${counts.confirmed} confirmé${counts.confirmed > 1 ? 's' : ''}` : 'Aucun invité pour le moment'}
                       onPress={() => goGuests('all')} />
-                    <ActionRow icon="chatbubbles-outline" title="Messages des invités"
-                      subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id })} />
-                    <ActionRow icon="help-circle-outline" title="Questions RSVP" last
+                    {/* Les invités écrivent à l'organisateur ; les co-organisateurs passent par « Message à tous » */}
+                    {isOrganizer ? <ActionRow icon="chatbubbles-outline" title="Messages des invités"
+                      subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id, eventTitle: event.title })} /> : null}
+                    <ActionRow icon="qr-code-outline" title="Contrôler les entrées"
+                      subtitle="Contrôle à l'entrée avec l'appareil photo" onPress={() => navigation.navigate('ScanTickets', { event })} />
+                    <ActionRow icon="help-circle-outline" title="Questions RSVP"
                       subtitle="Posez jusqu'à 5 questions à vos invités" onPress={() => navigation.navigate('RsvpQuestions', { event })} />
+                    <ActionRow icon="megaphone-outline" title="Message à tous les invités"
+                      subtitle="Une information importante, en une fois" onPress={() => navigation.navigate('Broadcast', { event })} />
+                    <ActionRow icon="basket-outline" title="Le panier"
+                      subtitle="Cagnotte : objets et participations, avec le bilan" onPress={() => navigation.navigate('Basket', { event })} />
+                    {/* Réponses automatiques aux questions (lieu, horaires, prix…) dans « Messages des invités » */}
+                    <View style={styles.assistantRow}>
+                      <View style={styles.assistantIcon}><Ionicons name="sparkles-outline" size={20} color={C.green} /></View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.assistantTitle}>Réponses automatiques</Text>
+                        <Text style={styles.assistantSub}>
+                          {event.assistant_enabled === false
+                            ? 'Désactivées : vous répondez vous-même à chaque question.'
+                            : 'Les questions courantes reçoivent une réponse tirée de votre événement ; les autres vous sont transmises.'}
+                        </Text>
+                      </View>
+                      <Switch value={event.assistant_enabled !== false} trackColor={{ true: C.green }}
+                        accessibilityLabel="Réponses automatiques aux questions des invités"
+                        onValueChange={async (v) => {
+                          setEvent((prev) => ({ ...prev, assistant_enabled: v }));
+                          try { await eventService.updateEvent(event.id, { assistant_enabled: v }); }
+                          catch { setEvent((prev) => ({ ...prev, assistant_enabled: !v })); showAlert('Réglage non enregistré', 'Vérifiez votre connexion puis réessayez.'); }
+                        }} />
+                    </View>
+                  </View>
+
+                  {/* Cogestion, statistiques, souvenirs, finances */}
+                  <View style={styles.rowsCard}>
+                    <ActionRow icon="people-circle-outline" title="Équipe"
+                      subtitle={isOrganizer ? 'Co-organisateurs, photographes, répartition des invités' : 'Organisateurs et photographes de l’événement'}
+                      onPress={() => navigation.navigate('EventTeam', { event })} />
+                    <ActionRow icon="stats-chart-outline" title="Statistiques"
+                      subtitle={started ? 'Vues, réponses, présence réelle' : 'Vues, j’aime, réponses des invités'}
+                      onPress={() => navigation.navigate('EventStats', { event })} />
+                    <ActionRow icon="images-outline" title="Souvenirs"
+                      subtitle="Photos de l’événement et commentaires des invités"
+                      onPress={() => navigation.navigate('Memories', { event })} last={!(isOrganizer && event.is_paid)} />
+                    {isOrganizer && event.is_paid ? (
+                      <ActionRow icon="wallet-outline" title="Finances" subtitle="Recettes, commission, ce que vous gagnez"
+                        onPress={() => navigation.navigate('EventFinance', { event })} last />
+                    ) : null}
                   </View>
 
                   {/* Actions principales */}
                   <View style={styles.actionsCard}>
                     <Text style={styles.cardTitle}>Actions</Text>
+
+                    {/* Visibilité : Public / Privé */}
+                    <Text style={styles.visLabel} nativeID="visLabel">Visibilité</Text>
+                    <View style={styles.visRow} accessibilityRole="radiogroup" accessibilityLabel="Visibilité">
+                      {[
+                        { value: 'public',  label: 'Public', icon: 'earth-outline',       desc: 'Visible par tous' },
+                        { value: 'private', label: 'Privé',  icon: 'lock-closed-outline', desc: 'Sur invitation' },
+                      ].map((v) => {
+                        const active = event.visibility === v.value;
+                        return (
+                          <TouchableOpacity key={v.value} style={[styles.visOpt, active && styles.visOptActive]}
+                            onPress={() => changeVisibility(v.value)} disabled={savingVisibility} activeOpacity={0.85}
+                            accessibilityRole="radio" accessibilityState={{ checked: active, disabled: savingVisibility }} aria-checked={active} aria-disabled={savingVisibility}
+                            accessibilityLabel={`${v.label} : ${v.desc}`}>
+                            <Ionicons name={v.icon} size={18} color={active ? C.white : C.green} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.visOptTxt, active && { color: C.white }]}>{v.label}</Text>
+                              <Text style={[styles.visOptSub, active && { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>{v.desc}</Text>
+                            </View>
+                            {active && savingVisibility ? <ActivityIndicator size="small" color={C.white} /> : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
 
                     {/* Bouton Publier / Dépublier */}
                     <TouchableOpacity
@@ -447,13 +601,13 @@ const handlePublish = async () => {
                       <View style={styles.publishedInfo}>
                         <Ionicons name="checkmark-circle" size={14} color={C.green} />
                         <Text style={styles.publishedInfoTxt}>
-                          Visible dans le fil de découverte
+                          {event.visibility === 'private' ? 'Accessible uniquement à vos invités' : 'Visible dans le fil de découverte'}
                         </Text>
                       </View>
                     )}
 
-                    {/* Bouton Supprimer */}
-                    <TouchableOpacity
+                    {/* Bouton Supprimer (organisateur seulement) */}
+                    {isOrganizer ? <TouchableOpacity
                       style={[styles.actionBtn, styles.actionBtnDanger]}
                       onPress={handleDelete}
                       activeOpacity={0.85}
@@ -462,7 +616,7 @@ const handlePublish = async () => {
                       <Text style={[styles.actionBtnTxt, { color: C.error }]}>
                         Supprimer l'événement
                       </Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity> : null}
                   </View>
 
                   {/* Informations de l'événement */}
@@ -473,11 +627,10 @@ const handlePublish = async () => {
                       { icon: 'calendar-outline',  label: 'Début',       value: formatDate(event.start_date) },
                       { icon: 'calendar-outline',  label: 'Fin',         value: formatDate(event.end_date) },
                       { icon: 'location-outline',  label: 'Lieu',        value: event.is_online ? 'En ligne' : (event.location_address || '—') },
-                      { icon: 'pricetag-outline',  label: 'Prix du ticket', value: formatPriceLabel(event) },
+                      { icon: 'pricetag-outline',  label: 'Prix', value: formatPriceLabel(event) },
                       { icon: 'shirt-outline',     label: 'Dress code',  value: event.dress_code || '—' },
                       { icon: 'eye-outline',       label: 'Visibilité',  value: event.visibility === 'public' ? 'Public' : 'Privé' },
                       { icon: 'color-palette-outline', label: 'Ambiance', value: event.ambiance || '—' },
-                      { icon: 'link-outline',      label: 'Lien',        value: event.subdomain ? `easevent.app/${event.subdomain}` : '—' },
                     ].map((row, i) => (
                       <View key={i} style={styles.infoRow}>
                         <View style={styles.infoRowLeft}>
@@ -515,6 +668,16 @@ const handlePublish = async () => {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  assistantRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16 },
+  assistantIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  assistantTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+  assistantSub: { fontSize: 12, color: C.textSub, marginTop: 2, lineHeight: 17 },
+  visLabel:     { fontSize: 12, fontWeight: '700', color: C.textMut, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  visRow:       { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  visOpt:       { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 56, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white },
+  visOptActive: { backgroundColor: C.green, borderColor: C.green },
+  visOptTxt:    { fontSize: 14, fontWeight: '800', color: C.text },
+  visOptSub:    { fontSize: 11, color: C.textMut },
   // M11 — lignes d'action
   rowsCard: { backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, marginBottom: 14 },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, borderBottomWidth: 1, borderBottomColor: C.border },
@@ -639,7 +802,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  infoRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  infoRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 12 },
   infoLabel:   { fontSize: 13, color: C.textMut, fontWeight: '500' },
   infoValue:   { fontSize: 13, color: C.text, fontWeight: '600', flex: 1, textAlign: 'right' },
   descText:    { fontSize: 14, color: C.textSub, lineHeight: 21 },

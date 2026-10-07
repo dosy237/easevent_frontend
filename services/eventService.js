@@ -1,4 +1,6 @@
+import { withRsvp } from '../utils/rsvp';
 import { apiClient } from './apiClient';
+import { logDev } from '../utils/log';
 
 /**
  * eventService.js
@@ -14,21 +16,18 @@ const eventService = {
       const response = await apiClient.get('/api/invitations/mine/');
       return response.data;
     } catch (error) {
-      console.error('Error fetching invitations:', error);
+      logDev('Error fetching invitations:', error);
       throw error;
     }
   },
 
   // Respond to an invitation (accept/decline)
-  respondToInvitation: async (invitationId, status) => {
-    try {
-      const response = await apiClient.post(`/api/invitations/${invitationId}/repondre/`, { status });
-      return response.data;
-    } catch (error) {
-      console.error('Error responding to invitation:', error);
-      throw error;
-    }
-  },
+  // Accepter affiche d'abord les questions RSVP de l'organisateur s'il y en a (M19)
+  respondToInvitation: async (invitationId, status) => withRsvp(async (answers) => {
+    const response = await apiClient.post(`/api/invitations/${invitationId}/repondre/`,
+      answers === undefined ? { status } : { status, rsvp_answers: answers });
+    return response.data;
+  }),
 
   // Fetch events created by the current user
   fetchMyEvents: async () => {
@@ -36,7 +35,7 @@ const eventService = {
       const response = await apiClient.get('/api/events/mes-evenements/');
       return response.data;
     } catch (error) {
-      console.error('Error fetching my events:', error);
+      logDev('Error fetching my events:', error);
       throw error;
     }
   },
@@ -46,7 +45,7 @@ const eventService = {
       const response = await apiClient.get('/api/events/publics/', { params });
       return response.data;
     } catch (error) {
-      console.error('Error fetching public events:', error);
+      logDev('Error fetching public events:', error);
       throw error;
     }
   },
@@ -57,7 +56,7 @@ const eventService = {
       const response = await apiClient.get(`/api/events/${eventId}/detail/`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching event detail:', error);
+      logDev('Error fetching event detail:', error);
       throw error;
     }
   },
@@ -68,7 +67,7 @@ const eventService = {
       const response = await apiClient.get(`/api/events/${eventId}/participants/`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching event participants:', error);
+      logDev('Error fetching event participants:', error);
       throw error;
     }
   },
@@ -79,9 +78,29 @@ const eventService = {
       const response = await apiClient.post(`/api/events/${eventId}/publish/`, { visibility });
       return response.data;
     } catch (error) {
-      console.error('Error publishing event:', error);
+      logDev('Error publishing event:', error);
       throw error;
     }
+  },
+
+  // « J'aime » (événements publics) : { liked, likes_count }
+  like: async (eventId, on = true) =>
+    (await (on ? apiClient.post(`/api/events/${eventId}/like/`) : apiClient.delete(`/api/events/${eventId}/like/`))).data,
+
+  // Partager un événement public à des amis (carte dans leur messagerie)
+  share: async (eventId, userIds, message = '') =>
+    (await apiClient.post(`/api/events/${eventId}/share/`, { user_ids: userIds, message })).data,
+
+  // Signature d'envoi direct d'une vidéo à Cloudinary (45 s au plus)
+  videoSignature: async () => (await apiClient.post('/api/events/video/signature/')).data,
+
+  // Événements restants ce mois-ci selon le plan : { limit, used, remaining, resets_on }
+  fetchQuota: async () => (await apiClient.get('/api/events/quota/')).data,
+
+  // Modifier un événement (PATCH partiel — organisateur uniquement)
+  updateEvent: async (eventId, data) => {
+    const response = await apiClient.patch(`/api/events/${eventId}/update/`, data);
+    return response.data;
   },
 
   // Invite a participant
@@ -90,7 +109,7 @@ const eventService = {
       const response = await apiClient.post(`/api/events/${eventId}/invite/`, inviteData);
       return response.data;
     } catch (error) {
-      console.error('Error inviting participant:', error);
+      logDev('Error inviting participant:', error);
       throw error;
     }
   },
@@ -101,7 +120,7 @@ const eventService = {
       const response = await apiClient.delete(`/api/invitations/${invitationId}/revoke/`);
       return response.data;
     } catch (error) {
-      console.error('Error revoking invitation:', error);
+      logDev('Error revoking invitation:', error);
       throw error;
     }
   },
@@ -112,7 +131,7 @@ const eventService = {
       const response = await apiClient.delete(`/api/events/${eventId}/delete/`);
       return response.data;
     } catch (error) {
-      console.error('Error deleting event:', error);
+      logDev('Error deleting event:', error);
       throw error;
     }
   },
@@ -126,7 +145,7 @@ const eventService = {
       });
       return response.data;
     } catch (error) {
-      console.error('Error uploading image:', error);
+      logDev('Error uploading image:', error);
       throw error;
     }
   },
@@ -137,7 +156,7 @@ const eventService = {
       const response = await apiClient.post('/api/events/create/', eventData);
       return response.data;
     } catch (error) {
-      console.error('Error creating event:', error);
+      logDev('Error creating event:', error);
       throw error;
     }
   },

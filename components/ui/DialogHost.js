@@ -32,7 +32,10 @@ export default function DialogHost() {
 
   if (!dialog) return null;
   // Action principale en dernier, comme sur iOS
-  const buttons = [...dialog.buttons].sort((a, b) => (a.style === 'cancel' ? -1 : 0) - (b.style === 'cancel' ? -1 : 0));
+  // Plus de deux choix : boutons empilés, le choix principal en haut, l'annulation en bas
+  const stacked = dialog.buttons.length > 2;
+  const cancelFirst = (a, b) => (a.style === 'cancel' ? -1 : 0) - (b.style === 'cancel' ? -1 : 0);
+  const buttons = [...dialog.buttons].sort(stacked ? (a, b) => -cancelFirst(a, b) : cancelFirst);
 
   return (
     <Modal transparent animationType="fade" visible onRequestClose={() => close(buttons.find((b) => b.style === 'cancel'))}>
@@ -47,23 +50,26 @@ export default function DialogHost() {
         >
           <Text nativeID="dialog-title" style={styles.title}>{dialog.title}</Text>
           {dialog.message ? <Text style={styles.message}>{dialog.message}</Text> : null}
-          <View style={styles.row}>
+          <View style={stacked ? styles.column : styles.row}>
             {buttons.map((b, i) => {
-              const primary = b.style !== 'cancel';
+              // Empilés : seul le premier choix est plein, les autres sont soulignés d'un contour vert
+              const secondary = stacked && i > 0 && b.style !== 'cancel';
+              const primary = b.style !== 'cancel' && !secondary;
               const destructive = b.style === 'destructive';
               return (
                 <Pressable
                   key={`${b.text}-${i}`}
-                  ref={i === buttons.length - 1 ? firstBtn : undefined}
+                  ref={(stacked ? i === 0 : i === buttons.length - 1) ? firstBtn : undefined}
                   onPress={() => close(b)}
                   accessibilityRole="button"
                   style={({ pressed, focused }) => [
                     styles.btn,
-                    primary ? (destructive ? styles.btnDanger : styles.btnPrimary) : styles.btnGhost,
+                    primary ? (destructive ? styles.btnDanger : styles.btnPrimary) : secondary ? styles.btnOutline : styles.btnGhost,
+                    stacked && styles.btnStacked,
                     (pressed || focused) && styles.btnActive,
                   ]}
                 >
-                  <Text style={[styles.btnTxt, primary ? styles.btnTxtPrimary : styles.btnTxtGhost]}>{b.text}</Text>
+                  <Text style={[styles.btnTxt, primary ? styles.btnTxtPrimary : secondary ? styles.btnTxtOutline : styles.btnTxtGhost]}>{b.text}</Text>
                 </Pressable>
               );
             })}
@@ -80,6 +86,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 8 },
   message: { fontSize: 15, color: C.textSub, lineHeight: 22, marginBottom: 20 },
   row: { flexDirection: 'row', gap: 10 },
+  column: { gap: 10 },
+  btnStacked: { flex: 0, width: '100%' },
+  btnOutline: { backgroundColor: C.white, borderWidth: 1.5, borderColor: C.green },
+  btnTxtOutline: { color: C.green },
   btn: { flex: 1, minHeight: TOUCH, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   btnPrimary: { backgroundColor: C.green },
   btnDanger: { backgroundColor: C.error },

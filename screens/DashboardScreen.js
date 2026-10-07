@@ -60,16 +60,20 @@ import { useFocusEffect } from '@react-navigation/native';
 // Retourne : user (infos utilisateur), accessToken (JWT), refreshAccessToken (renouveler le token)
 import { useAuth } from '../context/AuthContext';
 import { useTicketBadge } from '../context/TicketBadgeContext';
-import NotificationBell, { bellLabel } from '../components/ui/NotificationBell';
+import NotificationBell, { bellLabel, MessagesBubble, messagesLabel } from '../components/ui/NotificationBell';
 
 // ─────────────────────────────────────────────────────────────────
 // SERVICES
 // ─────────────────────────────────────────────────────────────────
 
 import eventService from '../services/eventService';
+import teamService from '../services/teamService';
 import { SkeletonGroup, StatsSkeleton, EventCardSkeleton, Bone } from '../components/ui/Skeleton';
 import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
 import { showAlert } from '../utils/dialog';
+import { isRsvpCancel } from '../utils/rsvp';
+import { apiErrorMessage } from '../services/authService';
+import { logDev } from '../utils/log';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE DE COULEURS — identique aux autres écrans pour la cohérence
 // ─────────────────────────────────────────────────────────────────
@@ -225,7 +229,7 @@ const InvitationCard = ({ invitation, onRespond, onPress }) => {
         </View>
 
         {/* Boutons répondre — affichés seulement si l'invitation est en attente */}
-        {invitation.status === 'sent' && (
+        {['sent', 'opened'].includes(invitation.status) && (
           <View style={styles.invitActions}>
             {/* Bouton Décliner */}
             <TouchableOpacity
@@ -267,7 +271,10 @@ const InvitationCard = ({ invitation, onRespond, onPress }) => {
 // - onPress  : naviguer vers le détail / dashboard de l'événement
 // - onDelete : supprimer l'événement
 // ════════════════════════════════════════════════════════════════
+const ROLE_CHIP = { cohost: 'Co-organisateur', photographer: 'Photographe' };
+
 const EventCard = ({ event, onPress, onDelete }) => {
+  const role = event.my_role || 'organizer';
 
   // Configuration des badges selon le statut de l'événement
   // Chaque statut a une couleur et un label différents
@@ -303,6 +310,11 @@ const EventCard = ({ event, onPress, onDelete }) => {
       <View style={[styles.eventStatusBadge, { backgroundColor: s.bg }]}>
         <Text style={[styles.eventStatusTxt, { color: s.color }]}>{s.label}</Text>
       </View>
+      {ROLE_CHIP[role] ? (
+        <View style={[styles.eventStatusBadge, { top: 42, backgroundColor: C.orangeL }]}>
+          <Text style={[styles.eventStatusTxt, { color: C.orange }]}>{ROLE_CHIP[role]}</Text>
+        </View>
+      ) : null}
 
       {/* Corps de la card */}
       <View style={styles.eventBody}>
@@ -347,18 +359,18 @@ const EventCard = ({ event, onPress, onDelete }) => {
             onPress={() => onPress && onPress(event)}
             activeOpacity={0.8}
           >
-            <Ionicons name="create-outline" size={14} color={C.green} />
-            <Text style={styles.manageTxt}>Gérer</Text>
+            <Ionicons name={role === 'photographer' ? 'camera-outline' : 'create-outline'} size={14} color={C.green} />
+            <Text style={styles.manageTxt}>{role === 'photographer' ? 'Photos' : 'Gérer'}</Text>
           </TouchableOpacity>
 
-          {/* Bouton Supprimer → alerte de confirmation */}
-          <TouchableOpacity
+          {/* Bouton Supprimer → alerte de confirmation (organisateur seulement) */}
+          {role === 'organizer' ? <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => onDelete && onDelete(event)}
             activeOpacity={0.8}
           >
             <Ionicons name="trash-outline" size={14} color={C.orange} />
-          </TouchableOpacity>
+          </TouchableOpacity> : null}
         </View>
       </View>
     </TouchableOpacity>
@@ -379,6 +391,8 @@ export default function DashboardScreen({ navigation }) {
   // ── États locaux ──────────────────────────────────────────────
   // invitations : liste des invitations reçues par l'utilisateur
   const [invitations, setInvitations] = useState([]);
+  // Propositions de co-organisation / photographe en attente
+  const [teamInvites, setTeamInvites] = useState([]);
 
   // myEvents : liste des événements créés par l'utilisateur
   const [myEvents,    setMyEvents]    = useState([]);
@@ -424,17 +438,19 @@ export default function DashboardScreen({ navigation }) {
     try {
       // Promise.all lance les deux requêtes EN PARALLÈLE
       // On fait : invitations ET événements en même temps (deux fois plus rapide)
-      const [invitData, eventsData] = await Promise.all([
+      const [invitData, eventsData, teamData] = await Promise.all([
         eventService.fetchMyInvitations(),
         eventService.fetchMyEvents(),
+        teamService.invitations().catch(() => []),
       ]);
+      setTeamInvites(teamData || []);
 
       setInvitations(invitData.invitations || []);
       setMyEvents(eventsData.events || []);
       setLoadError('');
 
     } catch (err) {
-      console.error('Erreur chargement dashboard:', err);
+      logDev('Erreur chargement dashboard:', err);
       setLoadError(err.response
         ? 'Impossible de charger vos données pour le moment.'
         : 'Connexion impossible. Vérifiez votre réseau.');
@@ -468,7 +484,24 @@ export default function DashboardScreen({ navigation }) {
         )
       );
     } catch (err) {
-      showAlert('Erreur', 'Impossible de répondre à cette invitation. Réessayez.');
+      if (isRsvpCancel(err)) return;
+      showAlert('Réponse impossible', apiErrorMessage(err, 'Impossible de répondre à cette invitation. Réessayez.'));
+    }
+  };
+
+  // ── Proposition d'équipe : accepter / refuser ──────────────────
+  const respondTeam = async (t, accept) => {
+    try {
+      await teamService.respond(t.id, accept);
+      setTeamInvites((prev) => prev.filter((x) => x.id !== t.id));
+      if (accept) {
+        showAlert('Bienvenue dans l’équipe', t.role === 'cohost'
+          ? `Vous gérez maintenant « ${t.event_title} » avec ${t.invited_by}.`
+          : `Vous pouvez ajouter vos photos à « ${t.event_title} » dès le début de l’événement.`);
+        loadData();
+      }
+    } catch (err) {
+      showAlert('Réponse impossible', apiErrorMessage(err));
     }
   };
 
@@ -489,7 +522,7 @@ export default function DashboardScreen({ navigation }) {
               // Retirer l'événement de la liste sans recharger
               setMyEvents(prev => prev.filter(e => e.id !== event.id));
             } catch {
-              showAlert('Erreur', 'Impossible de supprimer cet événement.');
+              showAlert('Suppression impossible', 'Vérifiez votre connexion et réessayez.');
             }
           },
         },
@@ -504,15 +537,18 @@ export default function DashboardScreen({ navigation }) {
   };
 
   // ── Navigations ──────────────────────────────────────────────
-const goToEventDetail = (event) => navigation?.navigate('EventDashboard', { event });
+// Photographe : directement l'espace souvenirs ; organisateurs : la gestion de l'événement
+const goToEventDetail = (event) => navigation?.navigate(event.my_role === 'photographer' ? 'Memories' : 'EventDashboard', { event });
+// Invitation reçue : la page de l'événement (vue invité), pas l'écran de gestion
+const goToInvitedEvent = (event) => event?.id && navigation?.navigate('TabDiscover', { screen: 'EventDetail', initial: false, params: { event } });
 const goToDiscover    = ()      => navigation?.getParent()?.navigate('TabDiscover');
 const goToProfile     = ()      => navigation?.getParent()?.navigate('TabProfile');
 const goToMessages    = ()      => navigation?.navigate('Conversations');
 const goToNotifications = ()    => navigation?.navigate('Notifications');
-  const { notifications: notifCount } = useTicketBadge();
+  const { notifications: notifCount, messages: msgCount } = useTicketBadge();
 
   // Invitations en attente de réponse
-  const pendingInvitations = invitations.filter(i => i.status === 'sent');
+  const pendingInvitations = invitations.filter(i => ['sent', 'opened'].includes(i.status));
 
   // Si pas d'utilisateur connecté, ne rien afficher
   if (!user) return null;
@@ -544,9 +580,9 @@ const goToNotifications = ()    => navigation?.navigate('Notifications');
               style={styles.headerIconBtn}
               onPress={goToMessages}
               accessibilityRole="button"
-              accessibilityLabel="Messages des invités"
+              accessibilityLabel={messagesLabel(msgCount)}
             >
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color={C.text} />
+              <MessagesBubble size={20} />
             </TouchableOpacity>
             {/* Notifications (M17) */}
             <TouchableOpacity
@@ -689,11 +725,42 @@ const goToNotifications = ()    => navigation?.navigate('Notifications');
                       key={inv.id}
                       invitation={inv}
                       onRespond={handleRespond}
-                      onPress={goToEventDetail}
+                      onPress={goToInvitedEvent}
                     />
                   ))
                 )}
               </View>
+
+              {/* ── PROPOSITIONS D'ÉQUIPE (co-organiser, photographe) ── */}
+              {teamInvites.length ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Propositions d'équipe</Text>
+                  </View>
+                  {teamInvites.map((t) => (
+                    <View key={t.id} style={styles.teamCard}>
+                      <View style={styles.teamIcon}>
+                        <Ionicons name={t.role === 'cohost' ? 'people-outline' : 'camera-outline'} size={20} color={C.green} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.teamTitle} numberOfLines={2}>
+                          {t.invited_by} vous propose {t.role === 'cohost' ? 'de co-organiser' : "d'être photographe pour"} « {t.event_title} »
+                        </Text>
+                        <View style={styles.teamBtns}>
+                          <TouchableOpacity style={styles.teamNo} onPress={() => respondTeam(t, false)} accessibilityRole="button"
+                            accessibilityLabel={`Refuser : ${t.event_title}`}>
+                            <Text style={styles.teamNoTxt}>Refuser</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.teamYes} onPress={() => respondTeam(t, true)} accessibilityRole="button"
+                            accessibilityLabel={`Accepter : ${t.event_title}`}>
+                            <Text style={styles.teamYesTxt}>Accepter</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
 
               {/* ── SECTION : MES ÉVÉNEMENTS ───────────────────────
                   Affiche les événements créés par l'utilisateur.
@@ -719,7 +786,7 @@ const goToNotifications = ()    => navigation?.navigate('Notifications');
                       Créez votre premier événement
                     </Text>
                     <Text style={styles.createFirstSub}>
-                      Mini-site personnalisé, invitations, analytics — tout en un.
+                      Invitations, billetterie, messagerie et contrôle des entrées — tout en un.
                     </Text>
                     <View style={styles.createFirstBtn}>
                       <Text style={styles.createFirstBtnTxt}>Commencer</Text>
@@ -926,6 +993,14 @@ const styles = StyleSheet.create({
     elevation:       2,
   },
   eventImg: { width: '100%', height: 140 },
+  teamCard: { flexDirection: 'row', gap: 12, backgroundColor: C.white, borderRadius: 16, borderWidth: 1, borderColor: C.border, padding: 14, marginBottom: 10 },
+  teamIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  teamTitle: { fontSize: 14, fontWeight: '700', color: C.text, lineHeight: 20 },
+  teamBtns: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  teamNo: { flex: 1, minHeight: 40, borderRadius: 10, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  teamNoTxt: { fontWeight: '700', color: C.textSub },
+  teamYes: { flex: 1, minHeight: 40, borderRadius: 10, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
+  teamYesTxt: { fontWeight: '800', color: C.white },
   eventStatusBadge: {
     position:         'absolute',
     top:              10,
