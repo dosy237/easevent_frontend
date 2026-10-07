@@ -64,6 +64,7 @@ const LOOK = {
   event_cancelled:     { icon: 'close-circle-outline', bg: C.errorBg, fg: C.errorText },
   invitation_revoked:  { icon: 'remove-circle-outline', bg: '#F4F4F4', fg: C.text },
   payouts_ready:       { icon: 'wallet-outline', bg: C.greenLight, fg: C.green },
+  minisite_ready:      { icon: 'sparkles-outline', bg: C.greenLight, fg: C.green, cta: 'Choisir mon mini-site' },
   subscription:        { icon: 'star-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Mon abonnement' },
   friend_request:      { icon: 'person-add-outline', bg: C.greenLight, fg: C.green },
   friend_accepted:     { icon: 'people-outline', bg: C.greenLight, fg: C.green, cta: 'Voir mes amis' },

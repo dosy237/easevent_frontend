@@ -175,6 +175,16 @@ export default function EventDashboardScreen({ route, navigation }) {
 
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
+  // ── Mini-site ────────────────────────────────────────────────
+  const openMiniSite = () => {
+    if (!event.has_minisite) { navigation.navigate('MiniSiteGenerating', { event }); return; }
+    showAlert('Mon mini-site', 'Que voulez-vous faire ?', [
+      { text: 'Voir', onPress: () => navigation.navigate('MiniSiteView', { eventId: event.id }) },
+      { text: 'Retoucher', onPress: () => navigation.navigate('MiniSiteEditor', { eventId: event.id }) },
+      { text: 'Nouvelles propositions', onPress: () => navigation.navigate('MiniSiteGenerating', { event, regenerate: true }) },
+    ]);
+  };
+
   // ── Publier / Dépublier ──────────────────────────────────────
 const handlePublish = async () => {
   const isPublished  = event.status === 'published';
@@ -453,18 +463,20 @@ const handlePublish = async () => {
                     />
                   </View>
 
-                  {/* Mini-site (lot IA) */}
+                  {/* Mini-site IA (M06–M08) : uniquement dans l'application */}
                   <TouchableOpacity
                     style={styles.minisiteCard}
-                    onPress={() => navigation.navigate('MiniSiteGenerating', { event })}
+                    onPress={openMiniSite}
                     activeOpacity={0.85}
                     accessibilityRole="button"
-                    accessibilityLabel="Générer le mini-site avec l'IA"
+                    accessibilityLabel={event.has_minisite ? 'Mon mini-site : voir, retoucher ou régénérer' : "Créer le mini-site avec l'IA"}
                   >
                     <View style={styles.actionRowIcon}><Ionicons name="sparkles-outline" size={20} color={C.green} /></View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.actionRowTitle}>Pas encore de mini-site</Text>
-                      <Text style={styles.actionRowSub}>Générez-le avec l'IA à partir de vos photos.</Text>
+                      <Text style={styles.actionRowTitle}>{event.has_minisite ? 'Mon mini-site' : 'Créer mon mini-site'}</Text>
+                      <Text style={styles.actionRowSub}>{event.has_minisite
+                        ? 'Voir, retoucher ou demander de nouvelles propositions.'
+                        : "6 propositions uniques composées par l'IA, à vos couleurs."}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={C.textMut} />
                   </TouchableOpacity>

@@ -206,6 +206,15 @@ export default function EventDetailScreen({ route, navigation }) {
   const [error, setError]       = useState(null);
   const [viewer, setViewer]     = useState(null);     // photo affichée en plein écran
 
+  // « Je participe » touché dans le mini-site : même parcours que le bouton de cette page
+  const participateRef = useRef(null);
+  const participateToken = params.participate;
+  useEffect(() => {
+    if (!participateToken || !fullEvent?.title || loading || !participateRef.current) return;
+    navigation.setParams({ participate: undefined });
+    participateRef.current();
+  }, [participateToken, fullEvent?.title, loading]);
+
   // Animations d'entrée du contenu
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -357,6 +366,8 @@ export default function EventDetailScreen({ route, navigation }) {
     : soldOut ? 'Complet'
     : isPaid ? 'Payer et générer mon ticket'
     : 'Participer — ticket gratuit';
+
+  participateRef.current = () => (isAuthenticated ? ticketAction() : handleParticipate());
 
   const contactOrganizer = () => navigation.navigate('Chat', {
     eventId: fullEvent.id, organizerName: fullEvent.organizer?.name,
@@ -545,6 +556,19 @@ export default function EventDetailScreen({ route, navigation }) {
               </>
             ) : null}
           </View>
+
+          {/* ── Mini-site de l'événement (dans l'application) ─── */}
+          {fullEvent.has_minisite ? (
+            <Pressable style={styles.minisiteBtn} onPress={() => navigation.navigate('MiniSiteView', { eventId: fullEvent.id })}
+              accessibilityRole="button" accessibilityLabel="Voir le mini-site de l'événement">
+              <View style={styles.minisiteIcon}><Ionicons name="sparkles" size={20} color={C.white} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.minisiteTitle}>Voir le mini-site</Text>
+                <Text style={styles.minisiteSub}>Toutes les infos de l'événement, mises en page par l'organisateur</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.green} />
+            </Pressable>
+          ) : null}
 
           {/* ── Lieu sur la carte + itinéraire ─────────────── */}
           {!fullEvent.is_online && fullEvent.location_address ? (
@@ -858,6 +882,10 @@ const styles = StyleSheet.create({
   },
 
   // ── Card description
+  minisiteBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.greenLight, borderRadius: 16, padding: 14, marginBottom: 14 },
+  minisiteIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
+  minisiteTitle: { fontSize: 16, fontWeight: '800', color: C.green },
+  minisiteSub: { fontSize: 13, color: C.textSub, marginTop: 2 },
   descCard: {
     backgroundColor: C.white,
     borderRadius: 18, padding: 18,

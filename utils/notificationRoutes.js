@@ -45,6 +45,10 @@ export function openNotification(navigation, n) {
         screen: 'Chat', initial: false, params: { conversationId, title: n.title },
       });
     }
+    case 'minisite_ready':
+      return eventId && navigation.navigate('TabDashboard', {
+        screen: 'TemplatePicker', initial: false, params: { event: n.event || { id: eventId } },
+      });
     case 'payouts_ready':
       return navigation.navigate('TabProfile', { screen: 'Payouts', initial: false });
     case 'subscription':

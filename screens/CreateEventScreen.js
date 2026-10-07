@@ -741,7 +741,6 @@ export default function CreateEventScreen({ navigation, route }) {
 
       const createdTitle = title;
       resetForm();
-      // TODO lot « mini-site IA » : passer par M05 (EventCreated) avant ce choix
       // L'événement est créé en brouillon : on propose de le publier et d'inviter tout de suite, ou plus tard.
       const openEvent = (invite) => navigation?.navigate('TabDashboard', {
         screen: 'EventDashboard', initial: false,   // le tableau de bord reste dessous (bouton retour)

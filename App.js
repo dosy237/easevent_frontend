@@ -41,6 +41,10 @@ import { C } from './constants/theme';
 
 import HomeScreen from './screens/HomeScreen';
 import EventDetailScreen from './screens/EventDetailScreen';
+import MiniSiteViewScreen from './screens/MiniSiteViewScreen';
+import MiniSiteGeneratingScreen from './screens/MiniSiteGeneratingScreen';
+import TemplatePickerScreen from './screens/TemplatePickerScreen';
+import MiniSiteEditorScreen from './screens/MiniSiteEditorScreen';
 import LoginScreen from './screens/LoginScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -179,6 +183,7 @@ function PublicNavigator() {
     <PublicStack.Navigator screenOptions={stackOptions}>
       <PublicStack.Screen name="Home"           component={HomeScreen}           options={{ title: 'Découvrir' }} />
       <PublicStack.Screen name="EventDetail"    component={EventDetailScreen}    options={{ title: 'Événement' }} />
+      <PublicStack.Screen name="MiniSiteView"   component={MiniSiteViewScreen}   options={{ title: 'Mini-site' }} />
       <PublicStack.Screen name="Login"          component={LoginScreen}          options={{ title: 'Bienvenue' }} />
       <PublicStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Mot de passe oublié' }} />
       <PublicStack.Screen name="ResetPassword"  component={ResetPasswordScreen}  options={{ title: 'Nouveau mot de passe' }} />
@@ -201,9 +206,10 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="Dashboard"          component={DashboardScreen}      options={{ title: 'Tableau de bord' }} />
       <DashStack.Screen name="CreateEvent"        component={CreateEventScreen}    options={{ title: 'Créer un événement' }} />
       <DashStack.Screen name="EventCreated"       {...soon('M05', 'Événement créé')} />
-      <DashStack.Screen name="MiniSiteGenerating" {...soon('M06', 'Génération du mini-site')} />
-      <DashStack.Screen name="TemplatePicker"     {...soon('M07', 'Choisir un modèle')} />
-      <DashStack.Screen name="MiniSiteEditor"     {...soon('M08', 'Éditeur du mini-site')} />
+      <DashStack.Screen name="MiniSiteGenerating" component={MiniSiteGeneratingScreen} options={{ title: 'Génération du mini-site' }} />
+      <DashStack.Screen name="TemplatePicker"     component={TemplatePickerScreen}     options={{ title: 'Choisir un mini-site' }} />
+      <DashStack.Screen name="MiniSiteEditor"     component={MiniSiteEditorScreen}     options={{ title: 'Retoucher le mini-site' }} />
+      <DashStack.Screen name="MiniSiteView"       component={MiniSiteViewScreen}       options={{ title: 'Mini-site' }} />
       <DashStack.Screen name="EventPublished"     {...soon('M10', 'Événement publié')} />
       <DashStack.Screen name="EventDashboard"     component={EventDashboardScreen} options={{ title: 'Gérer un événement' }} />
       <DashStack.Screen name="ScanTickets"        component={ScanTicketsScreen}    options={{ title: 'Scanner les tickets' }} />
@@ -228,6 +234,7 @@ function DiscoverStackNavigator() {
     <DiscoverStack.Navigator screenOptions={stackOptions}>
       <DiscoverStack.Screen name="DiscoverHome"  component={HomeScreen}        options={{ title: 'Découvrir' }} />
       <DiscoverStack.Screen name="EventDetail"   component={EventDetailScreen} options={{ title: 'Événement' }} />
+      <DiscoverStack.Screen name="MiniSiteView"  component={MiniSiteViewScreen} options={{ title: 'Mini-site' }} />
       <DiscoverStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <DiscoverStack.Screen name="Chat"          component={ChatScreen} options={{ title: 'Conversation' }} />
       <DiscoverStack.Screen name="TicketCheckout" component={TicketCheckoutScreen} options={{ title: 'Payer mon ticket' }} />
