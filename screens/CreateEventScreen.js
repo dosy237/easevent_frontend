@@ -412,6 +412,20 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading, onRemov
 // ════════════════════════════════════════════════════════════════
 const DRESS_CHIPS = ['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème', 'Autre'];
 
+// Exemples de thèmes selon le type (placeholder du champ « Thème »)
+const THEME_EXAMPLES = {
+  mariage: 'Ex : Bohème champêtre, Riviera chic, Royal Bamiléké…',
+  anniversaire: 'Ex : Années 80, Garden party, Afro chic…',
+  conference: 'Ex : IA & climat, Fintech en Afrique, Santé de demain…',
+  seminaire: 'Ex : Cap 2027, Cohésion et performance…',
+  concert: 'Ex : Nuit électro, Jazz au clair de lune…',
+  festival: 'Ex : Sons d’été, Saveurs du monde…',
+  gala: 'Ex : Nuit des étoiles, Gala solidaire…',
+  atelier: 'Ex : Céramique et slow life, Code pour débutants…',
+  exposition: 'Ex : Lumières africaines, Regards urbains…',
+  soiree: 'Ex : Nuit tropicale, White party…',
+};
+
 export default function CreateEventScreen({ navigation, route }) {
   // Mode « Modifier l'événement » : le même formulaire, pré-rempli
   const editing = route?.params?.event || null;
@@ -464,6 +478,8 @@ export default function CreateEventScreen({ navigation, route }) {
   const [ambiance,       setAmbiance]       = useState('');
   // Ambiance libre quand « Autre » est choisi (ex. « Bohème »)
   const [ambianceLabel,  setAmbianceLabel]  = useState('');
+  // Thème : fil conducteur du mini-site (« Bohème champêtre », « IA & climat »)
+  const [theme, setTheme] = useState('');
   const [primaryColor,   setPrimaryColor]   = useState('');
   const [secondaryColor, setSecondaryColor] = useState('');
   // Couleur en cours d'édition dans le sélecteur : 'primary' | 'secondary'
@@ -581,7 +597,7 @@ export default function CreateEventScreen({ navigation, route }) {
     setIsOnline(false); setOnlineLink('');
     setCoverImageUri(null); setCoverImageUrl(null);
     setGallery1Uri(null); setGallery1Url(null); setGallery2Uri(null); setGallery2Url(null);
-    setAmbiance(''); setAmbianceLabel(''); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
+    setAmbiance(''); setAmbianceLabel(''); setTheme(''); setPrimaryColor(''); setSecondaryColor(''); setEditingColor('primary');
     setVisibility('public'); setMaxGuests(''); setIsPaid(false); setPrice('');
     setHasDressCode(false); setDressChoice(''); setDressCode('');
     setErrors({});
@@ -606,7 +622,7 @@ export default function CreateEventScreen({ navigation, route }) {
       setCoverImageUri(e.cover_image || null); setCoverImageUrl(e.cover_image || null);
       const [g1, g2] = Array.isArray(tc.gallery) ? tc.gallery : [];
       setGallery1Uri(g1 || null); setGallery1Url(g1 || null); setGallery2Uri(g2 || null); setGallery2Url(g2 || null);
-      setAmbiance(e.ambiance || ''); setAmbianceLabel(e.ambiance_label || '');
+      setAmbiance(e.ambiance || ''); setAmbianceLabel(e.ambiance_label || ''); setTheme(e.theme || '');
       setPrimaryColor(e.palette?.primary || ''); setSecondaryColor(e.palette?.secondary || '');
       setVisibility(e.visibility || 'public');
       setMaxGuests(e.max_guests ? String(e.max_guests) : '');
@@ -705,6 +721,7 @@ export default function CreateEventScreen({ navigation, route }) {
         cover_image:      coverImageUrl,
         ambiance, palette, visibility, template_config,
         ambiance_label:   ambiance === 'autre' ? ambianceLabel.trim() : '',
+        theme:            theme.trim(),
         // Billetterie & dress code (M23) — champs de premier niveau du modèle Event
         is_paid:          isPaid,
         price:            isPaid ? parsePrice(price).toFixed(2) : '0.00',
@@ -1012,6 +1029,16 @@ export default function CreateEventScreen({ navigation, route }) {
           error={errors.ambianceLabel}
         />
       )}
+
+      <InputField
+        label="Thème de l'événement (facultatif)"
+        icon="sparkles-outline"
+        value={theme}
+        onChangeText={setTheme}
+        placeholder={THEME_EXAMPLES[eventType] || 'Ex : Nuit tropicale, Années folles, Innovation durable…'}
+        maxLength={80}
+      />
+      <Text style={styles.paletteHint}>Le mini-site s'en inspire : vocabulaire, images, couleurs et typographie.</Text>
 
       {/* Palette libre : n'importe quelle couleur (carré, teinte, code hexadécimal) */}
       <View style={styles.paletteSection}>

@@ -18,11 +18,11 @@ import minisiteService from '../services/minisiteService';
 import { isPlanLimit, planLimitAlert } from '../utils/plans';
 
 const STEPS = [
-  { key: 'direction', label: 'Direction artistique', sub: 'Couleurs, polices et ambiance, selon votre événement' },
-  { key: 'review', label: 'Rédaction et relecture', sub: 'Des textes à votre image, relus par un second modèle' },
-  { key: 'composition', label: 'Mise en page', sub: '6 propositions aux dispositions toutes différentes' },
+  { key: 'direction', label: 'Direction artistique et rédaction', sub: 'Couleurs, polices et textes inspirés de votre thème' },
+  { key: 'critique', label: 'Revue du directeur de création', sub: 'Un second modèle critique et affine chaque proposition' },
+  { key: 'composition', label: 'Mise en page finale', sub: '6 propositions aux dispositions toutes différentes' },
 ];
-const ORDER = { queued: 0, direction: 0, review: 1, composition: 2, done: 3 };
+const ORDER = { queued: 0, direction: 0, review: 0, critique: 1, composition: 2, done: 3 };
 
 export default function MiniSiteGeneratingScreen({ route, navigation }) {
   const { event, regenerate } = route?.params || {};
