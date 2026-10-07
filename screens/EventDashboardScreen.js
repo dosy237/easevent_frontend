@@ -28,6 +28,7 @@ import { Ionicons }        from '@expo/vector-icons';
 import { useFocusEffect }  from '@react-navigation/native';
 import { useAuth }         from '../context/AuthContext';
 import eventService    from '../services/eventService';
+import { isPlanLimit, planLimitAlert } from '../utils/plans';
 import { showAlert } from '../utils/dialog';
 import { logDev } from '../utils/log';
 
@@ -209,6 +210,7 @@ const handlePublish = async () => {
                   : 'Votre événement est maintenant visible dans le fil de découverte.',
             );
           } catch (err) {
+            if (isPlanLimit(err)) { planLimitAlert(navigation, err, 'Publication impossible'); return; }
             const detail = err.response?.data?.detail || 'Impossible de modifier le statut.';
             showAlert('Action impossible', detail);
           } finally {
@@ -297,7 +299,8 @@ const handlePublish = async () => {
               setEvent(published);
               navigation.navigate('InviteGuests', { event: published });
             } catch (err) {
-              showAlert('Publication impossible', err.response?.data?.detail || 'Réessayez.');
+              if (isPlanLimit(err)) planLimitAlert(navigation, err, 'Publication impossible');
+              else showAlert('Publication impossible', err.response?.data?.detail || 'Réessayez.');
             }
           },
         }]);

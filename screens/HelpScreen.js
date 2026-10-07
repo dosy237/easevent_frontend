@@ -42,7 +42,8 @@ const FAQ = [
     ['Comment supprimer mon compte ?', "Profil › Supprimer mon compte. Vos données personnelles sont effacées immédiatement ; vos événements à venir sont annulés."],
   ] },
   { icon: 'star-outline', title: 'Abonnements', items: [
-    ['Que m\'apportent les plans Standard et Pro ?', "Plus d'invités par événement (500 ou illimité) et l'export de la liste des invités. Détails dans Profil › Abonnement."],
+    ['Que m\'apportent les plans Standard et Pro ?', "Des événements illimités (le plan Gratuit en permet 1 par mois), plus d'invités par événement (500 ou illimité) et l'export de la liste des invités. Détails dans Profil › Abonnement."],
+    ['Combien d\'événements puis-je créer gratuitement ?', "Un événement par mois, avec jusqu'à 50 invités. La billetterie publique n'est pas limitée par le plan. Une nouvelle place se libère le 1er de chaque mois ; un brouillon supprimé sans avoir été publié rend sa place."],
     ['Comment résilier ?', "Profil › Abonnement › Résilier. Vous gardez votre plan jusqu'à la fin de la période payée, sans autre prélèvement."],
   ] },
 ];

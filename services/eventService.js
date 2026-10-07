@@ -83,6 +83,9 @@ const eventService = {
     }
   },
 
+  // Événements restants ce mois-ci selon le plan : { limit, used, remaining, resets_on }
+  fetchQuota: async () => (await apiClient.get('/api/events/quota/')).data,
+
   // Modifier un événement (PATCH partiel — organisateur uniquement)
   updateEvent: async (eventId, data) => {
     const response = await apiClient.patch(`/api/events/${eventId}/update/`, data);

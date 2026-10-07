@@ -14,7 +14,8 @@
  * ════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, StatusBar, Animated, Platform, Alert,
@@ -34,6 +35,8 @@ import ticketService from '../services/ticketService';
 import { showAlert } from '../utils/dialog';
 import AddressInput from '../components/maps/AddressInput';
 import { logDev } from '../utils/log';
+import QuotaReached from '../components/ui/QuotaReached';
+import { isPlanLimit, openPlans, planLimitAlert } from '../utils/plans';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -415,6 +418,16 @@ export default function CreateEventScreen({ navigation, route }) {
 
   const { accessToken } = useAuth();
 
+  // ── Quota du plan (Gratuit : 1 événement par mois) — vérifié à chaque visite ──
+  const [quota, setQuota] = useState(null);
+  useFocusEffect(useCallback(() => {
+    if (editing) return undefined;
+    let alive = true;
+    eventService.fetchQuota().then((q) => { if (alive) setQuota(q); }).catch(() => {});
+    return () => { alive = false; };
+  }, [editing]));
+  const quotaReached = !editing && quota && quota.limit !== null && quota.remaining === 0;
+
   // ── Étape actuelle ────────────────────────────────────────────
   const [step, setStep] = useState(1);
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -736,7 +749,10 @@ export default function CreateEventScreen({ navigation, route }) {
       });
       const publishThen = async (invite) => {
         try { await eventService.publishEvent(created.id, created.visibility); created.status = 'published'; }
-        catch (err) { showAlert('Publication impossible', err.response?.data?.detail || 'Vous pourrez le publier depuis la page de l\'événement.'); }
+        catch (err) {
+          if (isPlanLimit(err)) planLimitAlert(navigation, err, 'Publication impossible');
+          else showAlert('Publication impossible', err.response?.data?.detail || 'Vous pourrez le publier depuis la page de l\'événement.');
+        }
         openEvent(invite);
       };
       showAlert(
@@ -749,6 +765,11 @@ export default function CreateEventScreen({ navigation, route }) {
         ]
       );
     } catch (err) {
+      if (isPlanLimit(err)) {
+        if (err.response?.data?.quota) setQuota(err.response.data.quota);
+        planLimitAlert(navigation, err, 'Création impossible');
+        return;
+      }
       const detail = err.response?.data?.detail || 'Vérifiez votre connexion et réessayez.';
       showAlert(editing ? 'Enregistrement impossible' : 'Création impossible', detail);
       logDev('Erreur création:', err);
@@ -1225,13 +1246,22 @@ export default function CreateEventScreen({ navigation, route }) {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle} accessibilityRole="header">{editing ? "Modifier l'événement" : 'Créer un événement'}</Text>
-            <Text style={styles.headerStep}>
-              Étape {step}/{TOTAL_STEPS} — {stepLabels[step - 1]}
-            </Text>
+            {quotaReached ? null : (
+              <Text style={styles.headerStep}>
+                Étape {step}/{TOTAL_STEPS} — {stepLabels[step - 1]}
+              </Text>
+            )}
           </View>
           <View style={{ width: 36 }} />
         </View>
 
+        {quotaReached ? (
+          <QuotaReached
+            quota={quota}
+            onPlans={() => openPlans(navigation, 'Le plan Gratuit permet 1 événement par mois. Les plans Standard et Pro sont illimités.')}
+            onMyEvents={() => navigation?.navigate('TabDashboard', { screen: 'Dashboard' })}
+          />
+        ) : (<>
         {/* Barre de progression */}
         <StepIndicator currentStep={step} total={TOTAL_STEPS} />
 
@@ -1278,6 +1308,7 @@ export default function CreateEventScreen({ navigation, route }) {
           </TouchableOpacity>
           <Text style={styles.stepCounter}>{step} sur {TOTAL_STEPS}</Text>
         </View>
+        </>)}
 
       </SafeAreaView>
     </View>
