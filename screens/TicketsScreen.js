@@ -339,7 +339,7 @@ export default function TicketsScreen({ navigation, route }) {
       await load();
     } catch (err) {
       if (isRsvpCancel(err)) return;
-      showAlert('Erreur', apiErrorMessage(err, 'Impossible de répondre à cette invitation.'));
+      showAlert('Réponse impossible', apiErrorMessage(err, 'Impossible de répondre à cette invitation.'));
     }
   };
 
@@ -367,7 +367,7 @@ export default function TicketsScreen({ navigation, route }) {
           text: 'Annuler le ticket', style: 'destructive',
           onPress: async () => {
             try { await ticketService.cancel(ticket.id); await load(); }
-            catch (err) { showAlert('Erreur', apiErrorMessage(err)); }
+            catch (err) { showAlert('Action impossible', apiErrorMessage(err)); }
           },
         },
       ],

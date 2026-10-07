@@ -29,6 +29,7 @@ import { useFocusEffect }  from '@react-navigation/native';
 import { useAuth }         from '../context/AuthContext';
 import eventService    from '../services/eventService';
 import { showAlert } from '../utils/dialog';
+import { logDev } from '../utils/log';
 
 // ─────────────────────────────────────────────────────────────────
 // API
@@ -159,7 +160,7 @@ export default function EventDashboardScreen({ route, navigation }) {
       setCounts(participantsData.counts || { confirmed: 0, pending: 0, declined: 0, total: 0 });
 
     } catch (err) {
-      console.error('Erreur chargement event dashboard:', err);
+      logDev('Erreur chargement event dashboard:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -209,7 +210,7 @@ const handlePublish = async () => {
             );
           } catch (err) {
             const detail = err.response?.data?.detail || 'Impossible de modifier le statut.';
-            showAlert('Erreur', detail);
+            showAlert('Action impossible', detail);
           } finally {
             setPublishing(false);
           }
@@ -241,7 +242,7 @@ const handlePublish = async () => {
               const data = await eventService.updateEvent(event.id, { visibility: next });
               setEvent((prev) => ({ ...prev, visibility: data.event?.visibility || next }));
             } catch (err) {
-              showAlert('Erreur', err.response?.data?.detail || 'Impossible de changer la visibilité.');
+              showAlert('Action impossible', err.response?.data?.detail || 'Impossible de changer la visibilité.');
             } finally {
               setSavingVisibility(false);
             }
@@ -253,9 +254,12 @@ const handlePublish = async () => {
 
   // ── Supprimer l'événement ────────────────────────────────────
   const handleDelete = () => {
+    const n = counts.confirmed + counts.pending;
     showAlert(
       'Supprimer cet événement',
-      `Voulez-vous vraiment supprimer "${event.title}" ? Cette action est irréversible.`,
+      n
+        ? `« ${event.title} » sera annulé. ${n} participant${n > 1 ? 's' : ''} ${n > 1 ? 'seront prévenus' : 'sera prévenu'} et les tickets payés seront remboursés automatiquement. Cette action est irréversible.`
+        : `Voulez-vous vraiment supprimer « ${event.title} » ? Cette action est irréversible.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -263,13 +267,13 @@ const handlePublish = async () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await eventService.deleteEvent(event.id);
-              showAlert('Supprimé', 'L\'événement a été supprimé.', [{
+              const res = await eventService.deleteEvent(event.id);
+              showAlert('Événement supprimé', res?.message || "L'événement a été supprimé.", [{
                 text: 'OK',
-                onPress: () => navigation?.goBack(),
+                onPress: () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard')),
               }]);
             } catch {
-              showAlert('Erreur', 'Impossible de supprimer cet événement.');
+              showAlert('Suppression impossible', 'Vérifiez votre connexion et réessayez.');
             }
           },
         },

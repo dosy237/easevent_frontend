@@ -50,10 +50,15 @@ const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août'
 const shortDate = (iso) => { const d = new Date(iso); return `${d.getDate()} ${MOIS[d.getMonth()]}`; };
 
 function subtitle(g) {
-  if (['failed', 'not_configured'].includes(g.delivery_status)) {
+  if (g.source === 'ticket' && !g.checked_in_at) {
+    return g.display_status === 'confirmed' ? 'Ticket pris dans Découvrir' : 'Ticket en attente de validation';
+  }
+  // L'état de l'envoi n'a d'intérêt que tant que l'invité n'a pas répondu
+  const waiting = ['sent', 'opened'].includes(g.status);
+  if (waiting && ['failed', 'not_configured'].includes(g.delivery_status)) {
     return g.kind === 'phone' ? 'SMS non envoyé' : 'Email non envoyé';
   }
-  if (g.delivery_status === 'pending') return `${KIND[g.kind]} · envoi en cours…`;
+  if (waiting && g.delivery_status === 'pending') return `${KIND[g.kind]} · envoi en cours…`;
   const parts = [KIND[g.kind]];
   if (g.checked_in_at) {
     const d = new Date(g.checked_in_at);
@@ -317,14 +322,18 @@ export default function GuestListScreen({ navigation, route }) {
                 ))}
               </View>
             ) : null}
+            {selected.source !== 'ticket' && (
             <SheetAction icon="refresh-outline" label="Relancer" color={C.green}
               note={selected.can_remind ? 'Un nouveau lien est envoyé.' : (['sent', 'opened'].includes(selected.status) ? 'Déjà relancé il y a moins de 24 h.' : 'Cet invité a déjà répondu.')}
               disabled={!selected.can_remind} onPress={() => remindOne(selected)} />
+            )}
             <SheetAction icon="chatbubble-ellipses-outline" label="Message" color={C.orange}
               note={selected.user_id ? 'Ouvrir la conversation.' : 'Disponible quand l’invité a un compte Easevent.'}
               disabled={!selected.user_id} onPress={() => message(selected)} />
+            {selected.source !== 'ticket' && (
             <SheetAction icon="close-circle-outline" label="Révoquer l'invitation" color="#C0392B"
-              note="Son lien ne fonctionnera plus." onPress={() => revoke(selected)} />
+              note="Son ticket est annulé (et remboursé s'il a payé). Il est prévenu." onPress={() => revoke(selected)} />
+            )}
             <Pressable onPress={() => setSelected(null)} style={styles.sheetClose} accessibilityRole="button">
               <Text style={styles.sheetCloseTxt}>Fermer</Text>
             </Pressable>

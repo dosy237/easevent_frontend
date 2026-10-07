@@ -1,5 +1,6 @@
 import { withRsvp } from '../utils/rsvp';
 import { apiClient } from './apiClient';
+import { logDev } from '../utils/log';
 
 /**
  * eventService.js
@@ -15,7 +16,7 @@ const eventService = {
       const response = await apiClient.get('/api/invitations/mine/');
       return response.data;
     } catch (error) {
-      console.error('Error fetching invitations:', error);
+      logDev('Error fetching invitations:', error);
       throw error;
     }
   },
@@ -34,7 +35,7 @@ const eventService = {
       const response = await apiClient.get('/api/events/mes-evenements/');
       return response.data;
     } catch (error) {
-      console.error('Error fetching my events:', error);
+      logDev('Error fetching my events:', error);
       throw error;
     }
   },
@@ -44,7 +45,7 @@ const eventService = {
       const response = await apiClient.get('/api/events/publics/', { params });
       return response.data;
     } catch (error) {
-      console.error('Error fetching public events:', error);
+      logDev('Error fetching public events:', error);
       throw error;
     }
   },
@@ -55,7 +56,7 @@ const eventService = {
       const response = await apiClient.get(`/api/events/${eventId}/detail/`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching event detail:', error);
+      logDev('Error fetching event detail:', error);
       throw error;
     }
   },
@@ -66,7 +67,7 @@ const eventService = {
       const response = await apiClient.get(`/api/events/${eventId}/participants/`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching event participants:', error);
+      logDev('Error fetching event participants:', error);
       throw error;
     }
   },
@@ -77,7 +78,7 @@ const eventService = {
       const response = await apiClient.post(`/api/events/${eventId}/publish/`, { visibility });
       return response.data;
     } catch (error) {
-      console.error('Error publishing event:', error);
+      logDev('Error publishing event:', error);
       throw error;
     }
   },
@@ -94,7 +95,7 @@ const eventService = {
       const response = await apiClient.post(`/api/events/${eventId}/invite/`, inviteData);
       return response.data;
     } catch (error) {
-      console.error('Error inviting participant:', error);
+      logDev('Error inviting participant:', error);
       throw error;
     }
   },
@@ -105,7 +106,7 @@ const eventService = {
       const response = await apiClient.delete(`/api/invitations/${invitationId}/revoke/`);
       return response.data;
     } catch (error) {
-      console.error('Error revoking invitation:', error);
+      logDev('Error revoking invitation:', error);
       throw error;
     }
   },
@@ -116,7 +117,7 @@ const eventService = {
       const response = await apiClient.delete(`/api/events/${eventId}/delete/`);
       return response.data;
     } catch (error) {
-      console.error('Error deleting event:', error);
+      logDev('Error deleting event:', error);
       throw error;
     }
   },
@@ -130,7 +131,7 @@ const eventService = {
       });
       return response.data;
     } catch (error) {
-      console.error('Error uploading image:', error);
+      logDev('Error uploading image:', error);
       throw error;
     }
   },
@@ -141,7 +142,7 @@ const eventService = {
       const response = await apiClient.post('/api/events/create/', eventData);
       return response.data;
     } catch (error) {
-      console.error('Error creating event:', error);
+      logDev('Error creating event:', error);
       throw error;
     }
   },

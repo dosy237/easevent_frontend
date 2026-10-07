@@ -72,6 +72,7 @@ import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
 import { showAlert } from '../utils/dialog';
 import { isRsvpCancel } from '../utils/rsvp';
 import { apiErrorMessage } from '../services/authService';
+import { logDev } from '../utils/log';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE DE COULEURS — identique aux autres écrans pour la cohérence
 // ─────────────────────────────────────────────────────────────────
@@ -436,7 +437,7 @@ export default function DashboardScreen({ navigation }) {
       setLoadError('');
 
     } catch (err) {
-      console.error('Erreur chargement dashboard:', err);
+      logDev('Erreur chargement dashboard:', err);
       setLoadError(err.response
         ? 'Impossible de charger vos données pour le moment.'
         : 'Connexion impossible. Vérifiez votre réseau.');
@@ -471,7 +472,7 @@ export default function DashboardScreen({ navigation }) {
       );
     } catch (err) {
       if (isRsvpCancel(err)) return;
-      showAlert('Erreur', apiErrorMessage(err, 'Impossible de répondre à cette invitation. Réessayez.'));
+      showAlert('Réponse impossible', apiErrorMessage(err, 'Impossible de répondre à cette invitation. Réessayez.'));
     }
   };
 
@@ -492,7 +493,7 @@ export default function DashboardScreen({ navigation }) {
               // Retirer l'événement de la liste sans recharger
               setMyEvents(prev => prev.filter(e => e.id !== event.id));
             } catch {
-              showAlert('Erreur', 'Impossible de supprimer cet événement.');
+              showAlert('Suppression impossible', 'Vérifiez votre connexion et réessayez.');
             }
           },
         },

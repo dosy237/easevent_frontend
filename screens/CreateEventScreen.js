@@ -28,10 +28,12 @@ import DateTimePicker       from '@react-native-community/datetimepicker';
 import { useAuth }          from '../context/AuthContext';
 
 import eventService from '../services/eventService';
+import { apiErrorMessage } from '../services/authService';
 import ColorPicker from '../components/ui/ColorPicker';
 import ticketService from '../services/ticketService';
 import { showAlert } from '../utils/dialog';
 import AddressInput from '../components/maps/AddressInput';
+import { logDev } from '../utils/log';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -522,12 +524,12 @@ export default function CreateEventScreen({ navigation, route }) {
         const data = await eventService.uploadImage(base64Data, imageName);
         setUrl(data.url);
       } catch (err) {
-        showAlert('Erreur', 'Impossible d\'uploader l\'image. Réessayez.');
+        showAlert('Envoi impossible', apiErrorMessage(err, "La photo n'a pas pu être envoyée. Vérifiez votre connexion et réessayez."));
         setUri(null);
       }
     } catch (err) {
-      showAlert('Erreur', 'Une erreur est survenue lors de l\'upload.');
-      console.error('Erreur upload:', err);
+      showAlert('Photo indisponible', "Cette photo n'a pas pu être ouverte. Choisissez-en une autre.");
+      logDev('Erreur upload:', err);
     } finally {
       setUploading(false);
     }
@@ -628,7 +630,8 @@ export default function CreateEventScreen({ navigation, route }) {
       if (!coverImageUrl) e.coverImage = 'La photo de couverture est obligatoire';
     }
     if (step === 4) {
-      if (!ambiance) e.ambiance = 'Choisissez une ambiance';
+      // En modification, un événement sans ambiance (ancienne version) reste modifiable
+      if (!ambiance && !editing) e.ambiance = 'Choisissez une ambiance';
       if (ambiance === 'autre' && !ambianceLabel.trim()) e.ambianceLabel = 'Décrivez l\'ambiance de votre événement';
     }
     if (step === 5) {
@@ -747,8 +750,8 @@ export default function CreateEventScreen({ navigation, route }) {
       );
     } catch (err) {
       const detail = err.response?.data?.detail || 'Vérifiez votre connexion et réessayez.';
-      showAlert('Erreur', detail);
-      console.error('Erreur création:', err);
+      showAlert(editing ? 'Enregistrement impossible' : 'Création impossible', detail);
+      logDev('Erreur création:', err);
     } finally {
       setSubmitting(false);
     }

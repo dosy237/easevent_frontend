@@ -12,7 +12,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+// Caméra : seulement dans l'application mobile (sur le web, saisie du numéro)
+const Camera = Platform.OS !== 'web' ? require('expo-camera') : null;
+const CameraView = Camera?.CameraView;
+const useCameraPermissions = Camera?.useCameraPermissions || (() => [null, async () => null]);
 import * as Haptics from 'expo-haptics';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -58,11 +61,12 @@ export default function ScanTicketsScreen({ navigation, route }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const check = async (raw) => {
+  const check = async (raw, fromCamera = false) => {
     const value = String(raw || '').trim();
     if (!value || working.current) return;
     const now = Date.now();
-    if (value === last.current.code && now - last.current.at < SAME_CODE_PAUSE) return;   // même QR resté devant la caméra
+    // Même QR resté devant la caméra : ignoré quelques secondes (la saisie manuelle, elle, est toujours vérifiée)
+    if (fromCamera && value === last.current.code && now - last.current.at < SAME_CODE_PAUSE) return;
     last.current = { code: value, at: now };
     working.current = true;
     setBusy(true);
@@ -110,7 +114,7 @@ export default function ScanTicketsScreen({ navigation, route }) {
               {cameraReady && focused ? (
                 <CameraView style={StyleSheet.absoluteFill} facing="back"
                   barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                  onBarcodeScanned={busy ? undefined : ({ data }) => check(data)} />
+                  onBarcodeScanned={busy ? undefined : ({ data }) => check(data, true)} />
               ) : (
                 <View style={styles.cameraOff}>
                   <Ionicons name="qr-code-outline" size={46} color={C.green} />

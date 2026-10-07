@@ -48,6 +48,7 @@ import SafeImage from '../components/ui/SafeImage';
 const STORE_URL = 'https://play.google.com/store/apps/details?id=com.eranis.easevent';
 import { SkeletonGroup, Bone, EventCardSkeleton } from '../components/ui/Skeleton';
 import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
+import { logDev } from '../utils/log';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -262,7 +263,7 @@ export default function HomeScreen({ navigation }) {
       setError(null);
     } catch (err) {
       setError('Impossible de charger les événements.');
-      console.error('Erreur API HomeScreen:', err);
+      logDev('Erreur API HomeScreen:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
