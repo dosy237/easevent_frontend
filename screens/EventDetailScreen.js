@@ -49,6 +49,7 @@ import { useAuth } from '../context/AuthContext';
 import ticketService from '../services/ticketService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
+import EventMap, { openInMaps } from '../components/maps/EventMap';
 import { formatPrice } from '../utils/format';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 
@@ -472,12 +473,12 @@ export default function EventDetailScreen({ route, navigation }) {
             />
             <View style={styles.divider} />
 
-            {/* Lieu — cliquable */}
+            {/* Lieu : carte détaillée juste en dessous */}
             <InfoRow
-              icon="location-outline"
+              icon={fullEvent.is_online ? 'videocam-outline' : 'location-outline'}
               label="Lieu"
-              value={fullEvent.location_address}
-              onPress={() => openGoogleMaps(fullEvent.location_address)}
+              value={fullEvent.is_online ? 'En ligne' : fullEvent.location_address}
+              onPress={fullEvent.is_online ? undefined : () => openInMaps(fullEvent.map, fullEvent.location_address)}
             />
 
             {/* Prix du ticket + places restantes (M24) */}
@@ -508,6 +509,14 @@ export default function EventDetailScreen({ route, navigation }) {
               </>
             ) : null}
           </View>
+
+          {/* ── Lieu sur la carte + itinéraire ─────────────── */}
+          {!fullEvent.is_online && fullEvent.location_address ? (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.cardSectionTitle}>Comment y aller</Text>
+              <EventMap map={fullEvent.map} address={fullEvent.location_address} />
+            </View>
+          ) : null}
 
           {/* ── Description ────────────────────────────────── */}
           {fullEvent.description ? (

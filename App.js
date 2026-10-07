@@ -60,6 +60,7 @@ import ConversationsScreen from './screens/ConversationsScreen';
 import ChatScreen from './screens/ChatScreen';
 import ContactPickerScreen from './screens/ContactPickerScreen';
 import VerifyPhoneScreen from './screens/VerifyPhoneScreen';
+import FriendsScreen from './screens/FriendsScreen';
 import * as Application from 'expo-application';
 import { KEYS, getItem, setItem } from './services/storage';
 import { TicketBadgeProvider, useTicketBadge } from './context/TicketBadgeContext';
@@ -183,8 +184,9 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="MiniSiteEditor"     {...soon('M08', 'Éditeur du mini-site')} />
       <DashStack.Screen name="EventPublished"     {...soon('M10', 'Événement publié')} />
       <DashStack.Screen name="EventDashboard"     component={EventDashboardScreen} options={{ title: 'Gérer un événement' }} />
-      <DashStack.Screen name="EditEvent"          {...soon('M11', "Modifier l'événement")} />
+      <DashStack.Screen name="EditEvent"          component={CreateEventScreen}    options={{ title: "Modifier l'événement" }} />
       <DashStack.Screen name="InviteGuests"       component={InviteGuestsScreen}   options={{ title: 'Inviter des participants' }} />
+      <DashStack.Screen name="Friends"            component={FriendsScreen}        options={{ title: 'Mes amis' }} />
       <DashStack.Screen name="ContactPicker"      component={ContactPickerScreen}  options={{ title: 'Mes contacts' }} />
       <DashStack.Screen name="GuestList"          component={GuestListScreen}      options={{ title: 'Invités & réponses' }} />
       <DashStack.Screen name="RsvpQuestions"      {...soon('M14', 'Questions RSVP')} />
@@ -234,6 +236,7 @@ function ProfileStackNavigator() {
       <ProfileStack.Screen name="Profile"              component={ProfileScreen}       options={{ title: 'Mon profil' }} />
       <ProfileStack.Screen name="PrivacyPolicy"        component={PrivacyPolicyScreen} options={{ title: 'Confidentialité' }} />
       <ProfileStack.Screen name="Notifications"        component={NotificationsScreen} options={{ title: 'Notifications' }} />
+      <ProfileStack.Screen name="Friends"              component={FriendsScreen} options={{ title: 'Mes amis' }} />
       <ProfileStack.Screen name="VerifyPhone"          component={VerifyPhoneScreen} options={{ title: 'Mon numéro' }} />
       <ProfileStack.Screen name="Chat"                 component={ChatScreen} options={{ title: 'Conversation' }} />
       <ProfileStack.Screen name="Payouts"              component={PayoutsScreen} options={{ title: 'Paiements & virements' }} />
@@ -329,9 +332,23 @@ function AppTabNavigator() {
 // ════════════════════════════════════════════════════════════════
 // NAVIGATEUR RACINE
 // ════════════════════════════════════════════════════════════════
+const GateStack = createNativeStackNavigator();
+
+// Numéro de téléphone obligatoire : un compte sans numéro l'ajoute d'abord
+function PhoneGateNavigator() {
+  return (
+    <GateStack.Navigator screenOptions={stackOptions}>
+      <GateStack.Screen name="PhoneGate" component={VerifyPhoneScreen} initialParams={{ required: true }}
+        options={{ title: 'Votre numéro' }} />
+    </GateStack.Navigator>
+  );
+}
+
 function RootNavigator() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   linkingAuthenticated = isAuthenticated;
+
+  if (isAuthenticated && user && !user.phone) return <PhoneGateNavigator key="phone-gate" />;
 
   // `key` → évite le scintillement de la barre d'onglets au changement d'état
   return isAuthenticated

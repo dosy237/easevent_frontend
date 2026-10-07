@@ -21,6 +21,7 @@ import { formatDateLong, formatPrice } from '../utils/format';
 import ticketService from '../services/ticketService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
+import { openDirections } from './maps/EventMap';
 
 // Lien « Ajouter à Google Agenda » : fonctionne sur tous les appareils, sans permission
 const calendarUrl = (ticket) => {
@@ -164,6 +165,13 @@ export default function TicketView({ ticket, justPaid = false }) {
           <Text style={styles.actionTxt}>Télécharger</Text>
         </Pressable>
       </View>
+      {!e.is_online && e.location_address ? (
+        <Pressable onPress={() => openDirections(e.map, e.location_address)} style={styles.routeBtn} accessibilityRole="button"
+          accessibilityHint="Ouvre Google Maps avec le trajet depuis votre position">
+          <Ionicons name="navigate" size={16} color={C.white} />
+          <Text style={styles.routeTxt}>Itinéraire jusqu'au lieu</Text>
+        </Pressable>
+      ) : null}
       <Pressable onPress={shareTicket} accessibilityRole="button" style={styles.shareLink}>
         <Ionicons name="share-social-outline" size={14} color={C.green} />
         <Text style={styles.shareLinkTxt}>Partager mon ticket</Text>
@@ -214,6 +222,8 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white,
   },
   actionTxt: { fontSize: 14, fontWeight: '700', color: C.text },
+  routeBtn: { minHeight: 48, marginTop: 10, borderRadius: 14, backgroundColor: C.green, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  routeTxt: { fontSize: 14, fontWeight: '800', color: C.white },
   shareLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
   shareLinkTxt: { fontSize: 13, fontWeight: '700', color: C.green },
 });

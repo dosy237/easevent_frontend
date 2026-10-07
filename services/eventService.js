@@ -84,6 +84,12 @@ const eventService = {
     }
   },
 
+  // Modifier un événement (PATCH partiel — organisateur uniquement)
+  updateEvent: async (eventId, data) => {
+    const response = await apiClient.patch(`/api/events/${eventId}/update/`, data);
+    return response.data;
+  },
+
   // Invite a participant
   inviteParticipant: async (eventId, inviteData) => {
     try {

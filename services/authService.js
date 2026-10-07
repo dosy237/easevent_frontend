@@ -22,8 +22,14 @@ export const authService = {
     return response.data;
   },
 
-  resendVerification: async (email) => {
-    const response = await apiClient.post('/api/auth/resend-verification/', { email });
+  resendVerification: async (email, channel = 'email') => {
+    const response = await apiClient.post('/api/auth/resend-verification/', { email, channel });
+    return response.data;
+  },
+
+  // Code à 6 chiffres reçu par email ou par SMS
+  verifyCode: async ({ email, code, channel }) => {
+    const response = await apiClient.post('/api/auth/verify-code/', { email, code, channel });
     return response.data;
   },
 

@@ -22,8 +22,10 @@ import { toE164 } from '../utils/contacts';
 
 const RESEND_AFTER = 60;
 
-export default function VerifyPhoneScreen({ navigation }) {
-  const { user, updateUser } = useAuth();
+export default function VerifyPhoneScreen({ navigation, route }) {
+  // required : compte sans numéro → étape obligatoire avant d'utiliser l'app
+  const required = !!route?.params?.required;
+  const { user, updateUser, logout } = useAuth();
   const { refresh: refreshBadges } = useTicketBadge();
   const [step, setStep] = useState('phone');
   const [phone, setPhone] = useState('');
@@ -50,6 +52,17 @@ export default function VerifyPhoneScreen({ navigation }) {
       setStep('code');
       startCountdown();
     } catch (err) {
+      if (err.response?.data?.code === 'sms_unavailable' && required) {
+        // SMS pas encore activé : le numéro est enregistré, il sera vérifié plus tard
+        try {
+          const { data } = await apiClient.post('/api/auth/phone/', { phone_number: e164 });
+          await updateUser(data.user);
+          return;
+        } catch (saveErr) {
+          setError(apiErrorMessage(saveErr));
+          return;
+        }
+      }
       setError(apiErrorMessage(err, "Le code n'a pas pu être envoyé."));
     } finally {
       setBusy(false);
@@ -63,6 +76,7 @@ export default function VerifyPhoneScreen({ navigation }) {
       await updateUser(data.user);
       refreshBadges({ force: true });
       const n = data.invitations_found;
+      if (required) return;   // la porte s'ouvre d'elle-même (user.phone renseigné)
       showAlert('Numéro vérifié',
         n ? `${n} invitation${n > 1 ? 's' : ''} reçue${n > 1 ? 's' : ''} par SMS ${n > 1 ? 'vous attendent' : 'vous attend'} dans Mes tickets.`
           : 'Les prochaines invitations envoyées à ce numéro arriveront directement dans votre application.',
@@ -80,7 +94,9 @@ export default function VerifyPhoneScreen({ navigation }) {
     <View style={styles.root}>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={styles.header}>
-          <BackButton variant="square" onPress={step === 'code' ? () => { setStep('phone'); setCode(''); setError(''); } : goBack} />
+          {required && step === 'phone' ? <View style={{ width: 44 }} /> : (
+            <BackButton variant="square" onPress={step === 'code' ? () => { setStep('phone'); setCode(''); setError(''); } : goBack} />
+          )}
           <Text style={styles.headerTitle} accessibilityRole="header">Mon numéro de téléphone</Text>
           <View style={{ width: 44 }} />
         </View>
@@ -95,8 +111,9 @@ export default function VerifyPhoneScreen({ navigation }) {
             ) : null}
             {step === 'phone' ? (
               <>
-                <Text style={styles.title}>Retrouvez vos invitations reçues par SMS</Text>
+                <Text style={styles.title}>{required ? 'Ajoutez votre numéro de téléphone' : 'Retrouvez vos invitations reçues par SMS'}</Text>
                 <Text style={styles.text}>
+                  {required ? 'Pour vous connecter à Easevent, votre numéro de téléphone est nécessaire. ' : ''}
                   Nous envoyons un code à ce numéro pour vérifier qu'il est bien à vous. Ensuite, toutes les invitations
                   envoyées à ce numéro apparaissent dans votre application.
                 </Text>
@@ -126,6 +143,12 @@ export default function VerifyPhoneScreen({ navigation }) {
                   )}
                 </Pressable>
               </>
+            )}
+            {required && (
+              <Pressable onPress={() => logout({ revokeSession: true })} style={styles.resend} accessibilityRole="button"
+                accessibilityHint="Vous restez visiteur : seuls les événements publics sont visibles">
+                <Text style={[styles.resendTxt, { color: C.textSub }]}>Plus tard — continuer sans compte</Text>
+              </Pressable>
             )}
             <View style={styles.privacy}>
               <Ionicons name="lock-closed-outline" size={14} color={C.green} />

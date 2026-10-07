@@ -25,6 +25,7 @@ import { readAsStringAsync } from 'expo-file-system/legacy';
 import { C, TOUCH } from '../constants/theme';
 import { BackButton } from '../components/ui/Buttons';
 import invitationService from '../services/invitationService';
+import friendService from '../services/friendService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
 import { useAuth } from '../context/AuthContext';
@@ -272,10 +273,25 @@ export default function InviteGuestsScreen({ navigation, route }) {
 function MembersMode({ eventId, selected, onChange }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
+  const [friends, setFriends] = useState(null);
+  const [invited, setInvited] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const timer = useRef(null);
   const selectedIds = useMemo(() => new Set(selected.map((m) => m.id)), [selected]);
+
+  // Mes amis : invitables en un geste (déjà invités grisés)
+  useEffect(() => {
+    let alive = true;
+    Promise.all([friendService.list(), eventId ? invitationService.participants(eventId) : Promise.resolve(null)])
+      .then(([f, p]) => {
+        if (!alive) return;
+        setFriends(f.friends.map((row) => ({ ...row.user, friend_status: 'friend' })));
+        setInvited(new Set((p?.participants || []).map((g) => g.user_id).filter(Boolean)));
+      })
+      .catch(() => alive && setFriends([]));
+    return () => { alive = false; };
+  }, [eventId]);
 
   const search = useCallback((text) => {
     setQ(text);
@@ -297,6 +313,19 @@ function MembersMode({ eventId, selected, onChange }) {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const toggle = (u) => onChange(selectedIds.has(u.id) ? selected.filter((m) => m.id !== u.id) : [...selected, u]);
+  const addFriend = async (u) => {
+    try {
+      const r = await friendService.request(u.id);
+      setResults((prev) => prev.map((x) => (x.id === u.id ? { ...x, friend_status: r.status === 'accepted' ? 'friend' : 'sent' } : x)));
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  };
+
+  const searching = q.trim().length >= 2;
+  const rows = searching ? results : (friends || []).map((f) => ({ ...f, already_invited: invited.has(f.id) }));
+  const freeFriends = (friends || []).filter((f) => !invited.has(f.id));
+  const allFriendsOn = freeFriends.length > 0 && freeFriends.every((f) => selectedIds.has(f.id));
 
   return (
     <View>
@@ -319,42 +348,51 @@ function MembersMode({ eventId, selected, onChange }) {
         {loading && <ActivityIndicator size="small" color={C.green} />}
       </View>
 
-      {selected.length > 0 && (
-        <View style={styles.chips}>
-          {selected.map((m) => (
-            <View key={m.id} style={styles.chip}>
-              <Text style={styles.chipTxt}>{m.first_name} {m.last_name}</Text>
-              <Pressable onPress={() => toggle(m)} style={styles.chipX} accessibilityRole="button" accessibilityLabel={`Retirer ${m.first_name} ${m.last_name}`}>
-                <Ionicons name="close" size={14} color={C.greenDark} />
-              </Pressable>
-            </View>
-          ))}
+      {error ? <Text style={styles.errorTxt} accessibilityRole="alert">{error}</Text> : null}
+
+      {!searching && (
+        <View style={styles.friendsHead}>
+          <Text style={styles.sectionLabel}>Mes amis{friends ? ` (${friends.length})` : ''}</Text>
+          {freeFriends.length > 1 && (
+            <Pressable onPress={() => onChange(allFriendsOn ? selected.filter((m) => !freeFriends.some((f) => f.id === m.id))
+              : [...selected, ...freeFriends.filter((f) => !selectedIds.has(f.id))])} accessibilityRole="button">
+              <Text style={styles.selectAll}>{allFriendsOn ? 'Tout désélectionner' : 'Tout sélectionner'}</Text>
+            </Pressable>
+          )}
         </View>
       )}
-
-      {error ? <Text style={styles.errorTxt} accessibilityRole="alert">{error}</Text> : null}
-      {q.trim().length >= 2 && !loading && results.length === 0 && !error ? (
+      {!searching && friends === null && <ActivityIndicator color={C.green} style={{ marginVertical: 12 }} />}
+      {!searching && friends?.length === 0 && (
+        <Text style={styles.emptyTxt}>Pas encore d'amis sur Easevent. Recherchez un membre pour l'inviter ou l'ajouter en ami.</Text>
+      )}
+      {searching && !loading && results.length === 0 && !error ? (
         <Text style={styles.emptyTxt}>Aucun membre trouvé. Invitez cette personne par email ou SMS.</Text>
       ) : null}
-      {results.map((u) => {
+
+      {rows.map((u) => {
         const checked = selectedIds.has(u.id);
         return (
-          <Pressable
-            key={u.id}
-            onPress={() => !u.already_invited && toggle(u)}
-            disabled={u.already_invited}
-            style={[styles.person, checked && styles.personOn, u.already_invited && { opacity: 0.6 }]}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked, disabled: u.already_invited }}
-            accessibilityLabel={`${u.first_name} ${u.last_name}${u.already_invited ? ', déjà invité' : ''}`}
-          >
-            <View style={styles.avatar}><Text style={styles.avatarTxt}>{u.initials}</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.personName}>{u.first_name} {u.last_name}</Text>
-              <Text style={styles.personSub}>{u.already_invited ? 'Déjà invité' : 'Membre Easevent'}</Text>
-            </View>
-            <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={22} color={checked ? C.green : C.textMut} />
-          </Pressable>
+          <View key={u.id} style={[styles.person, checked && styles.personOn, u.already_invited && { opacity: 0.6 }]}>
+            <Pressable onPress={() => !u.already_invited && toggle(u)} disabled={u.already_invited} style={styles.personMain}
+              accessibilityRole="checkbox" accessibilityState={{ checked, disabled: u.already_invited }}
+              accessibilityLabel={`${u.first_name} ${u.last_name}${u.already_invited ? ', déjà invité' : ''}`}>
+              <View style={styles.avatar}><Text style={styles.avatarTxt}>{u.initials}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personName}>{u.first_name} {u.last_name}</Text>
+                <Text style={styles.personSub}>
+                  {u.already_invited ? 'Déjà invité' : u.friend_status === 'friend' ? 'Ami' : 'Membre Easevent'}
+                </Text>
+              </View>
+              <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={22} color={checked ? C.green : C.textMut} />
+            </Pressable>
+            {searching && !u.friend_status && (
+              <Pressable onPress={() => addFriend(u)} style={styles.addFriend} accessibilityRole="button"
+                accessibilityLabel={`Ajouter ${u.first_name} en ami`}>
+                <Ionicons name="person-add-outline" size={18} color={C.green} />
+              </Pressable>
+            )}
+            {searching && u.friend_status === 'sent' && <Text style={styles.sentTxt}>Demande envoyée</Text>}
+          </View>
         );
       })}
     </View>
@@ -521,7 +559,7 @@ function PhoneMode({ list, onChange, onPickContacts }) {
         <View style={styles.contactsIcon}><Ionicons name="people" size={20} color={C.white} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.contactsTitle}>Choisir dans mes contacts</Text>
-          <Text style={styles.contactsSub}>Comme sur WhatsApp : cochez autant de contacts que vous voulez</Text>
+          <Text style={styles.contactsSub}>Cochez autant de contacts que vous voulez</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={C.green} />
       </Pressable>
@@ -672,6 +710,11 @@ const styles = StyleSheet.create({
   badgeGreenTxt: { fontSize: 11, fontWeight: '700', color: C.greenDark },
   badgeOrange: { alignSelf: 'flex-start', marginTop: 4, backgroundColor: C.orangeL, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   badgeOrangeTxt: { fontSize: 11, fontWeight: '700', color: '#B4492E' },
+  friendsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
+  selectAll: { fontSize: 13, fontWeight: '700', color: C.green, paddingVertical: 8 },
+  personMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  addFriend: { width: TOUCH, height: TOUCH, borderRadius: 12, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  sentTxt: { fontSize: 11, fontWeight: '700', color: C.textSub },
   removeBtn: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
   textarea: {
     minHeight: 74, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.inputBg,

@@ -59,6 +59,16 @@ export function AuthProvider({ children }) {
       if (storedToken && storedUser) {
         setAccessToken(storedToken);
         setUser(JSON.parse(storedUser));
+        // Profil à jour (numéro, vérification…) sans bloquer le démarrage
+        authService.getProfile()
+          .then(async (fresh) => {
+            const profile = fresh?.user || fresh;
+            if (profile?.id) {
+              await setItem(KEYS.USER, JSON.stringify(profile));
+              setUser(profile);
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
       console.error('Erreur lecture stockage auth:', err);

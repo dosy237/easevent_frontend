@@ -29,6 +29,7 @@ import { Bone, SkeletonGroup } from '../components/ui/Skeleton';
 import LoadingMessages from '../components/ui/LoadingMessages';
 import notificationService from '../services/notificationService';
 import eventService from '../services/eventService';
+import friendService from '../services/friendService';
 import { apiErrorMessage } from '../services/authService';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { showAlert } from '../utils/dialog';
@@ -37,6 +38,7 @@ const FILTERS = [
   { id: 'all', label: 'Tout' },
   { id: 'events', label: 'Événements' },
   { id: 'messages', label: 'Messages' },
+  { id: 'social', label: 'Amis' },
   { id: 'system', label: 'Système' },
 ];
 
@@ -52,6 +54,8 @@ const LOOK = {
   message_received:    { icon: 'chatbubble-outline', bg: C.orangeL, fg: C.orangeDark },
   payment_failed:      { icon: 'card-outline', bg: C.errorBg, fg: C.errorText, cta: 'Réessayer le paiement' },
   payment_succeeded:   { icon: 'card-outline', bg: '#F4F4F4', fg: C.text },
+  friend_request:      { icon: 'person-add-outline', bg: C.greenLight, fg: C.green },
+  friend_accepted:     { icon: 'people-outline', bg: C.greenLight, fg: C.green, cta: 'Voir mes amis' },
 };
 
 function ago(iso) {
@@ -151,6 +155,10 @@ export default function NotificationsScreen({ navigation }) {
         return navigation.navigate('Chat', { conversationId: n.data?.conversation_id, title: n.title });
       case 'payment_succeeded':
         return navigation.navigate('TabProfile', { screen: 'Plans' });
+      case 'friend_request':
+        return navigation.navigate('TabProfile', { screen: 'Friends', params: { tab: 'requests' } });
+      case 'friend_accepted':
+        return navigation.navigate('TabProfile', { screen: 'Friends', params: { tab: 'friends' } });
       default:
         return null;
     }
@@ -176,6 +184,19 @@ export default function NotificationsScreen({ navigation }) {
     }
   };
 
+  const answerFriend = async (n, ok) => {
+    setBusy(`${n.id}:friend-${ok ? 'ok' : 'no'}`);
+    try {
+      if (ok) await friendService.accept(n.friendship.id); else await friendService.remove(n.friendship.id);
+      await markRead(n);
+      await load();
+    } catch (err) {
+      showAlert('Action impossible', apiErrorMessage(err));
+    } finally {
+      setBusy('');
+    }
+  };
+
   const sections = useMemo(() => {
     const groups = [];
     (items || []).forEach((n) => {
@@ -191,6 +212,7 @@ export default function NotificationsScreen({ navigation }) {
   const renderItem = ({ item: n }) => {
     const look = LOOK[n.type] || LOOK.payment_succeeded;
     const canAnswer = n.type === 'invitation_received' && n.invitation?.can_answer;
+    const canAnswerFriend = n.type === 'friend_request' && n.friendship?.can_answer;
     return (
       <Pressable
         onPress={() => open(n)}
@@ -216,6 +238,18 @@ export default function NotificationsScreen({ navigation }) {
               <Pressable onPress={() => answer(n, 'declined')} disabled={!!busy} style={[styles.answer, styles.decline]}
                 accessibilityRole="button" accessibilityLabel={`Décliner l'invitation à ${n.event?.title || ''}`}>
                 {busy === `${n.id}:declined` ? <ActivityIndicator size="small" color={C.text} /> : <Text style={styles.declineTxt}>Décliner</Text>}
+              </Pressable>
+            </View>
+          )}
+          {canAnswerFriend && (
+            <View style={styles.answers}>
+              <Pressable onPress={() => answerFriend(n, true)} disabled={!!busy} style={[styles.answer, styles.accept]}
+                accessibilityRole="button" accessibilityLabel={`Accepter la demande d'ami de ${n.title}`}>
+                {busy === `${n.id}:friend-ok` ? <ActivityIndicator size="small" color={C.white} /> : <Text style={styles.acceptTxt}>Accepter</Text>}
+              </Pressable>
+              <Pressable onPress={() => answerFriend(n, false)} disabled={!!busy} style={[styles.answer, styles.decline]}
+                accessibilityRole="button" accessibilityLabel={`Refuser la demande d'ami de ${n.title}`}>
+                <Text style={styles.declineTxt}>Refuser</Text>
               </Pressable>
             </View>
           )}

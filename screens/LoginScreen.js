@@ -185,6 +185,7 @@ export default function LoginScreen({ navigation, route }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
+  const [codeChannel, setCodeChannel] = useState('email');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -267,7 +268,8 @@ export default function LoginScreen({ navigation, route }) {
     const errors = {};
     if (!firstName.trim()) errors.firstName = 'Le prénom est requis';
     if (!lastName.trim())  errors.lastName  = 'Le nom est requis';
-    if (phone.trim() && !toE164(phone, '33')) errors.phone = 'Numéro invalide (ex. +33 6 12 34 56 78)';
+    if (!phone.trim()) errors.phone = 'Le numéro de téléphone est requis';
+    else if (!toE164(phone, '33')) errors.phone = 'Numéro invalide (ex. +33 6 12 34 56 78)';
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -310,7 +312,8 @@ export default function LoginScreen({ navigation, route }) {
         password,
         first_name:       firstName.trim(),
         last_name:        lastName.trim(),
-        ...(phone.trim() ? { phone_number: toE164(phone, '33') } : {}),
+        phone_number:     toE164(phone, '33'),
+        verification_channel: codeChannel,
         accepted_privacy: true,
         marketing_opt_in: marketingOptIn,
         ...(invitationToken ? { invitation_token: invitationToken } : {}),
@@ -319,7 +322,7 @@ export default function LoginScreen({ navigation, route }) {
         // Compte déjà vérifié (ex. invitation reçue sur cette adresse)
         await login({ userData: data.user, access: data.access, refresh: data.refresh });
       } else {
-        navigation?.navigate('VerifyEmail', { email: data.email || email.trim() });
+        navigation?.navigate('VerifyEmail', { email: data.email || email.trim(), channel: data.channel || codeChannel, phone: data.phone });
       }
     } catch (err) {
       const body = err.response?.data || {};
@@ -399,6 +402,13 @@ export default function LoginScreen({ navigation, route }) {
             <Ionicons name="logo-apple" size={22} color={C.text} />
           </TouchableOpacity>
         </View>
+
+        {/* L'inscription n'est pas obligatoire : on peut découvrir les événements publics sans compte */}
+        <TouchableOpacity style={styles.laterBtn} accessibilityRole="button"
+          accessibilityHint="Voir les événements publics sans créer de compte"
+          onPress={() => (navigation?.canGoBack() ? navigation.goBack() : navigation?.navigate('Home'))}>
+          <Text style={styles.laterTxt}>Plus tard — découvrir les événements publics</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
@@ -539,7 +549,7 @@ export default function LoginScreen({ navigation, route }) {
       <Text style={styles.formSubtitle}>
         {registerStep === 1
           ? 'Étape 1 sur 2 — Vos identifiants de connexion'
-          : 'Étape 2 sur 2 — Comment vous appelle-t-on ?'
+          : 'Étape 2 sur 2 — Vos informations'
         }
       </Text>
 
@@ -603,15 +613,28 @@ export default function LoginScreen({ navigation, route }) {
           />
           <InputField
             icon="call-outline"
-            placeholder="Téléphone (facultatif) · +33 6 12 34 56 78"
+            placeholder="Téléphone · +33 6 12 34 56 78"
             value={phone}
             onChangeText={(t) => { setPhone(t); setFieldErrors(p => ({ ...p, phone: '' })); }}
             keyboardType="phone-pad"
             error={fieldErrors.phone}
           />
           <Text style={styles.phoneHint}>
-            Invité par SMS ? Ajoutez votre numéro : vos invitations vous attendront dans l'application.
+            Vos invitations reçues par SMS vous attendront directement dans l'application.
           </Text>
+          <Text style={styles.channelLabel} nativeID="channelLabel">Recevoir mon code de validation par</Text>
+          <View style={styles.channelRow} accessibilityRole="radiogroup" aria-labelledby="channelLabel">
+            {[['email', 'mail-outline', 'Email'], ['sms', 'chatbubble-ellipses-outline', 'SMS']].map(([id, icon, label]) => {
+              const on = codeChannel === id;
+              return (
+                <TouchableOpacity key={id} style={[styles.channelBtn, on && styles.channelBtnOn]} onPress={() => setCodeChannel(id)}
+                  accessibilityRole="radio" accessibilityState={{ checked: on }} activeOpacity={0.85}>
+                  <Ionicons name={icon} size={18} color={on ? C.white : C.green} />
+                  <Text style={[styles.channelTxt, on && { color: C.white }]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           {/* ── Consentement RGPD (M01) ─────────────────────── */}
           <View style={styles.consentBox}>
@@ -702,7 +725,17 @@ export default function LoginScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  phoneHint: { fontSize: 12, color: '#555555', lineHeight: 17, marginTop: -6, marginBottom: 12 },
+  laterBtn: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+  laterTxt: { fontSize: 14, fontWeight: '700', color: C.textSub, textDecorationLine: 'underline' },
+  phoneHint: { fontSize: 12, color: '#555555', lineHeight: 17, marginTop: -6, marginBottom: 14 },
+  channelLabel: { fontSize: 13, fontWeight: '700', color: '#555555', marginBottom: 8 },
+  channelRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+  channelBtn: {
+    flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1.5, borderColor: '#C5E8D3', backgroundColor: '#F6FBF8',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  channelBtnOn: { backgroundColor: '#1B6B4A', borderColor: '#1B6B4A' },
+  channelTxt: { fontSize: 15, fontWeight: '700', color: '#1B6B4A' },
   root:  { flex: 1, backgroundColor: C.white },
   safe:  { flex: 1 },
   kav:   { flex: 1 },

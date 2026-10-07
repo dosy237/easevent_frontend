@@ -3,17 +3,17 @@
  * ════════════════════════════════════════════════════════════════
  * Deux façons d'arriver ici :
  *
- * 1. Après l'inscription (ou une connexion refusée car l'email n'est
- *    pas vérifié) → params { email }.
- *    « Ouvrir ma messagerie », « Renvoyer l'email » (attente 60 s),
- *    « Modifier » (retour à l'inscription).
+ * 1. Après l'inscription (ou une connexion refusée car le compte n'est
+ *    pas vérifié) → params { email, channel: 'email' | 'sms', phone }.
+ *    Saisie du code à 6 chiffres reçu par email ou par SMS (au choix),
+ *    renvoi (attente 60 s), changement de canal, « Modifier ».
  *
  * 2. Depuis le lien reçu par email : easevent.app/verify/:token
  *    → POST /api/auth/verify-email/ puis connexion automatique.
  * ════════════════════════════════════════════════════════════════
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Linking, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Linking, Platform, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -49,6 +49,10 @@ export default function VerifyEmailScreen({ navigation, route }) {
   const [verifyState, setVerifyState] = useState(token ? 'verifying' : 'waiting'); // verifying | error | waiting
   const [error, setError] = useState('');
   const verifyStarted = useRef(false);
+  const [channel, setChannel] = useState(route.params?.channel || 'email');
+  const phone = route.params?.phone || '';
+  const [code, setCode] = useState('');
+  const [checking, setChecking] = useState(false);
 
   // ── Compte à rebours avant de pouvoir renvoyer l'email ──────
   useEffect(() => {
@@ -90,18 +94,38 @@ export default function VerifyEmailScreen({ navigation, route }) {
     Linking.openURL(url).catch(() => Linking.openURL('mailto:').catch(() => {}));
   };
 
-  const resend = async () => {
-    if (!email || countdown > 0) return;
+  const resend = async (nextChannel = channel) => {
+    if (!email || (countdown > 0 && nextChannel === channel)) return;
     setSending(true);
     setNotice('');
+    setError('');
     try {
-      await authService.resendVerification(email);
-      setNotice('Un nouveau lien vient de vous être envoyé.');
+      const res = await authService.resendVerification(email, nextChannel);
+      const used = res.channel || nextChannel;
+      setChannel(used);
+      setCode('');
+      setNotice(used === 'sms' ? 'Un nouveau code vous a été envoyé par SMS.'
+        : nextChannel === 'sms' ? "L'envoi par SMS est indisponible : le code vous a été envoyé par email."
+          : 'Un nouveau code vous a été envoyé par email.');
       setCountdown(RESEND_DELAY);
     } catch (err) {
       setNotice(apiErrorMessage(err));
     } finally {
       setSending(false);
+    }
+  };
+
+  const submitCode = async () => {
+    if (code.length !== 6) return;
+    setChecking(true);
+    setError('');
+    try {
+      const data = await authService.verifyCode({ email, code, channel });
+      await login({ userData: data.user, access: data.access, refresh: data.refresh });
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Code incorrect ou expiré.'));
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -123,6 +147,7 @@ export default function VerifyEmailScreen({ navigation, route }) {
   }
 
   const hasError = verifyState === 'error';
+  const bySms = channel === 'sms';
 
   return (
     <View style={styles.root}>
@@ -133,25 +158,39 @@ export default function VerifyEmailScreen({ navigation, route }) {
           </View>
 
           <View style={styles.body}>
-            <EnvelopeIllustration />
+            {bySms
+              ? <View style={styles.smsIcon}><Ionicons name="chatbubble-ellipses-outline" size={44} color={C.green} /></View>
+              : <EnvelopeIllustration width={180} height={148} />}
             <View style={styles.texts}>
               <Text style={styles.title} accessibilityRole="header">
-                {hasError ? 'Lien non valide' : 'Vérifiez votre boîte mail'}
+                {hasError ? 'Lien non valide' : 'Entrez votre code'}
               </Text>
               {hasError ? (
                 <Text style={styles.subtitle}>{error}</Text>
               ) : (
                 <Text style={styles.subtitle}>
-                  Un lien de confirmation a été envoyé à{'\n'}
-                  <Text style={styles.email}>{email || 'votre adresse email'}</Text>
+                  Code à 6 chiffres envoyé {bySms ? 'par SMS au' : 'par email à'}{'\n'}
+                  <Text style={styles.email}>{bySms ? (phone || 'votre numéro') : (email || 'votre adresse email')}</Text>
                 </Text>
               )}
             </View>
             {!hasError && (
-              <View style={styles.pill}>
-                <Ionicons name="time-outline" size={16} color={C.green} />
-                <Text style={styles.pillTxt}>Le lien reste valable 24 heures</Text>
-              </View>
+              <>
+                <TextInput
+                  style={styles.code}
+                  value={code}
+                  onChangeText={(t) => { setCode(t.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                  placeholder="••••••"
+                  placeholderTextColor={C.textFaint}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  textContentType="oneTimeCode"
+                  accessibilityLabel="Code de vérification à 6 chiffres"
+                  onSubmitEditing={submitCode}
+                />
+                {error ? <Text style={styles.codeError} accessibilityRole="alert">{error}</Text> : null}
+              </>
             )}
           </View>
 
@@ -164,21 +203,29 @@ export default function VerifyEmailScreen({ navigation, route }) {
             ) : null}
 
             {hasError ? (
-              <PrimaryButton
-                label="Se connecter"
-                icon="arrow-forward-outline"
-                onPress={() => navigation.navigate('Login', { mode: 'login' })}
-              />
+              <PrimaryButton label="Se connecter" icon="arrow-forward-outline" onPress={() => navigation.navigate('Login', { mode: 'login' })} />
             ) : (
-              <PrimaryButton label="Ouvrir ma messagerie" icon="arrow-forward-outline" onPress={openMailbox} />
+              <PrimaryButton label="Valider mon compte" icon="checkmark-outline" onPress={submitCode}
+                loading={checking} disabled={code.length !== 6} />
             )}
 
-            {email ? (
-              <SecondaryButton
-                label={countdown > 0 ? `Renvoyer l'email dans ${formatDelay(countdown)}` : (sending ? 'Envoi…' : "Renvoyer l'email")}
-                onPress={resend}
-                disabled={countdown > 0 || sending}
-              />
+            {!hasError && !bySms && (
+              <SecondaryButton label="Ouvrir ma messagerie" icon="mail-open-outline" onPress={openMailbox} />
+            )}
+
+            {email && !hasError ? (
+              <>
+                <LinkButton
+                  label={countdown > 0 ? `Renvoyer le code dans ${formatDelay(countdown)}` : (sending ? 'Envoi…' : 'Renvoyer le code')}
+                  onPress={() => resend(channel)}
+                  style={styles.centerLink}
+                />
+                <LinkButton
+                  label={bySms ? 'Recevoir le code par email plutôt' : 'Recevoir le code par SMS plutôt'}
+                  onPress={() => resend(bySms ? 'email' : 'sms')}
+                  style={styles.centerLink}
+                />
+              </>
             ) : null}
 
             <View style={styles.editRow}>
@@ -216,4 +263,11 @@ const styles = StyleSheet.create({
   noticeTxt: { flex: 1, fontSize: 13, color: C.greenDark, fontWeight: '600' },
   editRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
   editTxt: { fontSize: 14, color: C.textMut },
+  smsIcon: { width: 96, height: 96, borderRadius: 28, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  code: {
+    width: '100%', maxWidth: 320, minHeight: 60, borderRadius: 16, borderWidth: 1.5, borderColor: C.border,
+    backgroundColor: C.inputBg, textAlign: 'center', fontSize: 30, fontWeight: '800', letterSpacing: 12, color: C.text,
+  },
+  codeError: { fontSize: 14, color: C.errorText, textAlign: 'center' },
+  centerLink: { alignSelf: 'center', minHeight: 40, justifyContent: 'center' },
 });

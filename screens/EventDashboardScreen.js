@@ -125,6 +125,15 @@ export default function EventDashboardScreen({ route, navigation }) {
   const [refreshing,    setRefreshing]    = useState(false);
   const [publishing,    setPublishing]    = useState(false);
 
+  // Nouvel événement passé en paramètre (écran déjà monté) et « Publier et inviter »
+  const openInvite = route.params?.openInvite;
+  useEffect(() => {
+    if (initialEvent?.id && initialEvent.id !== event?.id) setEvent(initialEvent);
+  }, [initialEvent?.id]);
+  useEffect(() => {
+    if (openInvite && initialEvent) navigation.navigate('InviteGuests', { event: initialEvent });
+  }, [openInvite]);
+
   // Animation d'entrée
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -209,6 +218,38 @@ const handlePublish = async () => {
     ]
   );
 };
+
+  // ── Public ↔ Privé (modifiable à tout moment) ─────────────────
+  const [savingVisibility, setSavingVisibility] = useState(false);
+  const changeVisibility = (next) => {
+    if (next === event.visibility || savingVisibility) return;
+    const toPrivate = next === 'private';
+    showAlert(
+      toPrivate ? 'Passer en privé ?' : 'Passer en public ?',
+      toPrivate
+        ? "L'événement n'apparaîtra plus dans Découvrir. Seuls vos invités et les personnes qui ont déjà un ticket pourront le voir."
+        : (event.status === 'published'
+          ? "L'événement apparaîtra dans Découvrir : tout le monde pourra le voir et prendre un ticket."
+          : "Une fois publié, l'événement apparaîtra dans Découvrir et tout le monde pourra le voir."),
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: toPrivate ? 'Passer en privé' : 'Passer en public',
+          onPress: async () => {
+            setSavingVisibility(true);
+            try {
+              const data = await eventService.updateEvent(event.id, { visibility: next });
+              setEvent((prev) => ({ ...prev, visibility: data.event?.visibility || next }));
+            } catch (err) {
+              showAlert('Erreur', err.response?.data?.detail || 'Impossible de changer la visibilité.');
+            } finally {
+              setSavingVisibility(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // ── Supprimer l'événement ────────────────────────────────────
   const handleDelete = () => {
@@ -416,6 +457,30 @@ const handlePublish = async () => {
                   <View style={styles.actionsCard}>
                     <Text style={styles.cardTitle}>Actions</Text>
 
+                    {/* Visibilité : Public / Privé */}
+                    <Text style={styles.visLabel} nativeID="visLabel">Visibilité</Text>
+                    <View style={styles.visRow} accessibilityRole="radiogroup" accessibilityLabel="Visibilité">
+                      {[
+                        { value: 'public',  label: 'Public', icon: 'earth-outline',       desc: 'Visible par tous' },
+                        { value: 'private', label: 'Privé',  icon: 'lock-closed-outline', desc: 'Sur invitation' },
+                      ].map((v) => {
+                        const active = event.visibility === v.value;
+                        return (
+                          <TouchableOpacity key={v.value} style={[styles.visOpt, active && styles.visOptActive]}
+                            onPress={() => changeVisibility(v.value)} disabled={savingVisibility} activeOpacity={0.85}
+                            accessibilityRole="radio" accessibilityState={{ selected: active, disabled: savingVisibility }}
+                            accessibilityLabel={`${v.label} : ${v.desc}`}>
+                            <Ionicons name={v.icon} size={18} color={active ? C.white : C.green} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.visOptTxt, active && { color: C.white }]}>{v.label}</Text>
+                              <Text style={[styles.visOptSub, active && { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>{v.desc}</Text>
+                            </View>
+                            {active && savingVisibility ? <ActivityIndicator size="small" color={C.white} /> : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
                     {/* Bouton Publier / Dépublier */}
                     <TouchableOpacity
                       style={[
@@ -447,7 +512,7 @@ const handlePublish = async () => {
                       <View style={styles.publishedInfo}>
                         <Ionicons name="checkmark-circle" size={14} color={C.green} />
                         <Text style={styles.publishedInfoTxt}>
-                          Visible dans le fil de découverte
+                          {event.visibility === 'private' ? 'Accessible uniquement à vos invités' : 'Visible dans le fil de découverte'}
                         </Text>
                       </View>
                     )}
@@ -515,6 +580,12 @@ const handlePublish = async () => {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  visLabel:     { fontSize: 12, fontWeight: '700', color: C.textMut, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  visRow:       { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  visOpt:       { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 56, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white },
+  visOptActive: { backgroundColor: C.green, borderColor: C.green },
+  visOptTxt:    { fontSize: 14, fontWeight: '800', color: C.text },
+  visOptSub:    { fontSize: 11, color: C.textMut },
   // M11 — lignes d'action
   rowsCard: { backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, marginBottom: 14 },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, borderBottomWidth: 1, borderBottomColor: C.border },
@@ -639,7 +710,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  infoRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  infoRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 12 },
   infoLabel:   { fontSize: 13, color: C.textMut, fontWeight: '500' },
   infoValue:   { fontSize: 13, color: C.text, fontWeight: '600', flex: 1, textAlign: 'right' },
   descText:    { fontSize: 14, color: C.textSub, lineHeight: 21 },

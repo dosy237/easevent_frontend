@@ -13,9 +13,12 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, AppState, FlatList, Image, KeyboardAvoidingView, Platform, Pressable,
+  ActivityIndicator, AppState, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { openDirections } from '../components/maps/EventMap';
+import { showAlert } from '../utils/dialog';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -33,6 +36,20 @@ const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août'
 const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const shortDay = (d) => `${d.getDate()} ${MOIS[d.getMonth()]}`;
+
+// Aperçu de carte ; si l'image ne charge pas (hors ligne…), pastille neutre
+function MapThumb({ uri }) {
+  const [failed, setFailed] = useState(false);
+  if (!uri || failed) {
+    return (
+      <View style={[styles.mapImg, styles.mapPh]}>
+        <Ionicons name="location" size={30} color={C.green} />
+        <Text style={styles.mapPhTxt}>Voir sur la carte</Text>
+      </View>
+    );
+  }
+  return <Image source={{ uri }} style={styles.mapImg} resizeMode="cover" onError={() => setFailed(true)} accessibilityIgnoresInvertColors />;
+}
 
 function dayLabel(iso) {
   const d = new Date(iso);
@@ -162,6 +179,42 @@ export default function ChatScreen({ navigation, route }) {
     }
   };
 
+  const sendPhoto = async () => {
+    if (!convId) return;
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Accès aux photos', 'Autorisez Easevent à accéder à vos photos pour envoyer une image ou une capture d’écran.');
+        return;
+      }
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85, allowsMultipleSelection: false });
+    if (res.canceled || !res.assets?.length) return;
+    const asset = res.assets[0];
+    const temp = { id: `tmp-${Date.now()}`, kind: 'image', body: '', from_me: true, created_at: new Date().toISOString(),
+      pending: true, image: { url: asset.uri, width: asset.width, height: asset.height } };
+    setMessages((prev) => [...prev, temp]);
+    try {
+      const saved = await messageService.sendImage(convId, asset);
+      setMessages((prev) => prev.map((m) => (m.id === temp.id ? saved : m)));
+    } catch (err) {
+      setMessages((prev) => prev.filter((m) => m.id !== temp.id));
+      showAlert('Envoi impossible', apiErrorMessage(err, "L'image n'a pas pu être envoyée."));
+    }
+  };
+
+  const sendItinerary = async () => {
+    if (!convId) return;
+    try {
+      const saved = await messageService.sendLocation(convId);
+      setMessages((prev) => [...prev, saved]);
+    } catch (err) {
+      showAlert('Itinéraire indisponible', apiErrorMessage(err));
+    }
+  };
+
+  const [viewer, setViewer] = useState(null);
+
   const retry = (m) => { setMessages((prev) => prev.filter((x) => x.id !== m.id)); send(m.body); };
 
   const role = head?.role;
@@ -177,7 +230,7 @@ export default function ChatScreen({ navigation, route }) {
 
   const quickReplies = role === 'organizer'
     ? [
-      ...(ev?.location_address ? [["Envoyer l'itinéraire", `Voici l'itinéraire : https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location_address)}`]] : []),
+      ...(ev?.location_address ? [["Envoyer l'itinéraire", sendItinerary]] : []),
       ['Merci pour votre réponse', 'Merci pour votre réponse, à très bientôt !'],
       ['Où trouver son ticket', "Votre ticket est dans l'application Easevent, onglet « Tickets » : présentez le QR code à l'entrée."],
     ]
@@ -219,6 +272,38 @@ export default function ChatScreen({ navigation, route }) {
     }
     const mine = m.from_me;
     const d = new Date(m.created_at);
+    if (m.kind === 'image' && m.image) {
+      const ratio = m.image.width && m.image.height ? m.image.width / m.image.height : 4 / 3;
+      return (
+        <Pressable onPress={() => setViewer(m.image.url)} style={[styles.media, mine ? styles.mediaMine : styles.mediaTheirs]}
+          accessibilityRole="imagebutton" accessibilityLabel={`Photo envoyée par ${mine ? 'vous' : other?.first_name || ''}, ${hhmm(d)}. Agrandir`}>
+          <Image source={{ uri: m.image.url }} style={[styles.photo, { aspectRatio: Math.max(0.5, Math.min(ratio, 2)) }]} resizeMode="cover" />
+          {m.body ? <Text style={[styles.body, { paddingHorizontal: 10, paddingTop: 6 }, mine && { color: C.white }]}>{m.body}</Text> : null}
+          <Text style={[styles.metaTxt, styles.mediaMeta, mine && { color: 'rgba(255,255,255,0.8)' }]}>{m.pending ? 'Envoi…' : hhmm(d)}</Text>
+        </Pressable>
+      );
+    }
+    if (m.kind === 'location' && m.location) {
+      const loc = m.location;
+      return (
+        <View style={[styles.media, mine ? styles.mediaMine : styles.mediaTheirs, { width: 260 }]}>
+          <Pressable onPress={() => openDirections(loc, loc.address)} accessibilityRole="button"
+            accessibilityLabel={`Itinéraire jusqu'à ${loc.address}`}>
+            <MapThumb uri={loc.map_image} />
+          </Pressable>
+          <View style={styles.locBody}>
+            <Text style={[styles.locTitle, mine && { color: C.white }]} numberOfLines={1}>{loc.title}</Text>
+            <Text style={[styles.locAddr, mine && { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={2}>{loc.address}</Text>
+            <Pressable onPress={() => openDirections(loc, loc.address)} style={[styles.locBtn, mine && { backgroundColor: C.white }]}
+              accessibilityRole="button" accessibilityHint="Ouvre Google Maps avec le trajet depuis votre position">
+              <Ionicons name="navigate" size={15} color={mine ? C.green : C.white} />
+              <Text style={[styles.locBtnTxt, mine && { color: C.green }]}>Itinéraire</Text>
+            </Pressable>
+            <Text style={[styles.metaTxt, { marginTop: 6 }, mine && { color: 'rgba(255,255,255,0.8)' }]}>{hhmm(d)}</Text>
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={[styles.bubble, mine ? styles.mine : styles.theirs, m.failed && styles.failed]}
         accessible accessibilityLabel={`${mine ? 'Vous' : other?.first_name || ''} : ${m.body}, ${hhmm(d)}${m.failed ? ', non envoyé' : ''}`}>
@@ -312,14 +397,18 @@ export default function ChatScreen({ navigation, route }) {
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickBar} contentContainerStyle={styles.quick} keyboardShouldPersistTaps="handled">
               {quickReplies.map(([label, body]) => (
-                <Pressable key={label} onPress={() => send(body)} style={styles.quickBtn} accessibilityRole="button"
-                  accessibilityHint="Envoie ce message">
+                <Pressable key={label} onPress={() => (typeof body === 'function' ? body() : send(body))} style={styles.quickBtn}
+                  accessibilityRole="button" accessibilityHint="Envoie ce message">
                   <Text style={styles.quickTxt}>{label}</Text>
                 </Pressable>
               ))}
             </ScrollView>
 
             <View style={styles.composer}>
+              <Pressable onPress={sendPhoto} style={styles.attach} accessibilityRole="button"
+                accessibilityLabel="Envoyer une photo ou une capture d'écran">
+                <Ionicons name="image-outline" size={22} color={C.textSub} />
+              </Pressable>
               <TextInput
                 style={styles.input}
                 value={text}
@@ -338,6 +427,12 @@ export default function ChatScreen({ navigation, route }) {
           </KeyboardAvoidingView>
         )}
       </SafeAreaView>
+      <Modal visible={!!viewer} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
+        <Pressable style={styles.viewer} onPress={() => setViewer(null)} accessibilityLabel="Fermer l'image">
+          {viewer ? <Image source={{ uri: viewer }} style={styles.viewerImg} resizeMode="contain" /> : null}
+          <View style={styles.viewerClose}><Ionicons name="close" size={26} color={C.white} /></View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -386,5 +481,22 @@ const styles = StyleSheet.create({
   quickTxt: { fontSize: 13, fontWeight: '600', color: C.green },
   composer: { backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.border, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24, flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   input: { flex: 1, minHeight: 44, maxHeight: 120, borderRadius: 14, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.inputBg, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 11, fontSize: 15, color: C.text },
+  attach: { width: TOUCH, height: TOUCH, borderRadius: 14, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
+  media: { maxWidth: '78%', width: 240, borderRadius: 18, overflow: 'hidden', paddingBottom: 6 },
+  mediaMine: { alignSelf: 'flex-end', backgroundColor: C.green, borderBottomRightRadius: 4 },
+  mediaTheirs: { alignSelf: 'flex-start', backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderBottomLeftRadius: 4 },
+  photo: { width: '100%', backgroundColor: '#E5E5E5' },
+  mediaMeta: { alignSelf: 'flex-end', paddingHorizontal: 10, paddingTop: 4 },
+  mapImg: { width: '100%', height: 130, backgroundColor: '#EEF2EF' },
+  mapPh: { alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: C.greenLight },
+  mapPhTxt: { fontSize: 12, fontWeight: '700', color: C.greenDark },
+  locBody: { paddingHorizontal: 12, paddingTop: 10 },
+  locTitle: { fontSize: 14, fontWeight: '800', color: C.text },
+  locAddr: { fontSize: 13, color: C.textSub, marginTop: 2, lineHeight: 18 },
+  locBtn: { marginTop: 10, minHeight: 40, borderRadius: 12, backgroundColor: C.green, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  locBtnTxt: { fontSize: 14, fontWeight: '800', color: C.white },
+  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  viewerImg: { width: '100%', height: '85%' },
+  viewerClose: { position: 'absolute', top: 48, right: 20, width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
   sendBtn: { width: TOUCH, height: TOUCH, borderRadius: 14, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' },
 });

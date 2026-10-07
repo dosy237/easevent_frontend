@@ -31,6 +31,7 @@ import eventService from '../services/eventService';
 import ColorPicker from '../components/ui/ColorPicker';
 import ticketService from '../services/ticketService';
 import { showAlert } from '../utils/dialog';
+import AddressInput from '../components/maps/AddressInput';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
 // ─────────────────────────────────────────────────────────────────
@@ -113,12 +114,9 @@ const formatDateDisplay = (date) => {
 // FONCTION UTILITAIRE : formater une date pour l'API Django
 // Date → "2026-09-15T18:00:00"
 // ─────────────────────────────────────────────────────────────────
-const formatDateISO = (date) => {
-  if (!date) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}` +
-         `T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
-};
+// Heure exacte en UTC (ex. 2026-11-20T18:00:00.000Z) : l'heure choisie sur le téléphone
+// reste la même quel que soit le fuseau du serveur ou de l'invité.
+const formatDateISO = (date) => (date ? date.toISOString() : '');
 
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : StepIndicator
@@ -399,7 +397,11 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading }) => (
 // ════════════════════════════════════════════════════════════════
 // ÉCRAN PRINCIPAL : CreateEventScreen
 // ════════════════════════════════════════════════════════════════
-export default function CreateEventScreen({ navigation }) {
+const DRESS_CHIPS = ['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème', 'Autre'];
+
+export default function CreateEventScreen({ navigation, route }) {
+  // Mode « Modifier l'événement » : le même formulaire, pré-rempli
+  const editing = route?.params?.event || null;
 
   const { accessToken } = useAuth();
 
@@ -420,6 +422,7 @@ export default function CreateEventScreen({ navigation }) {
   const [startDate,       setStartDate]       = useState(null);
   const [endDate,         setEndDate]         = useState(null);
   const [locationAddress, setLocationAddress] = useState('');
+  const [locationCoords, setLocationCoords] = useState({ lat: null, lng: null });
   const [isOnline,        setIsOnline]        = useState(false);
   const [onlineLink,      setOnlineLink]      = useState('');
 
@@ -551,7 +554,7 @@ export default function CreateEventScreen({ navigation }) {
   const resetForm = () => {
     setStep(1);
     setTitle(''); setEventType(''); setEventTypeLabel(''); setDescription('');
-    setStartDate(null); setEndDate(null); setLocationAddress('');
+    setStartDate(null); setEndDate(null); setLocationAddress(''); setLocationCoords({ lat: null, lng: null });
     setIsOnline(false); setOnlineLink('');
     setCoverImageUri(null); setCoverImageUrl(null);
     setGallery1Uri(null); setGallery1Url(null); setGallery2Uri(null); setGallery2Url(null);
@@ -560,6 +563,39 @@ export default function CreateEventScreen({ navigation }) {
     setHasDressCode(false); setDressChoice(''); setDressCode('');
     setErrors({});
   };
+
+  // ── Pré-remplissage en mode modification ──────────────────────
+  const initial = useRef(null);
+  React.useEffect(() => {
+    if (!editing) return;
+    let alive = true;
+    const fill = (e) => {
+      if (!alive || !e) return;
+      const tc = e.template_config || {};
+      initial.current = { cover: e.cover_image || null, visibility: e.visibility, status: e.status, template_config: tc };
+      setTitle(e.title || ''); setEventType(e.event_type || ''); setEventTypeLabel(e.event_type_label || '');
+      setDescription(e.description || '');
+      setStartDate(e.start_date ? new Date(e.start_date) : null);
+      setEndDate(e.end_date ? new Date(e.end_date) : null);
+      setIsOnline(!!e.is_online); setOnlineLink(e.online_link || '');
+      setLocationAddress(e.location_address || '');
+      setLocationCoords({ lat: e.latitude ?? null, lng: e.longitude ?? null });
+      setCoverImageUri(e.cover_image || null); setCoverImageUrl(e.cover_image || null);
+      const [g1, g2] = Array.isArray(tc.gallery) ? tc.gallery : [];
+      setGallery1Uri(g1 || null); setGallery1Url(g1 || null); setGallery2Uri(g2 || null); setGallery2Url(g2 || null);
+      setAmbiance(e.ambiance || ''); setAmbianceLabel(e.ambiance_label || '');
+      setPrimaryColor(e.palette?.primary || ''); setSecondaryColor(e.palette?.secondary || '');
+      setVisibility(e.visibility || 'public');
+      setMaxGuests(e.max_guests ? String(e.max_guests) : '');
+      setIsPaid(!!e.is_paid); setPrice(e.is_paid && e.price ? String(e.price).replace('.', ',') : '');
+      setHasDressCode(!!e.dress_code); setDressCode(e.dress_code || '');
+      setDressChoice(e.dress_code ? (DRESS_CHIPS.includes(e.dress_code) ? e.dress_code : 'Autre') : '');
+    };
+    fill(editing);
+    // Données complètes (galerie…) depuis le détail organisateur
+    eventService.fetchEventDetail(editing.id).then((d) => fill(d.event)).catch(() => {});
+    return () => { alive = false; };
+  }, [editing?.id]);
 
   // ── Validation par étape ──────────────────────────────────────
   const validateStep = () => {
@@ -630,7 +666,7 @@ export default function CreateEventScreen({ navigation }) {
         ambiance, palette,
       };
 
-      await eventService.createEvent({
+      const payload = {
         title,
         event_type:       eventType,
         event_type_label: eventType === 'autre' ? eventTypeLabel.trim() : '',
@@ -638,6 +674,8 @@ export default function CreateEventScreen({ navigation }) {
         start_date:       formatDateISO(startDate),
         end_date:         formatDateISO(endDate),
         location_address: locationAddress,
+        latitude:         isOnline ? null : locationCoords.lat,
+        longitude:        isOnline ? null : locationCoords.lng,
         is_online:        isOnline,
         online_link:      onlineLink || null,
         cover_image:      coverImageUrl,
@@ -649,19 +687,55 @@ export default function CreateEventScreen({ navigation }) {
         currency:         'EUR',
         max_guests:       maxGuests.trim() ? parseInt(maxGuests, 10) : null,
         dress_code:       hasDressCode ? finalDressCode() : null,
-      });
+      };
+
+      if (editing) {
+        // On ne renvoie la couverture que si elle a changé (l'URL affichée est absolue)
+        payload.template_config = { ...(initial.current?.template_config || {}), ...template_config };
+        if (coverImageUrl === initial.current?.cover) {
+          delete payload.cover_image;
+          payload.template_config.cover_image = initial.current?.template_config?.cover_image;
+        }
+        await eventService.updateEvent(editing.id, payload);
+        const before = initial.current?.visibility;
+        const changed = before && before !== visibility;
+        showAlert(
+          'Modifications enregistrées',
+          changed
+            ? (visibility === 'private'
+              ? "L'événement est maintenant privé : il n'apparaît plus dans Découvrir. Vos invités et les personnes qui ont déjà un ticket y gardent accès."
+              : initial.current?.status === 'published'
+                ? "L'événement est maintenant public : il apparaît dans Découvrir et tout le monde peut le voir."
+                : "L'événement est maintenant public : une fois publié, il apparaîtra dans Découvrir.")
+            : `"${title}" a été mis à jour.`,
+          [{ text: 'OK', onPress: () => navigation?.goBack() }]
+        );
+        return;
+      }
+
+      const { event: created } = await eventService.createEvent(payload);
 
       const createdTitle = title;
       resetForm();
-      // TODO lot « mini-site IA » : remplacer par la navigation vers M05 (EventCreated)
+      // TODO lot « mini-site IA » : passer par M05 (EventCreated) avant ce choix
+      // L'événement est créé en brouillon : on propose de le publier et d'inviter tout de suite, ou plus tard.
+      const openEvent = (invite) => navigation?.navigate('TabDashboard', {
+        screen: 'EventDashboard', initial: false,   // le tableau de bord reste dessous (bouton retour)
+        params: { event: created, ...(invite ? { openInvite: Date.now() } : {}) },
+      });
+      const publishThen = async (invite) => {
+        try { await eventService.publishEvent(created.id, created.visibility); created.status = 'published'; }
+        catch (err) { showAlert('Publication impossible', err.response?.data?.detail || 'Vous pourrez le publier depuis la page de l\'événement.'); }
+        openEvent(invite);
+      };
       showAlert(
         'Événement créé',
-        `"${createdTitle}" a été créé avec succès. Rendez-vous sur votre tableau de bord pour le personnaliser.`,
-        [{
-          text: 'Voir mon tableau de bord',
-          // navigate remonte jusqu'aux onglets, depuis l'onglet Créer comme depuis le tableau de bord
-          onPress: () => navigation?.navigate('TabDashboard', { screen: 'Dashboard' }),
-        }]
+        `"${createdTitle}" est prêt. Voulez-vous le publier et inviter vos proches maintenant ?`,
+        [
+          { text: 'Publier et inviter', onPress: () => publishThen(true) },
+          { text: 'Publier, inviter plus tard', onPress: () => publishThen(false) },
+          { text: 'Garder en brouillon', style: 'cancel', onPress: () => openEvent(false) },
+        ]
       );
     } catch (err) {
       const detail = err.response?.data?.detail || 'Vérifiez votre connexion et réessayez.';
@@ -792,14 +866,15 @@ export default function CreateEventScreen({ navigation }) {
 
       {/* Adresse ou lien selon le type */}
       {!isOnline ? (
-        <InputField
-          label="Adresse du lieu *"
-          icon="location-outline"
-          value={locationAddress}
-          onChangeText={setLocationAddress}
-          placeholder="Ex: Château de Versailles, 78000 Versailles"
-          error={errors.locationAddress}
-        />
+        <View style={{ marginBottom: 16 }}>
+          <Text style={styles.addressLabel}>Adresse du lieu *</Text>
+          <AddressInput
+            value={locationAddress}
+            located={locationCoords.lat != null}
+            onChange={({ address, lat, lng }) => { setLocationAddress(address); setLocationCoords({ lat, lng }); }}
+            error={errors.locationAddress}
+          />
+        </View>
       ) : (
         <InputField
           label="Lien de la réunion"
@@ -1069,7 +1144,7 @@ export default function CreateEventScreen({ navigation }) {
         {hasDressCode && (
           <>
             <View style={styles.dressChips}>
-              {['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème', 'Autre'].map((label) => {
+              {DRESS_CHIPS.map((label) => {
                 const active = dressChoice === label;
                 return (
                   <TouchableOpacity
@@ -1136,7 +1211,7 @@ export default function CreateEventScreen({ navigation }) {
             <Ionicons name="arrow-back-outline" size={22} color={C.text} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Créer un événement</Text>
+            <Text style={styles.headerTitle} accessibilityRole="header">{editing ? "Modifier l'événement" : 'Créer un événement'}</Text>
             <Text style={styles.headerStep}>
               Étape {step}/{TOTAL_STEPS} — {stepLabels[step - 1]}
             </Text>
@@ -1179,7 +1254,7 @@ export default function CreateEventScreen({ navigation }) {
             ) : (
               <>
                 <Text style={styles.nextBtnTxt}>
-                  {step === TOTAL_STEPS ? 'Créer mon événement' : 'Continuer'}
+                  {step === TOTAL_STEPS ? (editing ? 'Enregistrer' : 'Créer mon événement') : 'Continuer'}
                 </Text>
                 <Ionicons
                   name={step === TOTAL_STEPS ? 'checkmark-outline' : 'arrow-forward-outline'}
@@ -1200,6 +1275,7 @@ export default function CreateEventScreen({ navigation }) {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  addressLabel: { fontSize: 13, fontWeight: '700', color: '#555555', marginBottom: 8 },
 
   root: { flex: 1, backgroundColor: C.bg },
   safe: { flex: 1, backgroundColor: C.white },
