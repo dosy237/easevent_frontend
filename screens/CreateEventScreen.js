@@ -416,15 +416,17 @@ const ImageUploadCard = ({ label, imageUri, imageUrl, onPick, uploading, onRemov
 const DRESS_CHIPS = ['Business', 'Tenue de soirée', 'Chic décontracté', 'Thème', 'Autre'];
 
 // Exemples de thèmes selon le type (placeholder du champ « Thème »)
+// Le thème est le SUJET pour ces types, l'UNIVERS pour les autres (même règle que le serveur)
+const SUBJECT_TYPES = ['conference', 'seminaire', 'atelier', 'exposition'];
 const THEME_EXAMPLES = {
-  mariage: 'Ex : Bohème champêtre, Riviera chic, Royal Bamiléké…',
+  mariage: 'Ex : Amour et bohème, Riviera chic, Royal Bamiléké…',
   anniversaire: 'Ex : Années 80, Garden party, Afro chic…',
-  conference: 'Ex : IA & climat, Fintech en Afrique, Santé de demain…',
-  seminaire: 'Ex : Cap 2027, Cohésion et performance…',
+  conference: "Ex : L'impact de l'intelligence artificielle sur les capacités cognitives de l'homme",
+  seminaire: 'Ex : Cap 2027 : réussir notre transformation numérique',
   concert: 'Ex : Nuit électro, Jazz au clair de lune…',
   festival: 'Ex : Sons d’été, Saveurs du monde…',
   gala: 'Ex : Nuit des étoiles, Gala solidaire…',
-  atelier: 'Ex : Céramique et slow life, Code pour débutants…',
+  atelier: 'Ex : Apprendre à tourner un bol en céramique',
   exposition: 'Ex : Lumières africaines, Regards urbains…',
   soiree: 'Ex : Nuit tropicale, White party…',
 };
@@ -661,6 +663,8 @@ export default function CreateEventScreen({ navigation, route }) {
       if (!eventType)          e.eventType   = 'Choisissez un type d\'événement';
       if (eventType === 'autre' && !eventTypeLabel.trim()) e.eventTypeLabel = 'Indiquez le type de votre événement';
       if (!description.trim()) e.description = 'Ajoutez une description';
+      // Les événements créés avant le thème obligatoire restent modifiables sans lui
+      if (!theme.trim() && !editing) e.theme = 'Indiquez le thème : tout le contenu du mini-site en découle';
     }
     if (step === 2) {
       if (!startDate) e.startDate = 'Choisissez une date de début';
@@ -873,6 +877,23 @@ export default function CreateEventScreen({ navigation, route }) {
           error={errors.eventTypeLabel}
         />
       )}
+
+      {/* Thème : fil conducteur de tout le contenu (le sujet d'une conférence, l'univers d'un mariage) */}
+      <InputField
+        label="Thème de l'événement *"
+        icon="sparkles-outline"
+        value={theme}
+        onChangeText={(t) => { setTheme(t); setErrors((p) => ({ ...p, theme: undefined })); }}
+        placeholder={THEME_EXAMPLES[eventType] || 'Ex : Nuit tropicale, Années folles, Innovation durable…'}
+        maxLength={160}
+        multiline
+        error={errors.theme}
+      />
+      <Text style={styles.paletteHint}>
+        {SUBJECT_TYPES.includes(eventType)
+          ? 'Le sujet traité : le mini-site en présente l’enjeu et les questions qu’il soulève.'
+          : 'L’univers de votre événement : le mini-site en tire son vocabulaire, ses images et ses couleurs.'}
+      </Text>
 
       <InputField
         label="Description *"
@@ -1139,15 +1160,7 @@ export default function CreateEventScreen({ navigation, route }) {
         />
       )}
 
-      <InputField
-        label="Thème de l'événement (facultatif)"
-        icon="sparkles-outline"
-        value={theme}
-        onChangeText={setTheme}
-        placeholder={THEME_EXAMPLES[eventType] || 'Ex : Nuit tropicale, Années folles, Innovation durable…'}
-        maxLength={80}
-      />
-      <Text style={styles.paletteHint}>Le mini-site s'en inspire : vocabulaire, images, couleurs et typographie.</Text>
+
 
       {/* Palette libre : n'importe quelle couleur (carré, teinte, code hexadécimal) */}
       <View style={styles.paletteSection}>

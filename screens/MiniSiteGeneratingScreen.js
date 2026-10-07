@@ -8,13 +8,14 @@
  * ════════════════════════════════════════════════════════════════
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PrimaryButton, SecondaryButton } from '../components/ui/Buttons';
 import { C } from '../constants/theme';
 import minisiteService from '../services/minisiteService';
+import eventService from '../services/eventService';
 import { isPlanLimit, planLimitAlert } from '../utils/plans';
 
 const STEPS = [
@@ -29,6 +30,22 @@ export default function MiniSiteGeneratingScreen({ route, navigation }) {
   const [step, setStep] = useState('queued');
   const [failed, setFailed] = useState(null);
   const [attempt, setAttempt] = useState(0);
+  // Événement créé sans thème : on le demande ici, puis la génération repart
+  const [needTheme, setNeedTheme] = useState(false);
+  const [theme, setTheme] = useState('');
+  const [saving, setSaving] = useState(false);
+  const SUBJECT = ['conference', 'seminaire', 'atelier', 'exposition'].includes(event?.event_type);
+  const saveTheme = async () => {
+    setSaving(true);
+    try {
+      await eventService.updateEvent(event.id, { theme: theme.trim() });
+      setNeedTheme(false);
+      setAttempt((a) => a + 1);
+    } catch (err) {
+      setFailed(err.response?.data?.theme || err.response?.data?.detail || 'Enregistrement impossible. Réessayez.');
+      setNeedTheme(false);
+    } finally { setSaving(false); }
+  };
   const spin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -65,6 +82,7 @@ export default function MiniSiteGeneratingScreen({ route, navigation }) {
       } catch (err) {
         if (!alive) return;
         if (isPlanLimit(err)) { planLimitAlert(navigation, err, 'Génération impossible'); navigation.goBack(); return; }
+        if (err.response?.data?.code === 'theme_required') { setNeedTheme(true); return; }
         setFailed(err.response?.data?.detail || 'Vérifiez votre connexion puis réessayez.');
       }
     })();
@@ -73,6 +91,30 @@ export default function MiniSiteGeneratingScreen({ route, navigation }) {
 
   const current = ORDER[step] ?? 0;
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+  if (needTheme) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <View style={styles.body}>
+          <View style={styles.halo}><Ionicons name="bulb-outline" size={44} color={C.green} /></View>
+          <Text style={styles.title} accessibilityRole="header">Quel est le thème ?</Text>
+          <Text style={styles.sub}>
+            {SUBJECT
+              ? 'Le sujet traité, par exemple « L’impact de l’intelligence artificielle sur les capacités cognitives de l’homme ». Tout le texte du mini-site en présentera l’enjeu.'
+              : 'L’univers de votre événement, par exemple « Amour et bohème ». Tout le texte du mini-site s’en inspire.'}
+          </Text>
+          <TextInput value={theme} onChangeText={(t) => setTheme(t.slice(0, 160))} multiline autoFocus
+            placeholder={SUBJECT ? 'Le sujet de votre événement' : 'L’univers de votre événement'} placeholderTextColor={C.textMut}
+            style={styles.themeInput} accessibilityLabel="Thème de l'événement" />
+          <Text style={styles.count}>{`${theme.length}/160`}</Text>
+        </View>
+        <View style={styles.footer}>
+          <PrimaryButton label="Générer mon mini-site" icon="sparkles" disabled={theme.trim().length < 3} loading={saving} onPress={saveTheme} />
+          <SecondaryButton label="Retour" onPress={() => navigation.goBack()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -127,4 +169,7 @@ const styles = StyleSheet.create({
   stepSub: { fontSize: 13, color: C.textSub, marginTop: 2, lineHeight: 18 },
   footer: { padding: 20, gap: 10 },
   hint: { fontSize: 13, color: C.textSub, textAlign: 'center' },
+  themeInput: { alignSelf: 'stretch', maxWidth: 480, width: '100%', minHeight: 96, marginTop: 22, borderWidth: 1.5, borderColor: C.border || '#DDD',
+    borderRadius: 14, padding: 14, fontSize: 16, color: C.text, textAlignVertical: 'top', backgroundColor: C.white },
+  count: { alignSelf: 'flex-end', fontSize: 12, color: C.textSub, marginTop: 6 },
 });
