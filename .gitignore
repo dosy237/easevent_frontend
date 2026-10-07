@@ -46,3 +46,4 @@ dist/
 
 # Firebase (notifications push Android) — fourni à part
 google-services.json
+dump.rdb
