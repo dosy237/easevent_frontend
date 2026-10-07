@@ -52,6 +52,7 @@ import { showAlert } from '../utils/dialog';
 import EventMap, { openInMaps } from '../components/maps/EventMap';
 import { formatPrice } from '../utils/format';
 import { useTicketBadge } from '../context/TicketBadgeContext';
+import { isRsvpCancel } from '../utils/rsvp';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -310,6 +311,7 @@ export default function EventDetailScreen({ route, navigation }) {
       if (ticket.status === 'generated') openTicket(ticket.id);
       else navigation.navigate('TicketCheckout', { ticketId: ticket.id });
     } catch (err) {
+      if (isRsvpCancel(err)) return;
       showAlert('Impossible de continuer', apiErrorMessage(err));
     } finally {
       setTicketBusy(false);

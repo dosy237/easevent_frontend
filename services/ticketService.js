@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { withRsvp } from '../utils/rsvp';
 
 /**
  * ticketService.js — tickets (MVP §5) et paiements Stripe Connect.
@@ -9,7 +10,9 @@ const ticketService = {
   fetchCounts: async () => (await apiClient.get('/api/tickets/counts/')).data,
   fetchOne: async (id) => (await apiClient.get(`/api/tickets/${id}/`)).data,
   // Participer / Payer depuis le détail d'un événement (M24)
-  take: async (eventId) => (await apiClient.post(`/api/events/${eventId}/tickets/`)).data,
+  // Questions RSVP de l'organisateur affichées avant, s'il y en a (M19)
+  take: async (eventId) => withRsvp(async (answers) => (await apiClient.post(`/api/events/${eventId}/tickets/`,
+    answers === undefined ? {} : { rsvp_answers: answers })).data),
   validate: async (id) => (await apiClient.post(`/api/tickets/${id}/validate/`)).data,
   cancel: async (id) => (await apiClient.post(`/api/tickets/${id}/cancel/`)).data,
   // Lien de téléchargement du PDF, signé et valable 5 minutes

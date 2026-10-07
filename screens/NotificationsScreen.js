@@ -33,6 +33,7 @@ import friendService from '../services/friendService';
 import { apiErrorMessage } from '../services/authService';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { showAlert } from '../utils/dialog';
+import { isRsvpCancel } from '../utils/rsvp';
 
 const FILTERS = [
   { id: 'all', label: 'Tout' },
@@ -178,6 +179,7 @@ export default function NotificationsScreen({ navigation }) {
       }
       await load();
     } catch (err) {
+      if (isRsvpCancel(err)) return;      // fenêtre des questions fermée : rien n'est envoyé
       showAlert('Action impossible', apiErrorMessage(err));
     } finally {
       setBusy('');

@@ -35,6 +35,7 @@ import { SkeletonGroup, EventCardSkeleton, Bone } from '../components/ui/Skeleto
 import LoadingMessages from '../components/ui/LoadingMessages';
 import { useTicketBadge } from '../context/TicketBadgeContext';
 import { useAuth } from '../context/AuthContext';
+import { isRsvpCancel } from '../utils/rsvp';
 
 // ─────────────────────────────────────────────────────────────────
 // PALETTE
@@ -336,6 +337,7 @@ export default function TicketsScreen({ navigation, route }) {
       await eventService.respondToInvitation(invitation.id, status);
       await load();
     } catch (err) {
+      if (isRsvpCancel(err)) return;
       showAlert('Erreur', apiErrorMessage(err, 'Impossible de répondre à cette invitation.'));
     }
   };

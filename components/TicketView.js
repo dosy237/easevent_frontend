@@ -22,6 +22,8 @@ import ticketService from '../services/ticketService';
 import { apiErrorMessage } from '../services/authService';
 import { showAlert } from '../utils/dialog';
 import { openDirections } from './maps/EventMap';
+import rsvpService from '../services/rsvpService';
+import { askRsvp } from '../utils/rsvp';
 
 // Lien « Ajouter à Google Agenda » : fonctionne sur tous les appareils, sans permission
 const calendarUrl = (ticket) => {
@@ -56,6 +58,24 @@ export default function TicketView({ ticket, justPaid = false }) {
       showAlert('Téléchargement impossible', apiErrorMessage(err));
     } finally {
       setDownloading(false);
+    }
+  };
+
+  // Questions de l'organisateur : revoir et modifier ses réponses (M19)
+  const [rsvpBusy, setRsvpBusy] = useState(false);
+  const editAnswers = async () => {
+    setRsvpBusy(true);
+    try {
+      const data = await rsvpService.mine(e.id);
+      setRsvpBusy(false);
+      const answers = await askRsvp({ ...data, submitLabel: 'Enregistrer mes réponses' });
+      if (answers === null) return;
+      await rsvpService.saveMine(e.id, answers);
+      showAlert('Réponses enregistrées', "L'organisateur voit vos nouvelles réponses.");
+    } catch (err) {
+      showAlert('Action impossible', apiErrorMessage(err));
+    } finally {
+      setRsvpBusy(false);
     }
   };
 
@@ -170,6 +190,13 @@ export default function TicketView({ ticket, justPaid = false }) {
           accessibilityHint="Ouvre Google Maps avec le trajet depuis votre position">
           <Ionicons name="navigate" size={16} color={C.white} />
           <Text style={styles.routeTxt}>Itinéraire jusqu'au lieu</Text>
+        </Pressable>
+      ) : null}
+      {e.has_rsvp ? (
+        <Pressable onPress={editAnswers} disabled={rsvpBusy} style={styles.shareLink} accessibilityRole="button"
+          accessibilityHint="Revoir et modifier vos réponses aux questions de l'organisateur">
+          {rsvpBusy ? <ActivityIndicator size="small" color={C.green} /> : <Ionicons name="document-text-outline" size={14} color={C.green} />}
+          <Text style={styles.shareLinkTxt}>Mes réponses aux questions</Text>
         </Pressable>
       ) : null}
       <Pressable onPress={shareTicket} accessibilityRole="button" style={styles.shareLink}>

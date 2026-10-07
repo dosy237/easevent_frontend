@@ -70,6 +70,8 @@ import eventService from '../services/eventService';
 import { SkeletonGroup, StatsSkeleton, EventCardSkeleton, Bone } from '../components/ui/Skeleton';
 import LoadingMessages, { MESSAGES } from '../components/ui/LoadingMessages';
 import { showAlert } from '../utils/dialog';
+import { isRsvpCancel } from '../utils/rsvp';
+import { apiErrorMessage } from '../services/authService';
 // ─────────────────────────────────────────────────────────────────
 // PALETTE DE COULEURS — identique aux autres écrans pour la cohérence
 // ─────────────────────────────────────────────────────────────────
@@ -468,7 +470,8 @@ export default function DashboardScreen({ navigation }) {
         )
       );
     } catch (err) {
-      showAlert('Erreur', 'Impossible de répondre à cette invitation. Réessayez.');
+      if (isRsvpCancel(err)) return;
+      showAlert('Erreur', apiErrorMessage(err, 'Impossible de répondre à cette invitation. Réessayez.'));
     }
   };
 

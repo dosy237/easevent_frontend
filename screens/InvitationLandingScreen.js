@@ -31,6 +31,7 @@ import { apiErrorMessage } from '../services/authService';
 import { KEYS, setItem } from '../services/storage';
 import { showAlert } from '../utils/dialog';
 import { formatPrice } from '../utils/format';
+import { isRsvpCancel } from '../utils/rsvp';
 
 const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -78,6 +79,7 @@ export default function InvitationLandingScreen({ navigation, route }) {
       showAlert('Invitation acceptée', 'Votre ticket vous attend dans Mes tickets : validez-le pour le générer.',
         [{ text: 'Voir mon ticket', onPress: openTickets }]);
     } catch (err) {
+      if (isRsvpCancel(err)) return;
       showAlert('Action impossible', apiErrorMessage(err));
     } finally {
       setBusy('');

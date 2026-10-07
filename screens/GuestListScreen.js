@@ -254,7 +254,7 @@ export default function GuestListScreen({ navigation, route }) {
                   onPress={() => setSelected(g)}
                   style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
                   accessibilityRole="button"
-                  accessibilityLabel={`${g.name}, ${st.label}, ${subtitle(g)}`}
+                  accessibilityLabel={`${g.name}, ${st.label}, ${subtitle(g)}${g.rsvp?.length ? ', a répondu aux questions' : ''}`}
                   accessibilityHint="Ouvre les actions : relancer, message, révoquer"
                 >
                   <View style={[styles.avatar, g.bucket === 'pending' ? { backgroundColor: C.orangeL } : g.bucket === 'confirmed' ? null : { backgroundColor: '#F1F1F1' }]}>
@@ -268,6 +268,7 @@ export default function GuestListScreen({ navigation, route }) {
                     <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
                     <Text style={[styles.sub, ['failed', 'not_configured'].includes(g.delivery_status) && { color: C.errorText }]} numberOfLines={1}>{subtitle(g)}</Text>
                   </View>
+                  {g.rsvp?.length ? <Ionicons name="document-text-outline" size={16} color={C.green} style={{ marginRight: 6 }} /> : null}
                   {rowBusy ? <ActivityIndicator size="small" color={C.green} /> : (
                     <View style={[styles.badge, { backgroundColor: st.bg }]}><Text style={[styles.badgeTxt, { color: st.color }]}>{st.label}</Text></View>
                   )}
@@ -301,6 +302,16 @@ export default function GuestListScreen({ navigation, route }) {
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle} accessibilityRole="header">{selected.name}</Text>
             <Text style={styles.sheetSub}>{subtitle(selected)} · {(STATUS[selected.display_status] || STATUS.sent).label}</Text>
+            {selected.rsvp?.length ? (
+              <View style={styles.rsvpBox} accessibilityLabel="Réponses aux questions">
+                {selected.rsvp.map((a) => (
+                  <View key={a.question_id} style={styles.rsvpRow}>
+                    <Text style={styles.rsvpQ}>{a.label}</Text>
+                    <Text style={styles.rsvpA}>{a.display}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             <SheetAction icon="refresh-outline" label="Relancer" color={C.green}
               note={selected.can_remind ? 'Un nouveau lien est envoyé.' : (['sent', 'opened'].includes(selected.status) ? 'Déjà relancé il y a moins de 24 h.' : 'Cet invité a déjà répondu.')}
               disabled={!selected.can_remind} onPress={() => remindOne(selected)} />
@@ -379,6 +390,10 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: C.white, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 28, gap: 6 },
   sheetTitle: { fontSize: 17, fontWeight: '800', color: C.text },
   sheetSub: { fontSize: 13, color: C.textSub, marginBottom: 8 },
+  rsvpBox: { backgroundColor: C.bg, borderRadius: 14, padding: 12, gap: 8, marginBottom: 6 },
+  rsvpRow: { gap: 2 },
+  rsvpQ: { fontSize: 12, color: C.textMut, fontWeight: '700' },
+  rsvpA: { fontSize: 14, color: C.text, fontWeight: '600' },
   action: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingVertical: 6 },
   actionIcon: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { fontSize: 15, fontWeight: '700', color: C.text },

@@ -1,3 +1,4 @@
+import { withRsvp } from '../utils/rsvp';
 import { apiClient } from './apiClient';
 
 /**
@@ -20,15 +21,12 @@ const eventService = {
   },
 
   // Respond to an invitation (accept/decline)
-  respondToInvitation: async (invitationId, status) => {
-    try {
-      const response = await apiClient.post(`/api/invitations/${invitationId}/repondre/`, { status });
-      return response.data;
-    } catch (error) {
-      console.error('Error responding to invitation:', error);
-      throw error;
-    }
-  },
+  // Accepter affiche d'abord les questions RSVP de l'organisateur s'il y en a (M19)
+  respondToInvitation: async (invitationId, status) => withRsvp(async (answers) => {
+    const response = await apiClient.post(`/api/invitations/${invitationId}/repondre/`,
+      answers === undefined ? { status } : { status, rsvp_answers: answers });
+    return response.data;
+  }),
 
   // Fetch events created by the current user
   fetchMyEvents: async () => {

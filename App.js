@@ -35,6 +35,7 @@ import * as Linking from 'expo-linking';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import DialogHost from './components/ui/DialogHost';
+import RsvpSheet from './components/rsvp/RsvpSheet';
 import { C } from './constants/theme';
 
 import HomeScreen from './screens/HomeScreen';
@@ -44,6 +45,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import CreateEventScreen from './screens/CreateEventScreen';
 import EventDashboardScreen from './screens/EventDashboardScreen';
+import RsvpQuestionsScreen from './screens/RsvpQuestionsScreen';
 import TicketsScreen from './screens/TicketsScreen';
 import PrivacyPolicyScreen from './screens/PrivacyPolicyScreen';
 import VerifyEmailScreen from './screens/VerifyEmailScreen';
@@ -189,7 +191,7 @@ function DashboardStackNavigator() {
       <DashStack.Screen name="Friends"            component={FriendsScreen}        options={{ title: 'Mes amis' }} />
       <DashStack.Screen name="ContactPicker"      component={ContactPickerScreen}  options={{ title: 'Mes contacts' }} />
       <DashStack.Screen name="GuestList"          component={GuestListScreen}      options={{ title: 'Invités & réponses' }} />
-      <DashStack.Screen name="RsvpQuestions"      {...soon('M14', 'Questions RSVP')} />
+      <DashStack.Screen name="RsvpQuestions"      component={RsvpQuestionsScreen}  options={{ title: 'Questions RSVP' }} />
       <DashStack.Screen name="Conversations"      component={ConversationsScreen}  options={{ title: 'Messages' }} />
       <DashStack.Screen name="Chat"               component={ChatScreen}           options={{ title: 'Conversation' }} />
       <DashStack.Screen name="Notifications"      component={NotificationsScreen} options={{ title: 'Notifications' }} />
@@ -391,6 +393,7 @@ export default function App() {
         <TicketBadgeProvider>
           <NavigationShell />
         </TicketBadgeProvider>
+        <RsvpSheet />
         <DialogHost />
       </AuthProvider>
     </SafeAreaProvider>
