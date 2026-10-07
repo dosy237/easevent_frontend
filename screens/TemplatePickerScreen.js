@@ -31,7 +31,7 @@ function Preview({ spec, event, width, height }) {
       <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ height: inner * scale || undefined }}>
         <View style={{ width: BASE_W, transform: [{ scale }], transformOrigin: 'top left' }} pointerEvents="none"
           onLayout={(e) => setInner(e.nativeEvent.layout.height)}
-          accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <MiniSite spec={spec} event={event} width={BASE_W} preview />
         </View>
       </ScrollView>

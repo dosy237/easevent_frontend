@@ -19,6 +19,11 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
   const title = event.title;
   const pad = 26;
   const openCover = cover ? () => actions.viewImage(cover) : undefined;
+  // Date et heure : toujours issues de l'événement (fuseau du téléphone), jamais de l'IA
+  const dateLine = w ? `${w.long.charAt(0).toUpperCase()}${w.long.slice(1)} · ${w.time}` : '';
+  const DateLine = ({ tt, a = align, style }) => (dateLine ? (
+    <Text style={[{ fontFamily: theme.fonts.bold, color: tt.text, fontSize: 14, letterSpacing: 0.4, textAlign: a, marginTop: 10 }, style]}>{dateLine}</Text>
+  ) : null);
 
   if (s.variant === 'fullbleed') {
     const inner = (
@@ -27,6 +32,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
           <Kicker theme={theme} t={{ accent: '#FFFFFF' }} align={align}>{copy.kicker}</Kicker>
           <Title theme={theme} t={{ text: '#FFFFFF' }} size={42} align={align}>{title}</Title>
           <Body theme={theme} t={{ text: '#FFFFFF' }} align={align} style={{ marginTop: 12, opacity: 0.92 }}>{copy.subtitle}</Body>
+          <DateLine tt={{ text: '#FFFFFF' }} />
           <Ornament kind={theme.ornament} color="#FFFFFF" width={180} style={{ marginTop: 18 }} />
         </View>
       </LinearGradient>
@@ -54,6 +60,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
           <Title theme={theme} t={t} size={38} align={align}>{title}</Title>
           <View style={{ height: 3, width: 54, backgroundColor: t.accent, marginVertical: 18, borderRadius: 2 }} />
           <Body theme={theme} t={t} muted align={align}>{copy.subtitle}</Body>
+          <DateLine tt={t} />
         </View>
       </View>
     );
@@ -73,6 +80,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
             <Title theme={theme} t={t} size={36} align="center">{title}</Title>
             <Ornament kind={theme.ornament === 'none' ? 'lines' : theme.ornament} color={t.accent} width={200} style={{ marginVertical: 18 }} />
             <Body theme={theme} t={t} muted align="center">{copy.subtitle}</Body>
+            <DateLine tt={t} a="center" />
           </View>
         </View>
       </View>
@@ -90,6 +98,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
           </Text>
         ) : null}
         <Body theme={theme} t={t} muted align={align} style={{ marginTop: 14, maxWidth: 520 }}>{copy.subtitle}</Body>
+        {w ? <DateLine tt={t} style={{ marginTop: 4 }} /> : null}
         {cover ? (
           <Pressable onPress={openCover} accessibilityRole="imagebutton" accessibilityLabel="Agrandir la photo de couverture" style={{ marginTop: 30, alignSelf: 'stretch' }}>
             <SafeImage uri={cover} style={{ height: 190, borderRadius: radius.img }} />
@@ -110,8 +119,9 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
           <SafeImage uri={cover} style={{ height: Math.min(420, width), marginHorizontal: 14, marginTop: 26, borderRadius: radius.img }} />
         </Pressable>
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20, paddingHorizontal: pad, gap: 12, flexWrap: 'wrap' }}>
-          <Body theme={theme} t={t} align="center" style={{ fontFamily: theme.fonts.bold }}>{copy.subtitle}</Body>
+          <Body theme={theme} t={t} muted align="center">{copy.subtitle}</Body>
         </View>
+        <DateLine tt={t} a="center" style={{ paddingHorizontal: pad }} />
       </View>
     );
   }
@@ -129,6 +139,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
         <Title theme={theme} t={t} size={38} align="center">{title}</Title>
         <Ornament kind={theme.ornament} color={t.accent} width={200} style={{ marginVertical: 14 }} />
         <Body theme={theme} t={t} muted align="center">{copy.subtitle}</Body>
+        <DateLine tt={t} a="center" />
       </View>
     );
   }
@@ -157,6 +168,7 @@ export default function Hero({ s, copy = {}, event, theme, t, actions }) {
         </View>
       </View>
       <Body theme={theme} t={inv} muted style={{ marginTop: 18 }}>{copy.subtitle}</Body>
+      <DateLine tt={inv} a="left" />
       <Button theme={theme} t={inv} label={actions.ctaLabel} onPress={actions.participate} style={{ marginTop: 24, alignSelf: 'flex-start' }} />
     </View>
   );

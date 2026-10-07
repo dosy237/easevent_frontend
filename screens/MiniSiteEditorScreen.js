@@ -126,7 +126,8 @@ export default function MiniSiteEditorScreen({ route, navigation }) {
 
       <View style={[styles.preview, { height: Math.min(height * 0.34, 320), width: previewW }]}>
         <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
-          <View style={{ width: BASE_W, transform: [{ scale }], transformOrigin: 'top left' }} pointerEvents="none">
+          <View style={{ width: BASE_W, transform: [{ scale }], transformOrigin: 'top left' }} pointerEvents="none"
+            aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <MiniSite spec={spec} event={saved.event} width={BASE_W} preview />
           </View>
         </ScrollView>
