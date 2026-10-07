@@ -587,6 +587,14 @@ export default function EventDetailScreen({ route, navigation }) {
                 <InfoRow icon="gift-outline" label="Faire plaisir" value={`Offrir ${pw.a} à un proche`} onPress={openGift} />
               </>
             ) : null}
+            {/* Espace souvenirs : photos de l'équipe et commentaires, dès le début de l'événement */}
+            {isAuthenticated && fullEvent.start_date && new Date(fullEvent.start_date) <= new Date() ? (
+              <>
+                <View style={styles.divider} />
+                <InfoRow icon="images-outline" label="Souvenirs" value="Photos et commentaires"
+                  onPress={() => navigation.navigate('Memories', { event: fullEvent })} />
+              </>
+            ) : null}
             {fullEvent.dress_code ? (
               <>
                 <View style={styles.divider} />

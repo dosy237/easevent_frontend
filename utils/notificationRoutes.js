@@ -51,6 +51,26 @@ export function openNotification(navigation, n) {
       return eventId && navigation.navigate('TabDashboard', {
         screen: 'TemplatePicker', initial: false, params: { event: n.event || { id: eventId } },
       });
+    case 'team_invite':                           // proposition d'équipe : réponse sur le tableau de bord
+      return navigation.navigate('TabDashboard', { screen: 'Dashboard' });
+    case 'team_response':
+      return eventId && navigation.navigate('TabDashboard', {
+        screen: 'EventTeam', initial: false, params: { event: n.event || { id: eventId } },
+      });
+    case 'event_broadcast': {
+      const conversationId = data.conversation_id;
+      return conversationId
+        ? navigation.navigate('TabTickets', { screen: 'Chat', initial: false, params: { conversationId, title: n.title } })
+        : tickets({ tab: 'generated' });
+    }
+    case 'event_comment':
+      return eventId && navigation.navigate('TabDashboard', {
+        screen: 'Memories', initial: false, params: { event: n.event || { id: eventId }, tab: 'comments' },
+      });
+    case 'memories_added':
+      return eventId && navigation.navigate('TabTickets', {
+        screen: 'Memories', initial: false, params: { event: n.event || { id: eventId }, tab: 'photos' },
+      });
     case 'payouts_ready':
       return navigation.navigate('TabProfile', { screen: 'Payouts', initial: false });
     case 'subscription':

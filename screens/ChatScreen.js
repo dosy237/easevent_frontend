@@ -399,6 +399,13 @@ export default function ChatScreen({ navigation, route }) {
             <Ionicons name="sparkles" size={12} color={C.green} />
             <Text style={styles.assistantTagTxt}>Réponse automatique</Text>
           </View>
+        ) : m.broadcast ? (
+          <View style={styles.assistantTag}>
+            <Ionicons name="megaphone-outline" size={12} color={mine ? C.white : C.orange} />
+            <Text style={[styles.assistantTagTxt, { color: mine ? C.white : C.orange }]}>
+              À tous les invités{m.by ? ` · ${m.by}` : ''}
+            </Text>
+          </View>
         ) : null}
         <Text style={[styles.body, mine && { color: C.white }]} selectable>{m.body}</Text>
         <View style={styles.meta}>

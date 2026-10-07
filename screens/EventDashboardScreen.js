@@ -126,6 +126,8 @@ export default function EventDashboardScreen({ route, navigation }) {
   const [loading,       setLoading]       = useState(true);
   const [refreshing,    setRefreshing]    = useState(false);
   const [publishing,    setPublishing]    = useState(false);
+  // Rôle : organisateur (tout), co-organisateur (tout sauf équipe, finances, suppression)
+  const [role,          setRole]          = useState(initialEvent?.my_role || 'organizer');
 
   // Nouvel événement passé en paramètre (écran déjà monté) et « Publier et inviter »
   const openInvite = route.params?.openInvite;
@@ -158,6 +160,7 @@ export default function EventDashboardScreen({ route, navigation }) {
 
       setEvent(detailData.event);
       setStats(detailData.invitations);
+      if (detailData.my_role) setRole(detailData.my_role);
       setCounts(participantsData.counts || { confirmed: 0, pending: 0, declined: 0, total: 0 });
 
     } catch (err) {
@@ -319,6 +322,8 @@ const handlePublish = async () => {
     navigation.navigate('InviteGuests', { event });
   };
   const goGuests = (filter = 'all') => navigation.navigate('GuestList', { event, filter });
+  const isOrganizer = role === 'organizer';
+  const started = event?.start_date && new Date(event.start_date) <= new Date();
 
   // ── Badge de statut de l'événement ───────────────────────────
   const statusConfig = {
@@ -352,14 +357,14 @@ const handlePublish = async () => {
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity
+            {isOrganizer ? <TouchableOpacity
               style={styles.editBtn}
               onPress={() => navigation?.navigate('Conversations', { eventId: event.id, eventTitle: event.title })}
               accessibilityRole="button"
               accessibilityLabel="Messages des invités"
             >
               <Ionicons name="chatbubble-ellipses-outline" size={20} color={C.green} />
-            </TouchableOpacity>
+            </TouchableOpacity> : null}
             <TouchableOpacity
               style={styles.editBtn}
               onPress={() => navigation?.navigate('EditEvent', { event })}
@@ -488,12 +493,15 @@ const handlePublish = async () => {
                     <ActionRow icon="people-outline" title="Invités & réponses"
                       subtitle={counts.total ? `${counts.total} invité${counts.total > 1 ? 's' : ''} · ${counts.confirmed} confirmé${counts.confirmed > 1 ? 's' : ''}` : 'Aucun invité pour le moment'}
                       onPress={() => goGuests('all')} />
-                    <ActionRow icon="chatbubbles-outline" title="Messages des invités"
-                      subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id, eventTitle: event.title })} />
+                    {/* Les invités écrivent à l'organisateur ; les co-organisateurs passent par « Message à tous » */}
+                    {isOrganizer ? <ActionRow icon="chatbubbles-outline" title="Messages des invités"
+                      subtitle="Échangez avec vos invités" onPress={() => navigation.navigate('Conversations', { eventId: event.id, eventTitle: event.title })} /> : null}
                     <ActionRow icon="qr-code-outline" title="Contrôler les entrées"
                       subtitle="Contrôle à l'entrée avec l'appareil photo" onPress={() => navigation.navigate('ScanTickets', { event })} />
                     <ActionRow icon="help-circle-outline" title="Questions RSVP"
                       subtitle="Posez jusqu'à 5 questions à vos invités" onPress={() => navigation.navigate('RsvpQuestions', { event })} />
+                    <ActionRow icon="megaphone-outline" title="Message à tous les invités"
+                      subtitle="Une information importante, en une fois" onPress={() => navigation.navigate('Broadcast', { event })} />
                     {/* Réponses automatiques aux questions (lieu, horaires, prix…) dans « Messages des invités » */}
                     <View style={styles.assistantRow}>
                       <View style={styles.assistantIcon}><Ionicons name="sparkles-outline" size={20} color={C.green} /></View>
@@ -513,6 +521,23 @@ const handlePublish = async () => {
                           catch { setEvent((prev) => ({ ...prev, assistant_enabled: !v })); showAlert('Réglage non enregistré', 'Vérifiez votre connexion puis réessayez.'); }
                         }} />
                     </View>
+                  </View>
+
+                  {/* Cogestion, statistiques, souvenirs, finances */}
+                  <View style={styles.rowsCard}>
+                    <ActionRow icon="people-circle-outline" title="Équipe"
+                      subtitle={isOrganizer ? 'Co-organisateurs, photographes, répartition des invités' : 'Organisateurs et photographes de l’événement'}
+                      onPress={() => navigation.navigate('EventTeam', { event })} />
+                    <ActionRow icon="stats-chart-outline" title="Statistiques"
+                      subtitle={started ? 'Vues, réponses, présence réelle' : 'Vues, j’aime, réponses des invités'}
+                      onPress={() => navigation.navigate('EventStats', { event })} />
+                    <ActionRow icon="images-outline" title="Souvenirs"
+                      subtitle="Photos de l’événement et commentaires des invités"
+                      onPress={() => navigation.navigate('Memories', { event })} last={!(isOrganizer && event.is_paid)} />
+                    {isOrganizer && event.is_paid ? (
+                      <ActionRow icon="wallet-outline" title="Finances" subtitle="Recettes, commission, ce que vous gagnez"
+                        onPress={() => navigation.navigate('EventFinance', { event })} last />
+                    ) : null}
                   </View>
 
                   {/* Actions principales */}
@@ -579,8 +604,8 @@ const handlePublish = async () => {
                       </View>
                     )}
 
-                    {/* Bouton Supprimer */}
-                    <TouchableOpacity
+                    {/* Bouton Supprimer (organisateur seulement) */}
+                    {isOrganizer ? <TouchableOpacity
                       style={[styles.actionBtn, styles.actionBtnDanger]}
                       onPress={handleDelete}
                       activeOpacity={0.85}
@@ -589,7 +614,7 @@ const handlePublish = async () => {
                       <Text style={[styles.actionBtnTxt, { color: C.error }]}>
                         Supprimer l'événement
                       </Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity> : null}
                   </View>
 
                   {/* Informations de l'événement */}
