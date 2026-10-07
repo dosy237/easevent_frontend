@@ -78,17 +78,21 @@ const AvatarPlaceholder = ({ firstName, lastName, size = 80, uri }) => {
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : StatCard
 // ════════════════════════════════════════════════════════════════
-const StatCard = ({ icon, value, label, loading }) => (
-  <View style={styles.statCard} accessible accessibilityLabel={loading ? `${label} : chargement` : `${label} : ${value}`}>
-    <Ionicons name={icon} size={20} color={C.green} />
-    {loading ? (
-      <SkeletonGroup label={`Chargement : ${label}`}><Bone width={28} height={22} /></SkeletonGroup>
-    ) : (
-      <Text style={styles.statValue}>{value}</Text>
-    )}
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
+const StatCard = ({ icon, value, label, loading, onPress }) => {
+  const Box = onPress ? TouchableOpacity : View;
+  return (
+    <Box style={styles.statCard} accessible onPress={onPress} accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={loading ? `${label} : chargement` : `${label} : ${value}`}>
+      <Ionicons name={icon} size={20} color={C.green} />
+      {loading ? (
+        <SkeletonGroup label={`Chargement : ${label}`}><Bone width={28} height={22} /></SkeletonGroup>
+      ) : (
+        <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+      )}
+      <Text style={styles.statLabel}>{label}</Text>
+    </Box>
+  );
+};
 
 // ════════════════════════════════════════════════════════════════
 // COMPOSANT : EditableField
@@ -569,8 +573,9 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.statDivider} />
               <StatCard
                 icon="star-outline"
-                value={user.subscription_plan === 'pro' ? 'Pro' : user.subscription_plan === 'standard' ? 'Std' : 'Free'}
+                value={plan.label}
                 label="Abonnement"
+                onPress={() => navigation?.navigate('Plans')}
               />
             </View>
 
