@@ -43,3 +43,6 @@ node_modules/
 .expo/
 dist/
 .env
+
+# Firebase (notifications push Android) — fourni à part
+google-services.json

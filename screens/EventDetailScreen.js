@@ -88,17 +88,11 @@ const STORE_URL = 'https://play.google.com/store/apps/details?id=com.eranis.ease
 // FONCTION : ouvrir Google Maps
 // Même logique que dans HomeScreen — réutilisable
 // ─────────────────────────────────────────────────────────────────
-const openGoogleMaps = async (address) => {
+// Le lien https Google Maps ouvre l'application Maps quand elle est installée
+// (Android et iOS), sinon le navigateur — et fonctionne aussi sur le web.
+const openGoogleMaps = (address) => {
   if (!address) return;
-  const query = encodeURIComponent(address);
-  const appUrl = `comgooglemaps://?q=${query}`;
-  const webUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
-  try {
-    const canOpen = await Linking.canOpenURL(appUrl);
-    await Linking.openURL(canOpen ? appUrl : webUrl);
-  } catch {
-    await Linking.openURL(webUrl);
-  }
+  openInMaps(null, address);
 };
 
 // ─────────────────────────────────────────────────────────────────
