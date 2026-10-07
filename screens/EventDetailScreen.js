@@ -38,6 +38,7 @@ import {
   Linking,
   Dimensions,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 
 // SafeAreaView de react-native-safe-area-context est plus fiable
@@ -214,6 +215,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [error, setError]       = useState(null);
   const [viewer, setViewer]     = useState(null);     // photo affichée en plein écran
   const [sharing, setSharing]   = useState(false);    // feuille de partage
+  const [chooser, setChooser]   = useState(false);    // « Pour moi » ou « Pour un proche »
 
   // « Je participe » touché dans le mini-site : même parcours que le bouton de cette page
   const participateRef = useRef(null);
@@ -345,7 +347,15 @@ export default function EventDetailScreen({ route, navigation }) {
     screen: 'Tickets', params: { tab: 'generated', openTicketId: ticketId },
   });
 
-  const ticketAction = async () => {
+  // « Payer pour un proche » : événements publics publiés, à venir, non complets
+  const giftable = isAuthenticated && !isOrganizer && fullEvent.visibility === 'public' && !soldOut
+    && (!fullEvent.status || fullEvent.status === 'published') && (!fullEvent.end_date || new Date(fullEvent.end_date) > new Date());
+  const openGift = () => { setChooser(false); navigation.navigate('Gift', { event: fullEvent }); };
+
+  const ticketAction = async (forMe = false) => {
+    // Première participation : pour soi, ou pour un proche ?
+    if (!forMe && giftable && !myTicket) { setChooser(true); return; }
+    setChooser(false);
     if (isOrganizer) {
       navigation.navigate('TabDashboard', { screen: 'EventDashboard', initial: false, params: { event: fullEvent } });
       return;
@@ -571,6 +581,12 @@ export default function EventDetailScreen({ route, navigation }) {
               extra={isPaid ? <Price amount={fullEvent.price} currency={fullEvent.currency || 'EUR'} text={null} /> : null}
               value={`${isPaid ? priceTxt : '0,00 € · gratuit'}${fullEvent.spots_left != null ? ` · ${fullEvent.spots_left} place${fullEvent.spots_left > 1 ? 's' : ''} restante${fullEvent.spots_left > 1 ? 's' : ''}` : ''}`}
             />
+            {giftable ? (
+              <>
+                <View style={styles.divider} />
+                <InfoRow icon="gift-outline" label="Faire plaisir" value={`Offrir ${pw.a} à un proche`} onPress={openGift} />
+              </>
+            ) : null}
             {fullEvent.dress_code ? (
               <>
                 <View style={styles.divider} />
@@ -730,6 +746,28 @@ export default function EventDetailScreen({ route, navigation }) {
         </Animated.View>
       </Animated.ScrollView>
 
+      {/* ══ Pour moi / pour un proche ══════════════════════════ */}
+      <Modal visible={chooser} transparent animationType="slide" onRequestClose={() => setChooser(false)} statusBarTranslucent>
+        <Pressable style={styles.chooserBackdrop} onPress={() => setChooser(false)} accessibilityRole="button" accessibilityLabel="Fermer" />
+        <View style={styles.chooser} accessibilityViewIsModal>
+          <View style={styles.chooserHandle} />
+          <Text style={styles.chooserTitle} accessibilityRole="header">{`${isPaid ? 'Payer' : 'Réserver'} pour qui ?`}</Text>
+          {[
+            ['person-outline', 'Pour moi', `${pw.My} à mon nom`, () => ticketAction(true)],
+            ['gift-outline', 'Pour un proche', 'Un ami, un membre, ou quelqu’un à inviter', openGift],
+          ].map(([icon, label, sub, onPress]) => (
+            <Pressable key={label} onPress={onPress} style={styles.chooserRow} accessibilityRole="button" accessibilityLabel={`${label} : ${sub}`}>
+              <View style={styles.chooserIcon}><Ionicons name={icon} size={22} color={C.green} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.chooserLabel}>{label}</Text>
+                <Text style={styles.chooserSub}>{sub}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.textMut} />
+            </Pressable>
+          ))}
+        </View>
+      </Modal>
+
       {/* ══ BARRE FIXE (connecté, M24) ══════════════════════════ */}
       {isAuthenticated && (
         <View style={[styles.ticketBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -740,7 +778,7 @@ export default function EventDetailScreen({ route, navigation }) {
           </View>
           <TouchableOpacity
             style={[styles.ticketBarBtn, soldOut && !isOrganizer && styles.ticketBarBtnOff]}
-            onPress={ticketAction}
+            onPress={() => ticketAction()}
             disabled={ticketBusy || (soldOut && !isOrganizer)}
             activeOpacity={0.85}
             accessibilityRole="button"
@@ -763,6 +801,15 @@ export default function EventDetailScreen({ route, navigation }) {
 // STYLES
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  chooserBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  chooser: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: C.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, paddingBottom: 34, gap: 10, maxWidth: 560, alignSelf: 'center', width: '100%' },
+  chooserHandle: { width: 44, height: 5, borderRadius: 3, backgroundColor: C.border, alignSelf: 'center', marginBottom: 6 },
+  chooserTitle: { fontSize: 19, fontWeight: '900', color: C.text, marginBottom: 6 },
+  chooserRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16, borderWidth: 1.5, borderColor: C.border, minHeight: 64 },
+  chooserIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center' },
+  chooserLabel: { fontSize: 16, fontWeight: '800', color: C.text },
+  chooserSub: { fontSize: 13, color: C.textSub, marginTop: 2 },
   galleryImg: { width: 150, height: 110, borderRadius: 14, backgroundColor: '#EEE' },
   // ── M24 : badges, organisateur, barre fixe
   heroBadges: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },

@@ -52,6 +52,8 @@ const LOOK = {
   invitation_received: { icon: 'mail-open-outline', bg: C.greenLight, fg: C.green },
   ticket_to_validate:  { icon: 'ticket-outline', bg: C.green, fg: C.white, cta: 'Valider mon invitation' },
   ticket_generated:    { icon: 'qr-code-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
+  ticket_gift:         { icon: 'gift-outline', bg: C.greenLight, fg: C.green, cta: 'Voir' },
+  question_to_answer:  { icon: 'help-circle-outline', bg: C.orangeL, fg: C.orangeDark, cta: 'Répondre' },
   daily_summary:       { icon: 'people-outline', bg: C.greenLight, fg: C.green },
   reminder:            { icon: 'time-outline', bg: '#FFF6E0', fg: '#7A4F00', cta: 'Voir' },
   message_received:    { icon: 'chatbubble-outline', bg: C.orangeL, fg: C.orangeDark },

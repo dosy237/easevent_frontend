@@ -349,10 +349,12 @@ export default function ChatScreen({ navigation, route }) {
       return (
         <View style={[styles.media, mine ? styles.mediaMine : styles.mediaTheirs, { width: 264 }]}>
           <Pressable onPress={() => openShared(card)} accessibilityRole="button"
-            accessibilityLabel={`Événement partagé : ${card.title}${when ? `, ${shortDay(when)}` : ''}. Ouvrir`}>
+            accessibilityLabel={`${card.gift ? 'Place offerte' : 'Événement partagé'} : ${card.title}${when ? `, ${shortDay(when)}` : ''}. Ouvrir`}>
             {card.cover_image ? <Image source={{ uri: card.cover_image }} style={styles.sharedCover} resizeMode="cover" /> : null}
             <View style={styles.locBody}>
-              <Text style={[styles.sharedType, mine && { color: 'rgba(255,255,255,0.85)' }]}>{card.type}</Text>
+              <Text style={[styles.sharedType, mine && { color: 'rgba(255,255,255,0.85)' }]}>
+                {card.gift ? `${(card.pass || 'billet').charAt(0).toUpperCase()}${(card.pass || 'billet').slice(1)} offert${card.pass === 'invitation' ? 'e' : ''} · ${card.type}` : card.type}
+              </Text>
               <Text style={[styles.locTitle, mine && { color: C.white }]} numberOfLines={2}>{card.title}</Text>
               <Text style={[styles.locAddr, mine && { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={2}>
                 {[when ? `${JOURS[when.getDay()]} ${shortDay(when)} · ${hhmm(when)}` : '', card.location].filter(Boolean).join('\n')}

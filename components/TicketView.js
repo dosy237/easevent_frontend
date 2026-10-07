@@ -109,6 +109,16 @@ export default function TicketView({ ticket, justPaid = false }) {
         </View>
       )}
 
+      {ticket.offered_by ? (
+        <View style={[styles.paidBanner, styles.giftBanner]} accessible accessibilityLabel={`Offert par ${ticket.offered_by.name}`}>
+          <Ionicons name="gift" size={18} color={C.green} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.paidBannerTxt}>{`Offert${passWord(e).e} par ${ticket.offered_by.name}`}</Text>
+            {ticket.offered_by.message ? <Text style={styles.giftMsg}>{`« ${ticket.offered_by.message} »`}</Text> : null}
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.ticket}>
         <View style={styles.head}>
           {e.cover_image ? <Image source={{ uri: e.cover_image }} style={styles.cover} resizeMode="cover" accessibilityIgnoresInvertColors /> : null}
@@ -229,6 +239,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.greenSoft, borderRadius: 12, padding: 12, marginBottom: 14,
   },
   paidBannerTxt: { fontSize: 13, fontWeight: '600', color: C.greenDark, flex: 1 },
+  giftBanner: { alignItems: 'flex-start' },
+  giftMsg: { fontSize: 14, color: C.text, fontStyle: 'italic', marginTop: 4, lineHeight: 20 },
   ticket: {
     backgroundColor: C.white, borderRadius: 20, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 8,

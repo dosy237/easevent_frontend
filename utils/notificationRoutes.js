@@ -23,6 +23,7 @@ export function openNotification(navigation, n) {
     case 'payment_failed':
       return tickets({ tab: 'pending' });
     case 'ticket_generated':
+    case 'ticket_gift':
     case 'reminder':
     case 'payment_succeeded':
       return tickets({ tab: 'generated', openTicketId: ticketId || undefined });

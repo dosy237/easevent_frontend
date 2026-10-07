@@ -22,6 +22,12 @@ const ticketService = {
   // Orange Money / MTN MoMo (Notch Pay) : { url, reference, amount, currency: 'XAF' }
   mobileMoney: async (id) => (await apiClient.post(`/api/tickets/${id}/mobile-money/`, {})).data,
   paymentMethods: async () => (await apiClient.get('/api/payments/methods/')).data,
+  // Billet offert à un proche : { recipient: { user_id } | { name, email } | { name, phone }, message }
+  createGift: async (eventId, body) => (await apiClient.post(`/api/events/${eventId}/gifts/`, body)).data,
+  gift: async (id) => (await apiClient.get(`/api/gifts/${id}/`)).data,
+  giftCheckout: async (id) => (await apiClient.post(`/api/gifts/${id}/checkout/`)).data,
+  giftMobileMoney: async (id) => (await apiClient.post(`/api/gifts/${id}/mobile-money/`, {})).data,
+  cancelGift: async (id) => (await apiClient.post(`/api/gifts/${id}/cancel/`)).data,
 
   // Organisateur : Stripe Connect (recevoir l'argent des tickets sur son IBAN)
   connectStatus: async () => (await apiClient.get('/api/payments/connect/status/')).data,

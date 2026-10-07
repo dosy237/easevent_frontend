@@ -74,6 +74,7 @@ import SubscriptionSuccessScreen from './screens/SubscriptionSuccessScreen';
 import TermsScreen from './screens/TermsScreen';
 import HelpScreen from './screens/HelpScreen';
 import AdminScreen from './screens/AdminScreen';
+import GiftScreen from './screens/GiftScreen';
 import ScanTicketsScreen from './screens/ScanTicketsScreen';
 import * as Application from 'expo-application';
 import { KEYS, getItem, setItem } from './services/storage';
@@ -246,6 +247,7 @@ function DiscoverStackNavigator() {
     <DiscoverStack.Navigator screenOptions={stackOptions}>
       <DiscoverStack.Screen name="DiscoverHome"  component={HomeScreen}        options={{ title: 'Découvrir' }} />
       <DiscoverStack.Screen name="EventDetail"   component={EventDetailScreen} options={{ title: 'Événement' }} />
+      <DiscoverStack.Screen name="Gift"          component={GiftScreen}        options={{ title: 'Offrir' }} />
       <DiscoverStack.Screen name="MiniSiteView"  component={MiniSiteViewScreen} options={{ title: 'Mini-site' }} />
       <DiscoverStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <DiscoverStack.Screen name="Chat"          component={ChatScreen} options={{ title: 'Conversation' }} />
