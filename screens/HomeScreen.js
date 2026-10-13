@@ -35,6 +35,7 @@ import {
   Linking,
   TextInput,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -257,6 +258,7 @@ const CardStandard = React.memo(({ event, onPress, engage }) => {
 // ════════════════════════════════════════════════════════════════
 export default function HomeScreen({ navigation }) {
   const { isAuthenticated: isLoggedIn } = useAuth();
+  const compactHeader = useWindowDimensions().width < 360;     // petits écrans : « Connexion », sans icône
 
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -424,14 +426,27 @@ export default function HomeScreen({ navigation }) {
                 >
                   <Ionicons name="search-outline" size={22} color={C.text} />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.hdrBtn}
-                  onPress={goToNotifications}
-                  accessibilityRole="button"
-                  accessibilityLabel={isLoggedIn ? bellLabel(notifCount) : 'Notifications — se connecter'}
-                >
-                  <NotificationBell enabled={isLoggedIn} />
-                </TouchableOpacity>
+                {isLoggedIn ? (
+                  <TouchableOpacity
+                    style={styles.hdrBtn}
+                    onPress={goToNotifications}
+                    accessibilityRole="button"
+                    accessibilityLabel={bellLabel(notifCount)}
+                  >
+                    <NotificationBell enabled />
+                  </TouchableOpacity>
+                ) : (
+                  // Visiteur : accès direct à la connexion / l'inscription, toujours visible
+                  <Pressable
+                    style={({ pressed }) => [styles.hdrLogin, pressed && { opacity: 0.85 }]}
+                    onPress={goToLogin}
+                    accessibilityRole="button"
+                    accessibilityLabel="Se connecter ou créer un compte"
+                  >
+                    {compactHeader ? null : <Ionicons name="person-circle-outline" size={18} color={C.white} />}
+                    <Text style={styles.hdrLoginTxt}>{compactHeader ? 'Connexion' : 'Se connecter'}</Text>
+                  </Pressable>
+                )}
               </View>
             </>
           )}
@@ -670,6 +685,11 @@ const styles = StyleSheet.create({
   logoEven: { color: C.orange, fontWeight: '800' },
   headerRight: { flexDirection: 'row', gap: 2 },
   hdrBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  hdrLogin: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 14,
+    marginLeft: 4, borderRadius: 22, backgroundColor: C.green,
+  },
+  hdrLoginTxt: { color: C.white, fontSize: 14, fontWeight: '700' },
   notifWrap: { position: 'relative' },
   notifDot: {
     position: 'absolute',
