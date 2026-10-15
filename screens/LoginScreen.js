@@ -272,7 +272,8 @@ export default function LoginScreen({ navigation, route }) {
     const errors = {};
     if (!firstName.trim()) errors.firstName = 'Le prénom est requis';
     if (!lastName.trim())  errors.lastName  = 'Le nom est requis';
-    if (!phone.trim()) errors.phone = 'Le numéro de téléphone est requis';
+    // Téléphone facultatif : utile seulement pour les invitations reçues par SMS (ou le code par SMS)
+    if (!phone.trim()) { if (codeChannel === 'sms') errors.phone = 'Indiquez votre numéro pour recevoir le code par SMS'; }
     else if (!toE164(phone, deviceDialCode())) errors.phone = `Numéro invalide (ex. ${deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'})`;
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -316,7 +317,7 @@ export default function LoginScreen({ navigation, route }) {
         password,
         first_name:       firstName.trim(),
         last_name:        lastName.trim(),
-        phone_number:     toE164(phone, deviceDialCode()),
+        phone_number:     phone.trim() ? toE164(phone, deviceDialCode()) : '',
         verification_channel: codeChannel,
         accepted_privacy: true,
         marketing_opt_in: marketingOptIn,
@@ -622,14 +623,14 @@ export default function LoginScreen({ navigation, route }) {
           />
           <InputField
             icon="call-outline"
-            placeholder={`Téléphone · ${deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'}`}
+            placeholder={`Téléphone (facultatif) · ${deviceDialCode() === '237' ? '+237 6 90 12 34 56' : '+33 6 12 34 56 78'}`}
             value={phone}
             onChangeText={(t) => { setPhone(t); setFieldErrors(p => ({ ...p, phone: '' })); }}
             keyboardType="phone-pad"
             error={fieldErrors.phone}
           />
           <Text style={styles.phoneHint}>
-            Vos invitations reçues par SMS vous attendront directement dans l'application.
+            Facultatif : utile seulement si l'on vous invite par SMS. Les invitations envoyées à votre email arrivent directement sur votre compte.
           </Text>
           <Text style={styles.channelLabel} nativeID="channelLabel">Recevoir mon code de validation par</Text>
           <View style={styles.channelRow} accessibilityRole="radiogroup" aria-labelledby="channelLabel">

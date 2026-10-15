@@ -399,23 +399,11 @@ function AppTabNavigator() {
 // ════════════════════════════════════════════════════════════════
 // NAVIGATEUR RACINE
 // ════════════════════════════════════════════════════════════════
-const GateStack = createNativeStackNavigator();
-
-// Numéro de téléphone obligatoire : un compte sans numéro l'ajoute d'abord
-function PhoneGateNavigator() {
-  return (
-    <GateStack.Navigator screenOptions={stackOptions}>
-      <GateStack.Screen name="PhoneGate" component={VerifyPhoneScreen} initialParams={{ required: true }}
-        options={{ title: 'Votre numéro' }} />
-    </GateStack.Navigator>
-  );
-}
-
 function RootNavigator() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   linkingAuthenticated = isAuthenticated;
-
-  if (isAuthenticated && user && !user.phone) return <PhoneGateNavigator key="phone-gate" />;
+  // Numéro de téléphone facultatif : il sert seulement à retrouver les invitations reçues par SMS
+  // (bandeau dans Invitations, Profil › Mon numéro). Les invitations par email arrivent sur le compte.
 
   // `key` → évite le scintillement de la barre d'onglets au changement d'état
   return isAuthenticated
@@ -427,10 +415,10 @@ function RootNavigator() {
 // SESSION CONNECTÉE : temps réel, notifications push, badges
 // ════════════════════════════════════════════════════════════════
 function SessionBridge() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { refresh, notifications } = useTicketBadge();
   const pendingTap = useRef(null);
-  const ready = isAuthenticated && !!user?.phone;
+  const ready = isAuthenticated;
 
   // Connexion temps réel + badges mis à jour à chaque événement
   useEffect(() => {
